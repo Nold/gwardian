@@ -13,6 +13,7 @@
 //! | `MAX_CIPHERTEXT_SIZE` | `8192` | Max ciphertext size (bytes) |
 //! | `MAX_BLOBS_PER_CONVERSATION` | `50` | Max queued messages |
 //! | `CLEANUP_INTERVAL_SECS` | `10` | TTL cleanup interval |
+//! | `MAX_MESSAGE_TTL_SECS` | `604800` | Longest retention a conversation may ask for (7 days) |
 //! | `APNS_TEAM_ID` | - | Apple team ID |
 //! | `APNS_KEY_ID` | - | APNS key ID |
 //! | `APNS_KEY_PATH` | - | Path to .p8 key file |
@@ -21,8 +22,11 @@
 
 use std::time::Duration;
 
-/// Fixed message TTL (5 minutes). Not configurable by design.
+/// Message TTL for conversations that registered no retention (5 minutes).
 pub const MESSAGE_TTL: Duration = Duration::from_secs(300);
+
+/// Largest group a conversation may register (members are numbered 0 to 7).
+pub const MAX_GROUP_MEMBERS: u8 = 8;
 
 /// Default values as constants for clarity.
 mod defaults {
@@ -35,6 +39,7 @@ mod defaults {
     pub const MAX_CIPHERTEXT_SIZE: usize = 8 * 1024;
     pub const MAX_BLOBS_PER_CONVERSATION: usize = 50;
     pub const CLEANUP_INTERVAL: Duration = Duration::from_secs(10);
+    pub const MAX_MESSAGE_TTL: Duration = Duration::from_secs(7 * 24 * 3600);
 }
 
 /// Server configuration.
@@ -47,8 +52,10 @@ pub struct Config {
     pub port: u16,
 
     // === TTL Configuration ===
-    /// Fixed TTL for encrypted message blobs (5 minutes, not configurable).
+    /// TTL for blobs of conversations that registered no retention.
     pub blob_ttl: Duration,
+    /// Cap on the retention a conversation registers.
+    pub max_message_ttl: Duration,
     /// TTL for burn flags.
     pub burn_ttl: Duration,
     /// TTL for device registrations.
@@ -82,6 +89,10 @@ impl Config {
             bind_addr: env_or("BIND_ADDR", defaults::BIND_ADDR.to_string()),
             port: env_parse("PORT", defaults::PORT),
             blob_ttl: MESSAGE_TTL,
+            max_message_ttl: Duration::from_secs(env_parse(
+                "MAX_MESSAGE_TTL_SECS",
+                defaults::MAX_MESSAGE_TTL.as_secs(),
+            )),
             burn_ttl: Duration::from_secs(env_parse("BURN_TTL_SECS", defaults::BURN_TTL.as_secs())),
             device_token_ttl: Duration::from_secs(env_parse(
                 "DEVICE_TOKEN_TTL_SECS",
