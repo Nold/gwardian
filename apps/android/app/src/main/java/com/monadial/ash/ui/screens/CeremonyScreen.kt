@@ -2,6 +2,7 @@ package com.monadial.ash.ui.screens
 
 import android.app.Activity
 import android.view.WindowManager
+import android.widget.Toast
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.fadeIn
@@ -28,6 +29,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
@@ -103,6 +105,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.monadial.ash.domain.entities.CeremonyChannel
 import com.monadial.ash.domain.entities.CeremonyError
 import com.monadial.ash.domain.entities.CeremonyPhase
 import com.monadial.ash.domain.entities.ConsentState
@@ -110,11 +113,15 @@ import com.monadial.ash.domain.entities.ConversationColor
 import com.monadial.ash.domain.entities.DisappearingMessages
 import com.monadial.ash.domain.entities.MessageRetention
 import com.monadial.ash.domain.entities.PadSize
-import com.monadial.ash.ui.state.ConnectionTestResult
 import com.monadial.ash.ui.components.EntropyCollectionView
 import com.monadial.ash.ui.components.QRCodeView
 import com.monadial.ash.ui.components.QRScannerView
 import com.monadial.ash.ui.components.ScanProgressOverlay
+import com.monadial.ash.ui.components.ceremony.BluetoothReceiveContent
+import com.monadial.ash.ui.components.ceremony.BluetoothSendContent
+import com.monadial.ash.ui.components.ceremony.ChannelSelector
+import com.monadial.ash.ui.components.ceremony.rememberBluetoothPermissionRequest
+import com.monadial.ash.ui.state.ConnectionTestResult
 import com.monadial.ash.ui.viewmodels.InitiatorCeremonyViewModel
 import com.monadial.ash.ui.viewmodels.ReceiverCeremonyViewModel
 
@@ -342,6 +349,15 @@ private fun InitiatorCeremonyScreen(
 
     // Extract values for readability
     val phase = uiState.phase
+    val bleSender by viewModel.bleSender.collectAsState()
+    val context = LocalContext.current
+    val requestBluetooth = rememberBluetoothPermissionRequest { granted ->
+        if (granted) {
+            viewModel.setChannel(CeremonyChannel.BLUETOOTH)
+        } else {
+            Toast.makeText(context, "Bluetooth permission is needed to transfer over Bluetooth", Toast.LENGTH_LONG).show()
+        }
+    }
     val selectedPadSize = uiState.selectedPadSize
     val selectedColor = uiState.selectedColor
     val conversationName = uiState.conversationName
@@ -392,6 +408,14 @@ private fun InitiatorCeremonyScreen(
                     PadSizeSelectionContent(
                         selectedSize = selectedPadSize,
                         onSizeSelected = viewModel::selectPadSize,
+                        channel = uiState.channel,
+                        onChannelChange = { channel ->
+                            if (channel == CeremonyChannel.BLUETOOTH) {
+                                requestBluetooth()
+                            } else {
+                                viewModel.setChannel(channel)
+                            }
+                        },
                         passphraseEnabled = passphraseEnabled,
                         onPassphraseToggle = viewModel::setPassphraseEnabled,
                         passphrase = passphrase,
@@ -472,6 +496,17 @@ private fun InitiatorCeremonyScreen(
                     )
                 }
 
+                is CeremonyPhase.BluetoothTransfer -> {
+                    bleSender?.let { session ->
+                        BluetoothSendContent(
+                            session = session,
+                            accentColor = accentColor,
+                            onWordsRejected = viewModel::bluetoothWordsRejected,
+                            onRetry = viewModel::retryBluetooth
+                        )
+                    }
+                }
+
                 is CeremonyPhase.Verifying -> {
                     VerificationContent(
                         mnemonic = currentPhase.mnemonic,
@@ -523,6 +558,9 @@ private fun ReceiverCeremonyScreen(
 
     // Extract values for readability
     val phase = uiState.phase
+    val bleReceiver by viewModel.bleReceiver.collectAsState()
+    // Without the permissions the session reports it, with a way to retry
+    val requestBluetooth = rememberBluetoothPermissionRequest { viewModel.startBluetooth() }
     val conversationName = uiState.conversationName
     val selectedColor = uiState.selectedColor
     val receivedBlocks = uiState.receivedBlocks
@@ -558,14 +596,33 @@ private fun ReceiverCeremonyScreen(
             when (currentPhase) {
                 is CeremonyPhase.ConfiguringReceiver -> {
                     ReceiverSetupContent(
+                        channel = uiState.channel,
+                        onChannelChange = viewModel::setChannel,
                         passphraseEnabled = passphraseEnabled,
                         onPassphraseToggle = viewModel::setPassphraseEnabled,
                         passphrase = passphrase,
                         onPassphraseChange = viewModel::setPassphrase,
                         selectedColor = selectedColor,
                         onColorChange = viewModel::setSelectedColor,
-                        onStartScanning = viewModel::startScanning
+                        onStartScanning = {
+                            if (uiState.channel == CeremonyChannel.BLUETOOTH) {
+                                requestBluetooth()
+                            } else {
+                                viewModel.startScanning()
+                            }
+                        }
                     )
+                }
+
+                is CeremonyPhase.BluetoothTransfer -> {
+                    bleReceiver?.let { session ->
+                        BluetoothReceiveContent(
+                            session = session,
+                            accentColor = Color(selectedColor.toColorLong()),
+                            onWordsRejected = viewModel::bluetoothWordsRejected,
+                            onRetry = viewModel::retryBluetooth
+                        )
+                    }
                 }
 
                 is CeremonyPhase.Scanning, is CeremonyPhase.Transferring -> {
@@ -619,6 +676,8 @@ private fun ReceiverCeremonyScreen(
 private fun PadSizeSelectionContent(
     selectedSize: PadSize,
     onSizeSelected: (PadSize) -> Unit,
+    channel: CeremonyChannel,
+    onChannelChange: (CeremonyChannel) -> Unit,
     passphraseEnabled: Boolean,
     onPassphraseToggle: (Boolean) -> Unit,
     passphrase: String,
@@ -681,54 +740,60 @@ private fun PadSizeSelectionContent(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Passphrase section
-        OutlinedCard(
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        imageVector = Icons.Outlined.Lock,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = "Passphrase Protection",
-                            style = MaterialTheme.typography.titleSmall
+        ChannelSelector(channel = channel, onChannelChange = onChannelChange)
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        if (channel == CeremonyChannel.QR_CODES) {
+            // Passphrase section
+            OutlinedCard(
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Lock,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                        Text(
-                            text = "Encrypt QR codes with shared secret",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Passphrase Protection",
+                                style = MaterialTheme.typography.titleSmall
+                            )
+                            Text(
+                                text = "Encrypt QR codes with shared secret",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Switch(
+                            checked = passphraseEnabled,
+                            onCheckedChange = onPassphraseToggle,
+                            colors =
+                            SwitchDefaults.colors(
+                                checkedThumbColor = Color.White,
+                                checkedTrackColor = accentColor,
+                                checkedBorderColor = accentColor
+                            )
                         )
                     }
-                    Switch(
-                        checked = passphraseEnabled,
-                        onCheckedChange = onPassphraseToggle,
-                        colors =
-                        SwitchDefaults.colors(
-                            checkedThumbColor = Color.White,
-                            checkedTrackColor = accentColor,
-                            checkedBorderColor = accentColor
-                        )
-                    )
-                }
 
-                if (passphraseEnabled) {
-                    Spacer(modifier = Modifier.height(12.dp))
-                    OutlinedTextField(
-                        value = passphrase,
-                        onValueChange = onPassphraseChange,
-                        label = { Text("Passphrase") },
-                        placeholder = { Text("Enter shared secret") },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true
-                    )
+                    if (passphraseEnabled) {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        OutlinedTextField(
+                            value = passphrase,
+                            onValueChange = onPassphraseChange,
+                            label = { Text("Passphrase") },
+                            placeholder = { Text("Enter shared secret") },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true
+                        )
+                    }
                 }
             }
         }
@@ -1768,6 +1833,8 @@ private fun ScanningContent(receivedBlocks: Int, totalBlocks: Int, onFrameScanne
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun ReceiverSetupContent(
+    channel: CeremonyChannel,
+    onChannelChange: (CeremonyChannel) -> Unit,
     passphraseEnabled: Boolean,
     onPassphraseToggle: (Boolean) -> Unit,
     passphrase: String,
@@ -1804,12 +1871,16 @@ private fun ReceiverSetupContent(
         Spacer(modifier = Modifier.height(16.dp))
 
         Text(
-            text = "Ready to Scan",
+            text = if (channel == CeremonyChannel.BLUETOOTH) "Ready to Receive" else "Ready to Scan",
             style = MaterialTheme.typography.headlineSmall
         )
 
         Text(
-            text = "Point your camera at the sender's QR codes",
+            text = if (channel == CeremonyChannel.BLUETOOTH) {
+                "Choose the same method as the other phone"
+            } else {
+                "Point your camera at the sender's QR codes"
+            },
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center
@@ -1842,52 +1913,58 @@ private fun ReceiverSetupContent(
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        // Passphrase
-        OutlinedCard(modifier = Modifier.fillMaxWidth()) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        imageVector = Icons.Outlined.Lock,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = "Passphrase Protected",
-                            style = MaterialTheme.typography.titleSmall
+        ChannelSelector(channel = channel, onChannelChange = onChannelChange)
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        if (channel == CeremonyChannel.QR_CODES) {
+            // Passphrase
+            OutlinedCard(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Lock,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                        Text(
-                            text = "Enable if sender used a passphrase",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Passphrase Protected",
+                                style = MaterialTheme.typography.titleSmall
+                            )
+                            Text(
+                                text = "Enable if sender used a passphrase",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Switch(
+                            checked = passphraseEnabled,
+                            onCheckedChange = onPassphraseToggle,
+                            colors =
+                            SwitchDefaults.colors(
+                                checkedThumbColor = Color.White,
+                                checkedTrackColor = accentColor,
+                                checkedBorderColor = accentColor
+                            )
                         )
                     }
-                    Switch(
-                        checked = passphraseEnabled,
-                        onCheckedChange = onPassphraseToggle,
-                        colors =
-                        SwitchDefaults.colors(
-                            checkedThumbColor = Color.White,
-                            checkedTrackColor = accentColor,
-                            checkedBorderColor = accentColor
-                        )
-                    )
-                }
 
-                if (passphraseEnabled) {
-                    Spacer(modifier = Modifier.height(12.dp))
-                    OutlinedTextField(
-                        value = passphrase,
-                        onValueChange = onPassphraseChange,
-                        label = { Text("Passphrase") },
-                        placeholder = { Text("Enter shared secret") },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true
-                    )
+                    if (passphraseEnabled) {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        OutlinedTextField(
+                            value = passphrase,
+                            onValueChange = onPassphraseChange,
+                            label = { Text("Passphrase") },
+                            placeholder = { Text("Enter shared secret") },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true
+                        )
+                    }
                 }
             }
         }
@@ -1937,9 +2014,13 @@ private fun ReceiverSetupContent(
                 containerColor = accentColor
             )
         ) {
-            Icon(Icons.Default.CameraAlt, contentDescription = null, modifier = Modifier.size(18.dp))
+            Icon(
+                if (channel == CeremonyChannel.BLUETOOTH) Icons.Default.Bluetooth else Icons.Default.CameraAlt,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp)
+            )
             Spacer(modifier = Modifier.width(8.dp))
-            Text("Start Scanning")
+            Text(if (channel == CeremonyChannel.BLUETOOTH) "Start Receiving" else "Start Scanning")
         }
     }
 }
@@ -2249,6 +2330,7 @@ private fun phaseToContentKey(phase: CeremonyPhase): String = when (phase) {
     is CeremonyPhase.GeneratingPad -> "generating_pad"
     is CeremonyPhase.GeneratingQRCodes -> "generating_qr"
     is CeremonyPhase.Transferring -> "scanning_transferring" // Same key as Scanning for receiver
+    is CeremonyPhase.BluetoothTransfer -> "bluetooth_transfer"
     is CeremonyPhase.Verifying -> "verifying"
     is CeremonyPhase.Completed -> "completed"
     is CeremonyPhase.Failed -> "failed"

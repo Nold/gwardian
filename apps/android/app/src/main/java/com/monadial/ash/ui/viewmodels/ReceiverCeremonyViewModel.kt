@@ -1,9 +1,14 @@
 package com.monadial.ash.ui.viewmodels
 
+import android.content.Context
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.monadial.ash.core.services.bletransfer.BlePadReceiverSession
+import com.monadial.ash.core.services.bletransfer.BleTransferState
+import com.monadial.ash.core.services.bletransfer.toUBytes
 import com.monadial.ash.domain.services.QRCodeService
+import com.monadial.ash.domain.entities.CeremonyChannel
 import com.monadial.ash.domain.entities.CeremonyError
 import com.monadial.ash.domain.entities.CeremonyPhase
 import com.monadial.ash.domain.entities.Conversation
@@ -17,14 +22,18 @@ import com.monadial.ash.domain.services.CryptoService
 import com.monadial.ash.domain.usecases.conversation.RegisterConversationUseCase
 import com.monadial.ash.ui.state.ReceiverCeremonyUiState
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import uniffi.ash.FountainCeremonyResult
+import uniffi.ash.CeremonyMetadata
 import uniffi.ash.FountainFrameReceiver
+import uniffi.ash.decodeCeremonyPayload
 
 /**
  * ViewModel for the receiver (scanner) ceremony flow.
@@ -37,6 +46,7 @@ import uniffi.ash.FountainFrameReceiver
  */
 @HiltViewModel
 class ReceiverCeremonyViewModel @Inject constructor(
+    @ApplicationContext private val context: Context,
     private val qrCodeService: QRCodeService,
     private val conversationRepository: ConversationRepository,
     private val cryptoService: CryptoService,
@@ -54,11 +64,20 @@ class ReceiverCeremonyViewModel @Inject constructor(
 
     // Internal state (not exposed to UI)
     private var fountainReceiver: FountainFrameReceiver? = null
-    private var ceremonyResult: FountainCeremonyResult? = null
-    private var reconstructedPadBytes: ByteArray? = null
+    private var receivedMetadata: CeremonyMetadata? = null
+    private var receivedPad: List<UByte>? = null
     private var mnemonic: List<String> = emptyList()
 
+    /** Bluetooth receiving session, while the channel is Bluetooth */
+    private val _bleReceiver = MutableStateFlow<BlePadReceiverSession?>(null)
+    val bleReceiver: StateFlow<BlePadReceiverSession?> = _bleReceiver.asStateFlow()
+    private var bleJob: Job? = null
+
     // MARK: - Configuration
+
+    fun setChannel(channel: CeremonyChannel) {
+        _uiState.update { it.copy(channel = channel) }
+    }
 
     fun setConversationName(name: String) {
         _uiState.update { it.copy(conversationName = name) }
@@ -94,8 +113,8 @@ class ReceiverCeremonyViewModel @Inject constructor(
         fountainReceiver = cryptoService.createFountainReceiver(passphrase = passphraseToUse)
 
         // Reset internal state
-        ceremonyResult = null
-        reconstructedPadBytes = null
+        receivedMetadata = null
+        receivedPad = null
         mnemonic = emptyList()
 
         // Update UI state
@@ -109,6 +128,51 @@ class ReceiverCeremonyViewModel @Inject constructor(
         }
 
         Log.d(TAG, "Started scanning with new fountain receiver, passphraseEnabled=${state.passphraseEnabled}")
+    }
+
+    // MARK: - Bluetooth
+
+    /** Advertise a code and wait for the other phone to send the pad. */
+    fun startBluetooth() {
+        val session = BlePadReceiverSession(context)
+        _bleReceiver.value = session
+        _uiState.update { it.copy(phase = CeremonyPhase.BluetoothTransfer) }
+        bleJob?.cancel()
+        bleJob = viewModelScope.launch {
+            session.state.first { it is BleTransferState.Completed }
+            val received = session.receivedPad
+            _bleReceiver.value = null
+            if (received == null) {
+                _uiState.update { it.copy(phase = CeremonyPhase.Failed(CeremonyError.PAD_RECONSTRUCTION_FAILED)) }
+                return@launch
+            }
+            try {
+                val payload = decodeCeremonyPayload(received.pad.toUBytes())
+                applyReceived(payload.metadata, payload.pad)
+            } catch (e: Exception) {
+                Log.e(TAG, "Invalid Bluetooth payload: ${e.message}", e)
+                _uiState.update { it.copy(phase = CeremonyPhase.Failed(CeremonyError.PAD_RECONSTRUCTION_FAILED)) }
+            }
+        }
+        session.start()
+    }
+
+    /** The six words differed: the exchange may be intercepted. */
+    fun bluetoothWordsRejected() {
+        stopBluetooth()
+        rejectVerification()
+    }
+
+    /** Advertise a new code after a failure. */
+    fun retryBluetooth() {
+        _bleReceiver.value?.start()
+    }
+
+    private fun stopBluetooth() {
+        bleJob?.cancel()
+        bleJob = null
+        _bleReceiver.value?.cancel()
+        _bleReceiver.value = null
     }
 
     fun processScannedFrame(base64String: String) {
@@ -162,35 +226,31 @@ class ReceiverCeremonyViewModel @Inject constructor(
                 return
             }
 
-            ceremonyResult = result
-            val padUBytes = result.pad
-
-            Log.d(TAG, "Reconstructed pad: ${padUBytes.size} bytes, blocks used: ${result.blocksUsed}")
-            Log.d(TAG, "Metadata: ttl=${result.metadata.ttlSeconds}, relayUrl=${result.metadata.relayUrl}")
-
-            // Extract color from notification flags
-            val colorIndex = ((result.metadata.notificationFlags.toInt()) shr 12) and 0x0F
-            val decodedColor = ConversationColor.entries.getOrElse(colorIndex) { ConversationColor.INDIGO }
-            _uiState.update { it.copy(selectedColor = decodedColor) }
-            Log.d(TAG, "Decoded conversation color: $decodedColor (index=$colorIndex)")
-
-            logPadDebugInfo(padUBytes)
-
-            // Generate mnemonic using FFI (takes List<UByte>)
-            mnemonic = uniffi.ash.generateMnemonic(padUBytes)
-            Log.d(TAG, "Generated mnemonic: ${mnemonic.joinToString(" ")}")
-
-            // Derive tokens for debugging
-            val tokens = uniffi.ash.deriveAllTokens(padUBytes)
-            Log.d(TAG, "Derived conversation ID: ${tokens.conversationId}")
-
-            reconstructedPadBytes = padUBytes.map { it.toByte() }.toByteArray()
-
-            _uiState.update { it.copy(phase = CeremonyPhase.Verifying(mnemonic = mnemonic)) }
+            Log.d(TAG, "Reconstructed pad: ${result.pad.size} bytes, blocks used: ${result.blocksUsed}")
+            applyReceived(result.metadata, result.pad)
         } catch (e: Exception) {
             Log.e(TAG, "Failed to reconstruct ceremony: ${e.message}", e)
             _uiState.update { it.copy(phase = CeremonyPhase.Failed(CeremonyError.PAD_RECONSTRUCTION_FAILED)) }
         }
+    }
+
+    /** Take the settings chosen by the initiator, then show the words to compare. */
+    private fun applyReceived(metadata: CeremonyMetadata, padUBytes: List<UByte>) {
+        Log.d(TAG, "Metadata: ttl=${metadata.ttlSeconds}, relayUrl=${metadata.relayUrl}")
+
+        // Extract color from notification flags
+        val colorIndex = ((metadata.notificationFlags.toInt()) shr 12) and 0x0F
+        val decodedColor = ConversationColor.entries.getOrElse(colorIndex) { ConversationColor.INDIGO }
+        _uiState.update { it.copy(selectedColor = decodedColor) }
+
+        logPadDebugInfo(padUBytes)
+
+        // Generate mnemonic using FFI (takes List<UByte>)
+        mnemonic = uniffi.ash.generateMnemonic(padUBytes)
+        receivedMetadata = metadata
+        receivedPad = padUBytes
+
+        _uiState.update { it.copy(phase = CeremonyPhase.Verifying(mnemonic = mnemonic)) }
     }
 
     private fun logPadDebugInfo(padUBytes: List<UByte>) {
@@ -203,9 +263,8 @@ class ReceiverCeremonyViewModel @Inject constructor(
     // MARK: - Verification
 
     fun confirmVerification(): Conversation? {
-        val result = ceremonyResult ?: return null
-        val padUBytes = result.pad
-        val metadata = result.metadata
+        val padUBytes = receivedPad ?: return null
+        val metadata = receivedMetadata ?: return null
         val state = _uiState.value
 
         try {
@@ -256,8 +315,8 @@ class ReceiverCeremonyViewModel @Inject constructor(
         cleanupResources()
 
         _uiState.value = ReceiverCeremonyUiState()
-        ceremonyResult = null
-        reconstructedPadBytes = null
+        receivedMetadata = null
+        receivedPad = null
         mnemonic = emptyList()
     }
 
@@ -269,6 +328,7 @@ class ReceiverCeremonyViewModel @Inject constructor(
     private fun cleanupResources() {
         fountainReceiver?.close()
         fountainReceiver = null
+        stopBluetooth()
     }
 
     override fun onCleared() {

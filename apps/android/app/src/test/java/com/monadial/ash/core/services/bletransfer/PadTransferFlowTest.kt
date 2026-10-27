@@ -8,8 +8,12 @@ import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import uniffi.ash.BlePacketReassembler
+import uniffi.ash.CeremonyMetadata
 import uniffi.ash.SecurityLevel
+import uniffi.ash.TransferMethod
 import uniffi.ash.bleServiceUuid
+import uniffi.ash.decodeCeremonyPayload
+import uniffi.ash.encodeCeremonyPayload
 
 @DisplayName("Pad transfer over BLE")
 class PadTransferFlowTest {
@@ -65,6 +69,28 @@ class PadTransferFlowTest {
 
         private fun List<PadTransferEvent>.words(): List<String>? =
             filterIsInstance<PadTransferEvent.CompareWords>().singleOrNull()?.words
+
+        @Test
+        fun `ceremony payload carries the settings with the pad`() {
+            val pad = ByteArray(4096) { (it * 3).toByte() }
+            val metadata = CeremonyMetadata(
+                version = 1u,
+                ttlSeconds = 3600u,
+                disappearingMessagesSeconds = 300u,
+                notificationFlags = 0x1234u,
+                transferMethod = TransferMethod.RAPTOR,
+                relayUrl = "https://relay.example.com"
+            )
+            val payload = encodeCeremonyPayload(metadata, pad.toUBytes())
+
+            val decoded = decodeCeremonyPayload(overBle(payload))
+            assertThat(decoded.pad.toBytes()).isEqualTo(pad)
+            assertThat(decoded.metadata.ttlSeconds).isEqualTo(3600uL)
+            assertThat(decoded.metadata.disappearingMessagesSeconds).isEqualTo(300u)
+            assertThat(decoded.metadata.notificationFlags).isEqualTo(0x1234.toUShort())
+            assertThat(decoded.metadata.relayUrl).isEqualTo("https://relay.example.com")
+            assertThrows<Exception> { decodeCeremonyPayload(listOf(0u, 1u)) }
+        }
 
         @Test
         fun `full transfer delivers the pad at Enhanced level`() {
