@@ -919,3 +919,121 @@ async fn test_burn_removes_device_registrations() {
 
     response.assert_status(StatusCode::NOT_FOUND);
 }
+
+#[tokio::test]
+async fn test_group_message_waits_for_every_member() {
+    let server = build_test_server().await;
+    let creds = generate_test_credentials_with_seed(42);
+    let auth = auth_header(&creds.auth_token);
+
+    server
+        .post("/v1/conversations")
+        .json(&json!({
+            "conversation_id": creds.conversation_id,
+            "auth_token_hash": creds.auth_token_hash,
+            "burn_token_hash": creds.burn_token_hash,
+            "ttl_seconds": 86400,
+            "members": 3
+        }))
+        .await
+        .assert_status_ok();
+
+    // Member 0 sends
+    let submit = server
+        .post("/v1/messages")
+        .add_header(header::AUTHORIZATION, auth.clone())
+        .json(&json!({
+            "conversation_id": creds.conversation_id,
+            "ciphertext": "YWJj",
+            "sender": 0,
+            "ttl_seconds": 86400
+        }))
+        .await;
+    submit.assert_status_ok();
+    let blob_id = submit.json::<Value>()["blob_id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+
+    let poll = |member: u8| {
+        server
+            .get(&format!(
+                "/v1/messages?conversation_id={}&member={member}",
+                creds.conversation_id
+            ))
+            .add_header(header::AUTHORIZATION, auth.clone())
+    };
+    let count = |body: Value| body["messages"].as_array().unwrap().len();
+
+    // The sender does not get it back; the others do
+    assert_eq!(count(poll(0).await.json()), 0);
+    assert_eq!(count(poll(1).await.json()), 1);
+
+    // Member 1 reads it: member 2 still gets it
+    server
+        .post("/v1/messages/ack")
+        .add_header(header::AUTHORIZATION, auth.clone())
+        .json(&json!({
+            "conversation_id": creds.conversation_id,
+            "blob_ids": [blob_id],
+            "member": 1
+        }))
+        .await
+        .assert_status_ok();
+    assert_eq!(count(poll(1).await.json()), 0);
+    assert_eq!(count(poll(2).await.json()), 1);
+
+    // Member 2 reads it: gone for everyone
+    server
+        .post("/v1/messages/ack")
+        .add_header(header::AUTHORIZATION, auth.clone())
+        .json(&json!({
+            "conversation_id": creds.conversation_id,
+            "blob_ids": [blob_id],
+            "member": 2
+        }))
+        .await
+        .assert_status_ok();
+    assert_eq!(count(poll(2).await.json()), 0);
+}
+
+#[tokio::test]
+async fn test_group_rejects_unknown_members() {
+    let server = build_test_server().await;
+    let creds = generate_test_credentials_with_seed(43);
+    let auth = auth_header(&creds.auth_token);
+
+    // More than 8 members is refused
+    server
+        .post("/v1/conversations")
+        .json(&json!({
+            "conversation_id": creds.conversation_id,
+            "auth_token_hash": creds.auth_token_hash,
+            "burn_token_hash": creds.burn_token_hash,
+            "members": 9
+        }))
+        .await
+        .assert_status_bad_request();
+
+    server
+        .post("/v1/conversations")
+        .json(&json!({
+            "conversation_id": creds.conversation_id,
+            "auth_token_hash": creds.auth_token_hash,
+            "burn_token_hash": creds.burn_token_hash,
+            "members": 3
+        }))
+        .await
+        .assert_status_ok();
+
+    server
+        .post("/v1/messages")
+        .add_header(header::AUTHORIZATION, auth.clone())
+        .json(&json!({
+            "conversation_id": creds.conversation_id,
+            "ciphertext": "YWJj",
+            "sender": 3
+        }))
+        .await
+        .assert_status_bad_request();
+}

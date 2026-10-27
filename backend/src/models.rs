@@ -55,18 +55,21 @@ pub mod notification_flags {
 pub struct ConversationPrefs {
     /// 16-bit notification flags.
     pub notification_flags: u16,
-    /// Message TTL in seconds (for expiry notifications).
+    /// Message retention in seconds, chosen at the ceremony.
     pub ttl_seconds: u64,
+    /// Number of members: 2 for a two-person conversation, up to 8 for a group.
+    pub members: u8,
     /// When the preferences were registered.
     pub created_at: DateTime<Utc>,
 }
 
 impl ConversationPrefs {
     /// Create new preferences with the given flags and TTL.
-    pub fn new(notification_flags: u16, ttl_seconds: u64) -> Self {
+    pub fn new(notification_flags: u16, ttl_seconds: u64, members: u8) -> Self {
         Self {
             notification_flags,
             ttl_seconds,
+            members,
             created_at: Utc::now(),
         }
     }
@@ -115,6 +118,10 @@ pub struct StoredBlob {
     pub received_at: DateTime<Utc>,
     /// When the blob expires (automatic deletion).
     pub expires_at: DateTime<Utc>,
+    /// Group member who sent it (anonymous index), for group conversations.
+    pub sender: Option<u8>,
+    /// Bit `n` set once group member `n` acknowledged the blob.
+    pub acked_by: u8,
 }
 
 /// Registered device for push notifications.
@@ -205,6 +212,13 @@ pub struct RegisterConversationRequest {
     /// Message TTL in seconds.
     #[serde(default = "default_ttl_seconds")]
     pub ttl_seconds: u64,
+    /// Number of members (2 to 8). Group members are only anonymous indexes.
+    #[serde(default = "default_members")]
+    pub members: u8,
+}
+
+fn default_members() -> u8 {
+    2
 }
 
 fn default_notification_flags() -> u16 {
@@ -236,6 +250,12 @@ pub struct SubmitMessageRequest {
     pub ciphertext: String,
     /// Optional client sequence number.
     pub sequence: Option<SequenceNumber>,
+    /// Group member index of the sender, for group conversations.
+    #[serde(default)]
+    pub sender: Option<u8>,
+    /// Retention the conversation chose, sent by the apps with each message.
+    #[serde(default)]
+    pub ttl_seconds: Option<u64>,
 }
 
 /// Poll messages query parameters.
@@ -245,6 +265,9 @@ pub struct PollMessagesQuery {
     pub conversation_id: ConversationId,
     /// Pagination cursor (base64-encoded).
     pub cursor: Option<String>,
+    /// Group member polling: skips its own messages and those it acknowledged.
+    #[serde(default)]
+    pub member: Option<u8>,
 }
 
 /// Burn conversation request.
@@ -268,6 +291,10 @@ pub struct AckMessageRequest {
     pub conversation_id: ConversationId,
     /// Blob IDs to acknowledge.
     pub blob_ids: Vec<Uuid>,
+    /// Group member acknowledging: a group blob is deleted once every other
+    /// member acknowledged it. Without it the blob is deleted at once.
+    #[serde(default)]
+    pub member: Option<u8>,
 }
 
 /// SSE stream query parameters.
@@ -424,6 +451,7 @@ mod tests {
         let prefs = ConversationPrefs::new(
             notification_flags::NOTIFY_NEW_MESSAGE | notification_flags::NOTIFY_MESSAGE_EXPIRING,
             300,
+            2,
         );
 
         assert!(prefs.notify_new_message());

@@ -106,6 +106,10 @@ pub async fn register_conversation(
         return Err(ApiError::InvalidInput("invalid burn_token_hash format"));
     }
 
+    if !(2..=crate::config::MAX_GROUP_MEMBERS).contains(&req.members) {
+        return Err(ApiError::InvalidInput("members must be between 2 and 8"));
+    }
+
     // Register the conversation (idempotent - both parties may register)
     let result = state.auth.register(
         &req.conversation_id,
@@ -120,6 +124,7 @@ pub async fn register_conversation(
                 req.conversation_id.clone(),
                 req.notification_flags,
                 req.ttl_seconds,
+                req.members,
             );
             info!(
                 conv_id_prefix = &req.conversation_id[..8],
@@ -134,6 +139,7 @@ pub async fn register_conversation(
                 req.conversation_id.clone(),
                 req.notification_flags,
                 req.ttl_seconds,
+                req.members,
             );
             debug!(
                 conv_id_prefix = &req.conversation_id[..8],
@@ -259,16 +265,28 @@ pub async fn submit_message(
         .decode(&req.ciphertext)
         .map_err(|_| ApiError::InvalidInput("invalid base64 ciphertext"))?;
 
-    // Store the blob (fixed 5-minute TTL)
+    // A group sender must be one of the registered members
+    let members = state
+        .store
+        .get_prefs(&req.conversation_id)
+        .map_or(2, |p| p.members);
+    if req.sender.is_some_and(|s| s >= members) {
+        return Err(ApiError::InvalidInput("sender is not a member"));
+    }
+
+    // Store the blob for the conversation's retention
     let conversation_id = req.conversation_id;
     let received_at = chrono::Utc::now();
-    // Calculate expiry time using same logic as store (for client synchronization)
-    let expires_at = received_at
-        + chrono::Duration::from_std(crate::config::MESSAGE_TTL).expect("valid duration");
 
-    let blob_id = state
+    let (blob_id, expires_at) = state
         .store
-        .store_blob(conversation_id.clone(), ciphertext.clone(), req.sequence)
+        .store_blob(
+            conversation_id.clone(),
+            ciphertext.clone(),
+            req.sequence,
+            req.sender,
+            req.ttl_seconds,
+        )
         .await
         .map_err(|e| match e {
             StoreError::ConversationBurned => ApiError::ConversationBurned,
@@ -340,6 +358,14 @@ pub async fn poll_messages(
         "Polling messages"
     );
 
+    let members = state
+        .store
+        .get_prefs(&query.conversation_id)
+        .map_or(2, |p| p.members);
+    if query.member.is_some_and(|m| m >= members) {
+        return Err(ApiError::InvalidInput("member is not in the conversation"));
+    }
+
     // Parse cursor if provided
     let cursor = query.cursor.as_ref().and_then(|c| Cursor::decode(c));
 
@@ -347,9 +373,10 @@ pub async fn poll_messages(
     let burned = state.store.is_burned(&query.conversation_id);
 
     // Get messages
-    let (blobs, next_cursor) = state
-        .store
-        .get_blobs(&query.conversation_id, cursor.as_ref());
+    let (blobs, next_cursor) =
+        state
+            .store
+            .get_blobs(&query.conversation_id, cursor.as_ref(), query.member);
 
     tracing::info!(
         conv_id = %query.conversation_id,
@@ -451,12 +478,20 @@ pub async fn ack_messages(
         return Ok(Json(AckMessageResponse { acknowledged: 0 }));
     }
 
+    let members = state
+        .store
+        .get_prefs(&req.conversation_id)
+        .map_or(2, |p| p.members);
+    if req.member.is_some_and(|m| m >= members) {
+        return Err(ApiError::InvalidInput("member is not in the conversation"));
+    }
+
     let conversation_id = req.conversation_id.clone();
     let mut acknowledged = 0;
 
     // Delete acknowledged messages from store
     for blob_id in &req.blob_ids {
-        if state.store.delete_blob(&conversation_id, blob_id) {
+        if state.store.ack_blob(&conversation_id, blob_id, req.member) {
             acknowledged += 1;
         }
     }

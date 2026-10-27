@@ -83,13 +83,18 @@ impl Store {
 
     /// Store an encrypted blob for a conversation.
     ///
-    /// Uses fixed 5-minute TTL. Messages are deleted on expiry or ACK.
+    /// Kept for the retention the message carries, or else the one the
+    /// conversation registered, capped by the server; 5 minutes without
+    /// either. Deleted on expiry or once acknowledged (by every other member
+    /// in a group). Returns its ID and expiry.
     pub async fn store_blob(
         &self,
         conversation_id: ConversationId,
         ciphertext: Vec<u8>,
         sequence: Option<SequenceNumber>,
-    ) -> Result<Uuid, StoreError> {
+        sender: Option<u8>,
+        ttl_seconds: Option<u64>,
+    ) -> Result<(Uuid, chrono::DateTime<Utc>), StoreError> {
         if self.is_burned(&conversation_id) {
             return Err(StoreError::ConversationBurned);
         }
@@ -99,7 +104,7 @@ impl Store {
         }
 
         let now = Utc::now();
-        let ttl = self.config.blob_ttl;
+        let ttl = self.blob_ttl(&conversation_id, ttl_seconds);
         let expires_at = now + chrono::Duration::from_std(ttl).expect("valid duration");
 
         let blob = StoredBlob {
@@ -108,6 +113,8 @@ impl Store {
             ciphertext,
             received_at: now,
             expires_at,
+            sender,
+            acked_by: 0,
         };
 
         let blob_id = blob.id;
@@ -123,14 +130,31 @@ impl Store {
         self.metrics.write().await.total_blobs_stored += 1;
 
         debug!(blob_id = %blob_id, ttl_secs = ttl.as_secs(), "Stored blob");
-        Ok(blob_id)
+        Ok((blob_id, expires_at))
+    }
+
+    /// Retention for a blob: the message's, else the conversation's, capped.
+    fn blob_ttl(
+        &self,
+        conversation_id: &ConversationId,
+        ttl_seconds: Option<u64>,
+    ) -> std::time::Duration {
+        ttl_seconds
+            .or_else(|| self.prefs.get(conversation_id).map(|p| p.ttl_seconds))
+            .map(|secs| std::time::Duration::from_secs(secs.max(1)))
+            .unwrap_or(self.config.blob_ttl)
+            .min(self.config.max_message_ttl)
     }
 
     /// Get blobs for a conversation, optionally filtered by cursor.
+    ///
+    /// A group `member` does not get its own blobs back, nor those it already
+    /// acknowledged.
     pub fn get_blobs(
         &self,
         conversation_id: &ConversationId,
         cursor: Option<&crate::models::Cursor>,
+        member: Option<u8>,
     ) -> (Vec<StoredBlob>, Option<crate::models::Cursor>) {
         use crate::models::Cursor;
 
@@ -149,6 +173,11 @@ impl Store {
             .value()
             .iter()
             .filter(|b| b.expires_at > now)
+            .filter(|b| {
+                member.map_or(true, |m| {
+                    b.sender != Some(m) && b.acked_by & member_bit(m) == 0
+                })
+            })
             .filter(|b| {
                 cursor.map_or(true, |c| {
                     if let Some(last_id) = c.last_id {
@@ -173,7 +202,47 @@ impl Store {
         (filtered, next_cursor)
     }
 
-    /// Delete a specific blob by ID (used for ACK).
+    /// Acknowledge a blob.
+    ///
+    /// Without a `member`, or in a two-person conversation, the blob is
+    /// deleted at once. In a group, the member is recorded and the blob is
+    /// deleted once every member except its sender acknowledged it.
+    /// Returns `true` if the blob was found.
+    pub fn ack_blob(
+        &self,
+        conversation_id: &ConversationId,
+        blob_id: &Uuid,
+        member: Option<u8>,
+    ) -> bool {
+        let members = self
+            .prefs
+            .get(conversation_id)
+            .map(|p| p.members)
+            .unwrap_or(2);
+        let Some(member) = member.filter(|_| members > 2) else {
+            return self.delete_blob(conversation_id, blob_id);
+        };
+        let Some(mut entry) = self.blobs.get_mut(conversation_id) else {
+            return false;
+        };
+        let Some(blob) = entry.value_mut().iter_mut().find(|b| b.id == *blob_id) else {
+            return false;
+        };
+        blob.acked_by |= member_bit(member);
+        let everyone: u8 = if members >= 8 {
+            u8::MAX
+        } else {
+            (1u8 << members) - 1
+        };
+        let needed = everyone & !blob.sender.map_or(0, member_bit);
+        if blob.acked_by & needed == needed {
+            entry.value_mut().retain(|b| b.id != *blob_id);
+            debug!(blob_id = %blob_id, "Deleted group blob after every member acknowledged");
+        }
+        true
+    }
+
+    /// Delete a specific blob by ID.
     ///
     /// Returns `true` if the blob was found and deleted.
     pub fn delete_blob(&self, conversation_id: &ConversationId, blob_id: &Uuid) -> bool {
@@ -293,8 +362,9 @@ impl Store {
         conversation_id: ConversationId,
         notification_flags: u16,
         ttl_seconds: u64,
+        members: u8,
     ) {
-        let prefs = ConversationPrefs::new(notification_flags, ttl_seconds);
+        let prefs = ConversationPrefs::new(notification_flags, ttl_seconds, members);
         self.prefs.insert(conversation_id, prefs);
         debug!("Stored conversation preferences");
     }
@@ -375,6 +445,11 @@ pub enum StoreError {
 // Tests
 // =============================================================================
 
+/// Bit of a group member in [`StoredBlob::acked_by`].
+fn member_bit(member: u8) -> u8 {
+    1u8.checked_shl(u32::from(member)).unwrap_or(0)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -385,6 +460,7 @@ mod tests {
             bind_addr: "127.0.0.1".to_string(),
             port: 8080,
             blob_ttl: std::time::Duration::from_secs(300),
+            max_message_ttl: std::time::Duration::from_secs(7 * 24 * 3600),
             burn_ttl: std::time::Duration::from_secs(300),
             device_token_ttl: std::time::Duration::from_secs(3600),
             max_ciphertext_size: 8192,
@@ -404,12 +480,12 @@ mod tests {
         let conv_id = "a".repeat(64);
         let ciphertext = vec![1, 2, 3, 4];
 
-        let blob_id = store
-            .store_blob(conv_id.clone(), ciphertext.clone(), Some(1))
+        let (blob_id, _) = store
+            .store_blob(conv_id.clone(), ciphertext.clone(), Some(1), None, None)
             .await
             .expect("store failed");
 
-        let (blobs, cursor) = store.get_blobs(&conv_id, None);
+        let (blobs, cursor) = store.get_blobs(&conv_id, None, None);
         assert_eq!(blobs.len(), 1);
         assert_eq!(blobs[0].id, blob_id);
         assert_eq!(blobs[0].ciphertext, ciphertext);
@@ -421,15 +497,15 @@ mod tests {
         let store = Store::new(test_config());
         let conv_id = "b".repeat(64);
 
-        let blob_id = store
-            .store_blob(conv_id.clone(), vec![1], None)
+        let (blob_id, _) = store
+            .store_blob(conv_id.clone(), vec![1], None, None, None)
             .await
             .unwrap();
 
-        assert!(store.delete_blob(&conv_id, &blob_id));
+        assert!(store.ack_blob(&conv_id, &blob_id, None));
         assert!(!store.delete_blob(&conv_id, &blob_id)); // Already deleted
 
-        let (blobs, _) = store.get_blobs(&conv_id, None);
+        let (blobs, _) = store.get_blobs(&conv_id, None, None);
         assert!(blobs.is_empty());
     }
 
@@ -439,15 +515,15 @@ mod tests {
         let conv_id = "c".repeat(64);
 
         store
-            .store_blob(conv_id.clone(), vec![1], None)
+            .store_blob(conv_id.clone(), vec![1], None, None, None)
             .await
             .unwrap();
-        store.store_prefs(conv_id.clone(), 0, 300);
+        store.store_prefs(conv_id.clone(), 0, 300, 2);
 
         store.burn(conv_id.clone()).await;
 
         assert!(store.is_burned(&conv_id));
-        let (blobs, _) = store.get_blobs(&conv_id, None);
+        let (blobs, _) = store.get_blobs(&conv_id, None, None);
         assert!(blobs.is_empty());
     }
 
@@ -459,15 +535,17 @@ mod tests {
         let conv_id = "d".repeat(64);
 
         store
-            .store_blob(conv_id.clone(), vec![1], None)
+            .store_blob(conv_id.clone(), vec![1], None, None, None)
             .await
             .unwrap();
         store
-            .store_blob(conv_id.clone(), vec![2], None)
+            .store_blob(conv_id.clone(), vec![2], None, None, None)
             .await
             .unwrap();
 
-        let result = store.store_blob(conv_id.clone(), vec![3], None).await;
+        let result = store
+            .store_blob(conv_id.clone(), vec![3], None, None, None)
+            .await;
         assert!(matches!(result, Err(StoreError::QueueFull)));
     }
 
@@ -478,7 +556,9 @@ mod tests {
         let store = Store::new(config);
         let conv_id = "e".repeat(64);
 
-        let result = store.store_blob(conv_id, vec![0; 100], None).await;
+        let result = store
+            .store_blob(conv_id, vec![0; 100], None, None, None)
+            .await;
         assert!(matches!(result, Err(StoreError::PayloadTooLarge)));
     }
 
@@ -489,12 +569,117 @@ mod tests {
 
         store.burn(conv_id.clone()).await;
 
-        let result = store.store_blob(conv_id.clone(), vec![1], None).await;
+        let result = store
+            .store_blob(conv_id.clone(), vec![1], None, None, None)
+            .await;
         assert!(matches!(result, Err(StoreError::ConversationBurned)));
 
         let result = store
             .register_device(conv_id, "token".to_string(), Platform::Ios)
             .await;
         assert!(matches!(result, Err(StoreError::ConversationBurned)));
+    }
+
+    #[tokio::test]
+    async fn group_blob_is_kept_until_every_other_member_acked() {
+        let store = Store::new(test_config());
+        let conv_id = "g".repeat(64);
+        store.store_prefs(conv_id.clone(), 0, 3600, 3);
+
+        // Member 0 sends; members 1 and 2 must both acknowledge
+        let (blob_id, _) = store
+            .store_blob(conv_id.clone(), vec![1], None, Some(0), None)
+            .await
+            .unwrap();
+
+        // The sender does not get its own message back
+        assert!(store.get_blobs(&conv_id, None, Some(0)).0.is_empty());
+        assert_eq!(store.get_blobs(&conv_id, None, Some(1)).0.len(), 1);
+
+        assert!(store.ack_blob(&conv_id, &blob_id, Some(1)));
+        // Member 1 no longer sees it, member 2 still does
+        assert!(store.get_blobs(&conv_id, None, Some(1)).0.is_empty());
+        assert_eq!(store.get_blobs(&conv_id, None, Some(2)).0.len(), 1);
+
+        assert!(store.ack_blob(&conv_id, &blob_id, Some(2)));
+        assert!(store.get_blobs(&conv_id, None, None).0.is_empty());
+        assert!(!store.ack_blob(&conv_id, &blob_id, Some(2)));
+    }
+
+    #[tokio::test]
+    async fn eight_member_group_acks() {
+        let store = Store::new(test_config());
+        let conv_id = "h".repeat(64);
+        store.store_prefs(conv_id.clone(), 0, 3600, 8);
+        let (blob_id, _) = store
+            .store_blob(conv_id.clone(), vec![1], None, Some(7), None)
+            .await
+            .unwrap();
+        for member in 0..7 {
+            assert_eq!(
+                store.get_blobs(&conv_id, None, None).0.len(),
+                1,
+                "before member {member}"
+            );
+            assert!(store.ack_blob(&conv_id, &blob_id, Some(member)));
+        }
+        assert!(store.get_blobs(&conv_id, None, None).0.is_empty());
+    }
+
+    #[tokio::test]
+    async fn two_person_ack_deletes_at_once() {
+        let store = Store::new(test_config());
+        let conv_id = "i".repeat(64);
+        store.store_prefs(conv_id.clone(), 0, 3600, 2);
+        let (blob_id, _) = store
+            .store_blob(conv_id.clone(), vec![1], None, None, None)
+            .await
+            .unwrap();
+        assert!(store.ack_blob(&conv_id, &blob_id, Some(1)));
+        assert!(store.get_blobs(&conv_id, None, None).0.is_empty());
+    }
+
+    #[tokio::test]
+    async fn retention_follows_the_conversation_and_is_capped() {
+        let store = Store::new(test_config());
+        let day = "j".repeat(64);
+        let year = "k".repeat(64);
+        let unregistered = "l".repeat(64);
+        store.store_prefs(day.clone(), 0, 24 * 3600, 2);
+        store.store_prefs(year.clone(), 0, 365 * 24 * 3600, 2);
+
+        let now = Utc::now();
+        let (_, day_expiry) = store
+            .store_blob(day, vec![1], None, None, None)
+            .await
+            .unwrap();
+        let (_, year_expiry) = store
+            .store_blob(year, vec![1], None, None, None)
+            .await
+            .unwrap();
+        let (_, default_expiry) = store
+            .store_blob(unregistered.clone(), vec![1], None, None, None)
+            .await
+            .unwrap();
+        let (_, message_expiry) = store
+            .store_blob(unregistered, vec![1], None, None, Some(3600))
+            .await
+            .unwrap();
+
+        // Minutes from now, within a minute of slack
+        let minutes = |t: chrono::DateTime<Utc>| (t - now).num_minutes();
+        assert!((minutes(day_expiry) - 24 * 60).abs() <= 1);
+        assert!(
+            (minutes(year_expiry) - 7 * 24 * 60).abs() <= 1,
+            "capped at 7 days"
+        );
+        assert!(
+            (minutes(default_expiry) - 5).abs() <= 1,
+            "5 minutes without retention"
+        );
+        assert!(
+            (minutes(message_expiry) - 60).abs() <= 1,
+            "the message's retention wins"
+        );
     }
 }

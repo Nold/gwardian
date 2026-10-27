@@ -101,10 +101,17 @@ If a device is offline, it receives burn when it next connects.
 The backend must delete expired data automatically via background cleanup task (runs every 10 seconds).
 
 **Message TTL:**
-- Configured during ceremony (stored in ceremony metadata)
-- Default: 5 minutes (maximum ephemerality)
-- Maximum: 7 days (604,800 seconds)
-- Messages deleted on ACK or TTL expiry, whichever comes first
+- Configured during ceremony (stored in ceremony metadata); the apps send it with each message (`ttl_seconds`), and it may also be given at registration
+- Default: 5 minutes (maximum ephemerality) when neither is given
+- Maximum: 7 days (604,800 seconds, `MAX_MESSAGE_TTL_SECS`); longer values are capped
+- Messages deleted on ACK or TTL expiry, whichever comes first; in a group, on ACK by every member except the sender
+
+**Groups (2 to 8 members):**
+- A conversation registers its number of `members`; members are anonymous indexes 0 to 7, never identities
+- A message carries its `sender` index; each member polls and acknowledges with its own `member` index
+- A member does not receive its own messages, nor those it already acknowledged
+- A message is deleted once every member except its sender acknowledged it, or when its TTL expires
+- The relay learns which index read a message and when, as it already learns when a message is read
 
 **Server restart:**
 - All RAM data lost (messages, auth tokens, device tokens)
@@ -216,12 +223,15 @@ Exact paths and schemas may vary, but semantics must match.
   {
     "conversation_id": "hex string (64 chars)",
     "auth_token_hash": "sha256 hash (64 hex chars)",
-    "burn_token_hash": "sha256 hash (64 hex chars)"
+    "burn_token_hash": "sha256 hash (64 hex chars)",
+    "notification_flags": 11,   // optional
+    "ttl_seconds": 86400,       // optional retention
+    "members": 2                // optional, 2 to 8 (default 2)
   }
   ```
 - Success: `200 OK` with `{"success": true}`
 - Errors:
-  - `400 INVALID_INPUT` - malformed request
+  - `400 INVALID_INPUT` - malformed request, or `members` outside 2 to 8
 
 **Invariants:**
 - Must store only hashes (cannot reverse to get tokens)
@@ -272,10 +282,12 @@ Exact paths and schemas may vary, but semantics must match.
   {
     "conversation_id": "...",
     "ciphertext": "base64 encoded",
-    "sequence": 123  // optional
+    "sequence": 123,       // optional
+    "ttl_seconds": 86400,  // optional retention, capped at 7 days
+    "sender": 0            // group member index, groups only
   }
   ```
-- Success: `200 OK` with `{"accepted": true, "blob_id": "uuid"}`
+- Success: `200 OK` with `{"accepted": true, "blob_id": "uuid", "expires_at": "..."}`
 - Errors:
   - `400 INVALID_INPUT` - invalid base64 or missing fields
   - `401 MISSING_AUTH` / `401 UNAUTHORIZED` - auth errors
@@ -297,7 +309,7 @@ Exact paths and schemas may vary, but semantics must match.
 
 **Goal:** Return new ciphertext blobs for a conversation.
 
-- Endpoint: `GET /v1/messages?conversation_id=...&cursor=...`
+- Endpoint: `GET /v1/messages?conversation_id=...&cursor=...&member=...` (`member`: group member index, groups only)
 - Headers: `Authorization: Bearer <auth_token>`
 - Success: `200 OK` with:
   ```json
@@ -326,22 +338,23 @@ Exact paths and schemas may vary, but semantics must match.
 
 **Goal:** Confirm message was displayed and trigger deletion.
 
-- Endpoint: `POST /v1/ack`
+- Endpoint: `POST /v1/messages/ack`
 - Headers: `Authorization: Bearer <auth_token>`
 - Input:
   ```json
   {
     "conversation_id": "...",
-    "blob_id": "uuid"
+    "blob_ids": ["uuid"],
+    "member": 1   // group member index, groups only
   }
   ```
-- Success: `200 OK` with `{"accepted": true}`
+- Success: `200 OK` with `{"acknowledged": 1}`
 - Errors:
   - `401 MISSING_AUTH` / `401 UNAUTHORIZED` - auth errors
   - `404 CONVERSATION_NOT_FOUND` - re-register required
 
 **Invariants:**
-- Must delete the blob from RAM immediately
+- Must delete the blob from RAM immediately; in a group, once every member except the sender acknowledged it
 - Must broadcast `delivered` event via SSE to conversation participants
 - ACK is idempotent (ACKing already-deleted blob returns success)
 - Must not log blob contents

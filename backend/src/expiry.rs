@@ -103,7 +103,7 @@ impl ExpiryWorker {
             }
 
             // Get blobs for this conversation
-            let (blobs, _) = self.state.store.get_blobs(&conversation_id, None);
+            let (blobs, _) = self.state.store.get_blobs(&conversation_id, None, None);
 
             for blob in blobs {
                 active_blob_ids.insert(blob.id);
