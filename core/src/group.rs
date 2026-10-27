@@ -28,6 +28,11 @@
 //! sender's pad starting at `offset`: first the authentication key, then
 //! the encryption key.
 //!
+//! The plaintext is padded to at least [`GROUP_MIN_PADDED_SIZE`] bytes
+//! before encryption ([`crate::message::pad_message`] format), so the relay
+//! cannot tell short messages apart by their length. The padding is
+//! encrypted and covered by the MAC like the content.
+//!
 //! # Security Properties
 //!
 //! - **sender** and **offset** are not covered by the MAC directly, but they
@@ -103,8 +108,22 @@ use std::collections::{BTreeMap, BTreeSet};
 use crate::crc;
 use crate::error::{Error, Result};
 use crate::mac::{AuthKey, AUTH_KEY_SIZE};
-use crate::message::{MessageFrame, MessageType, MAX_CIPHERTEXT_LEN};
+use crate::message::{
+    pad_message_to, unpad_message, MessageFrame, MessageType, MAX_CIPHERTEXT_LEN,
+};
 use crate::pad::secure_zero;
+
+/// Every group message is padded to at least this many bytes, hiding the
+/// length of short messages.
+pub const GROUP_MIN_PADDED_SIZE: usize = 64;
+
+/// Padding overhead: marker byte and 2-byte length.
+const PADDING_OVERHEAD: usize = 3;
+
+/// Bytes a message of `plaintext_len` bytes occupies once padded.
+pub fn padded_len(plaintext_len: usize) -> usize {
+    (plaintext_len + PADDING_OVERHEAD).max(GROUP_MIN_PADDED_SIZE)
+}
 
 /// Identifier of a member within a group.
 pub type MemberId = u8;
@@ -551,17 +570,20 @@ impl Group {
 
     /// Whether a message of `plaintext_len` bytes fits in this device's pad.
     pub fn can_send(&self, plaintext_len: usize) -> bool {
-        AUTH_KEY_SIZE + plaintext_len <= self.own_pad().available_for_sending()
+        AUTH_KEY_SIZE + padded_len(plaintext_len) <= self.own_pad().available_for_sending()
     }
 
-    /// Encrypt a message with this device's pad.
+    /// Encrypt a message with this device's pad, padded to at least
+    /// [`GROUP_MIN_PADDED_SIZE`] bytes.
     pub fn encrypt(&mut self, msg_type: MessageType, plaintext: &[u8]) -> Result<GroupFrame> {
-        if plaintext.len() > MAX_CIPHERTEXT_LEN {
+        let max = MAX_CIPHERTEXT_LEN - PADDING_OVERHEAD;
+        if plaintext.len() > max {
             return Err(Error::PayloadTooLarge {
                 size: plaintext.len(),
-                max: MAX_CIPHERTEXT_LEN,
+                max,
             });
         }
+        let plaintext = pad_message_to(plaintext, GROUP_MIN_PADDED_SIZE)?;
         let me = self.me;
         let pad = self.pads.get_mut(&me).expect("own pad is always present");
         let start = pad.next_send_offset();
@@ -574,7 +596,7 @@ impl Group {
         let auth_key = AuthKey::from_slice(&pad.bytes[start..start + AUTH_KEY_SIZE]);
         let result = MessageFrame::encrypt(
             msg_type,
-            plaintext,
+            &plaintext,
             &pad.bytes[start + AUTH_KEY_SIZE..end],
             &auth_key,
         );
@@ -622,7 +644,8 @@ impl Group {
         };
         pad.burn(start, end);
         self.failures.remove(&frame.sender);
-        Ok(plaintext)
+        // Authenticated, so a bad padding means a broken sender, not an attack
+        unpad_message(&plaintext)
     }
 
     fn check_no_downgrade(
@@ -801,16 +824,49 @@ mod tests {
 
     #[test]
     fn pad_exhaustion() {
-        let mut groups = family(2, AUTH_KEY_SIZE + 10);
-        assert!(groups[0].can_send(10));
-        assert!(!groups[0].can_send(11));
+        // Room for one padded message of 74 bytes (71 bytes of content)
+        let mut groups = family(2, AUTH_KEY_SIZE + GROUP_MIN_PADDED_SIZE + 10);
+        assert!(groups[0].can_send(71));
+        assert!(!groups[0].can_send(72));
         assert!(matches!(
-            groups[0].encrypt(MessageType::Text, &[0u8; 11]),
+            groups[0].encrypt(MessageType::Text, &[0u8; 72]),
             Err(Error::InsufficientPadBytes { .. })
         ));
-        send(&mut groups[0], &[0u8; 10]);
+        send(&mut groups[0], &[0u8; 71]);
         assert!(!groups[0].can_send(0));
         assert_eq!(groups[0].pad(0).unwrap().remaining(), 0);
+    }
+
+    #[test]
+    fn short_messages_have_the_same_length() {
+        let mut groups = family(2, 4096);
+        let ok = groups[0].encrypt(MessageType::Text, b"ok").unwrap();
+        let longer = groups[0]
+            .encrypt(MessageType::Text, &[b'a'; GROUP_MIN_PADDED_SIZE - 3])
+            .unwrap();
+        assert_eq!(ok.frame.ciphertext.len(), GROUP_MIN_PADDED_SIZE);
+        assert_eq!(longer.frame.ciphertext.len(), GROUP_MIN_PADDED_SIZE);
+        assert_eq!(groups[1].decrypt(&ok).unwrap(), b"ok");
+
+        let long = groups[0].encrypt(MessageType::Text, &[b'a'; 100]).unwrap();
+        assert_eq!(long.frame.ciphertext.len(), padded_len(100));
+        assert_eq!(groups[1].decrypt(&long).unwrap(), vec![b'a'; 100]);
+    }
+
+    #[test]
+    fn empty_message_round_trips() {
+        let mut groups = family(2, 4096);
+        let frame = groups[0].encrypt(MessageType::Text, b"").unwrap();
+        assert_eq!(frame.frame.ciphertext.len(), GROUP_MIN_PADDED_SIZE);
+        assert_eq!(groups[1].decrypt(&frame).unwrap(), b"");
+    }
+
+    #[test]
+    fn padded_length() {
+        assert_eq!(padded_len(0), 64);
+        assert_eq!(padded_len(61), 64);
+        assert_eq!(padded_len(62), 65);
+        assert_eq!(padded_len(1000), 1003);
     }
 
     #[test]
