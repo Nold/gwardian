@@ -26,6 +26,14 @@ namespace ash {
         TransferMethod method
     );
 
+    /// Pad and ceremony metadata in one payload, for channels other than
+    /// QR codes (Bluetooth, relay).
+    sequence<u8> encode_ceremony_payload(CeremonyMetadata metadata, sequence<u8> pad_bytes);
+
+    /// Split a payload made by `encode_ceremony_payload`.
+    [Throws=AshError]
+    CeremonyPayload decode_ceremony_payload(sequence<u8> payload);
+
     // === Authenticated Message Operations ===
 
     /// Authentication overhead per message (64 bytes for Wegman-Carter MAC)
@@ -320,6 +328,12 @@ dictionary DecryptedMessage {
 };
 
 /// Result of fountain ceremony decoding
+/// Pad and ceremony metadata received over Bluetooth or the relay
+dictionary CeremonyPayload {
+    CeremonyMetadata metadata;
+    sequence<u8> pad;
+};
+
 dictionary FountainCeremonyResult {
     /// Ceremony metadata (settings)
     CeremonyMetadata metadata;

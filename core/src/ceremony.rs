@@ -372,6 +372,47 @@ impl CeremonyMetadata {
     }
 }
 
+/// Pad and metadata sent together over a channel other than QR codes
+/// (Bluetooth, relay), which carries the bytes but no ceremony framing.
+///
+/// Format: `[metadata_len: u16 BE][metadata][pad]`
+pub fn encode_ceremony_payload(metadata: &CeremonyMetadata, pad: &[u8]) -> Vec<u8> {
+    let encoded = metadata.encode();
+    let mut bytes = Vec::with_capacity(2 + encoded.len() + pad.len());
+    bytes.extend_from_slice(&(encoded.len() as u16).to_be_bytes());
+    bytes.extend_from_slice(&encoded);
+    bytes.extend_from_slice(pad);
+    bytes
+}
+
+/// Split a payload made by [`encode_ceremony_payload`].
+///
+/// # Errors
+///
+/// Returns an error if the metadata is malformed or the pad is empty.
+pub fn decode_ceremony_payload(bytes: &[u8]) -> Result<(CeremonyMetadata, Vec<u8>)> {
+    if bytes.len() < 2 {
+        return Err(Error::MetadataTooShort {
+            size: bytes.len(),
+            minimum: 2,
+        });
+    }
+    let metadata_len = u16::from_be_bytes([bytes[0], bytes[1]]) as usize;
+    let rest = &bytes[2..];
+    if rest.len() < metadata_len {
+        return Err(Error::MetadataTooShort {
+            size: rest.len(),
+            minimum: metadata_len,
+        });
+    }
+    let metadata = CeremonyMetadata::decode(&rest[..metadata_len])?;
+    let pad = &rest[metadata_len..];
+    if pad.is_empty() {
+        return Err(Error::EmptyPayload);
+    }
+    Ok((metadata, pad.to_vec()))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -547,5 +588,32 @@ mod tests {
         let decoded = CeremonyMetadata::decode(&encoded).unwrap();
 
         assert_eq!(decoded.transfer_method, TransferMethod::LT);
+    }
+
+    #[test]
+    fn ceremony_payload_round_trip() {
+        let metadata =
+            CeremonyMetadata::new(3600, 0, "https://relay.example.com".to_string()).unwrap();
+        let pad = vec![7u8; 1000];
+        let bytes = encode_ceremony_payload(&metadata, &pad);
+        let (decoded, decoded_pad) = decode_ceremony_payload(&bytes).unwrap();
+        assert_eq!(decoded, metadata);
+        assert_eq!(decoded_pad, pad);
+    }
+
+    #[test]
+    fn ceremony_payload_rejects_malformed_input() {
+        let metadata =
+            CeremonyMetadata::new(3600, 0, "https://relay.example.com".to_string()).unwrap();
+        assert!(decode_ceremony_payload(&[]).is_err());
+        assert!(decode_ceremony_payload(&[0xFF, 0xFF, 1, 2]).is_err());
+        let no_pad = encode_ceremony_payload(&metadata, &[]);
+        assert!(matches!(
+            decode_ceremony_payload(&no_pad),
+            Err(Error::EmptyPayload)
+        ));
+        let mut truncated = encode_ceremony_payload(&metadata, &[1, 2, 3]);
+        truncated.truncate(10);
+        assert!(decode_ceremony_payload(&truncated).is_err());
     }
 }

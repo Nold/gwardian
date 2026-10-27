@@ -352,9 +352,26 @@ enum CeremonyPhase: Equatable, Sendable {
     case generatingQRCodes(progress: Double, total: Int)
     case configuringReceiver        // Receiver: passphrase config before scanning
     case transferring(currentFrame: Int, totalFrames: Int)
+    /// Pad and settings going over Bluetooth; progress is in the BLE session
+    case bluetoothTransfer
     case verifying(mnemonic: [String])
     case completed(conversation: Conversation)
     case failed(CeremonyError)
+}
+
+/// How the pad travels from one phone to the other
+enum CeremonyChannel: String, CaseIterable, Sendable {
+    /// 🔴 Maximum: QR codes, nothing goes over the air
+    case qrCodes
+    /// 🟠 Enhanced: Bluetooth, protected by a post-quantum key exchange
+    case bluetooth
+
+    var displayName: String {
+        switch self {
+        case .qrCodes: return "QR Codes"
+        case .bluetooth: return "Bluetooth"
+        }
+    }
 }
 
 /// Errors that can occur during ceremony

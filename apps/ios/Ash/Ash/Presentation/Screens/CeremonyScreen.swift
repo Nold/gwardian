@@ -69,6 +69,25 @@ struct CeremonyScreen: View {
                         QRScanView(viewModel: receiver, accentColor: receiver.selectedColor.color)
                     }
 
+                case .bluetoothTransfer:
+                    if let initiator = viewModel.initiatorViewModel, let session = initiator.bleSender {
+                        BluetoothSendView(
+                            session: session,
+                            accentColor: initiator.selectedColor.color,
+                            onCompleted: { initiator.bluetoothCompleted() },
+                            onWordsRejected: { initiator.bluetoothWordsRejected() },
+                            onRetry: { initiator.retryBluetooth() }
+                        )
+                    } else if let receiver = viewModel.receiverViewModel, let session = receiver.bleReceiver {
+                        BluetoothReceiveView(
+                            session: session,
+                            accentColor: receiver.selectedColor.color,
+                            onCompleted: { receiver.bluetoothCompleted() },
+                            onWordsRejected: { receiver.bluetoothWordsRejected() },
+                            onRetry: { receiver.retryBluetooth() }
+                        )
+                    }
+
                 case .verifying(let mnemonic):
                     if let initiator = viewModel.initiatorViewModel {
                         VerificationView(
@@ -224,7 +243,7 @@ private struct PadSizeView: View {
     @Bindable var viewModel: InitiatorCeremonyViewModel
 
     private var canProceed: Bool {
-        viewModel.isPassphraseValid && viewModel.isCustomPadSizeValid
+        viewModel.isChannelReady && viewModel.isCustomPadSizeValid
     }
 
     /// Formatted custom pad size description
@@ -361,69 +380,75 @@ private struct PadSizeView: View {
                 .padding(.horizontal, 20)
                 .padding(.top, 16)
 
-                // Passphrase Section (Required)
-                VStack(spacing: 0) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        HStack {
-                            Image(systemName: "lock.shield.fill")
-                                .font(.title3)
-                                .foregroundStyle(.tint)
-                                .frame(width: 32)
-                            Text("Verbal Passphrase")
-                                .font(.subheadline.weight(.semibold))
-                            Spacer()
-                            Text("Required")
-                                .font(.caption.weight(.medium))
-                                .foregroundStyle(.white)
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 4)
-                                .background(Color.orange, in: Capsule())
-                        }
+                ChannelPicker(channel: $viewModel.channel)
+                    .padding(.horizontal, 20)
+                    .padding(.top, 20)
 
-                        Text("Speak this passphrase to your contact before the ceremony. It encrypts the QR codes so they cannot be intercepted.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    .padding(16)
+                if viewModel.channel == .qrCodes {
+                    // Passphrase Section (Required)
+                    VStack(spacing: 0) {
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack {
+                                Image(systemName: "lock.shield.fill")
+                                    .font(.title3)
+                                    .foregroundStyle(.tint)
+                                    .frame(width: 32)
+                                Text("Verbal Passphrase")
+                                    .font(.subheadline.weight(.semibold))
+                                Spacer()
+                                Text("Required")
+                                    .font(.caption.weight(.medium))
+                                    .foregroundStyle(.white)
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 4)
+                                    .background(Color.orange, in: Capsule())
+                            }
 
-                    Divider().padding(.leading, 56)
-
-                    SecureField("Enter a passphrase (4+ characters)", text: $viewModel.passphrase)
-                        .textFieldStyle(.roundedBorder)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 12)
-
-                    if !viewModel.passphrase.isEmpty && !viewModel.isPassphraseValid {
-                        HStack {
-                            Image(systemName: "exclamationmark.triangle.fill")
-                                .foregroundStyle(.orange)
-                            Text("Passphrase must be at least 4 characters")
+                            Text("Speak this passphrase to your contact before the ceremony. It encrypts the QR codes so they cannot be intercepted.")
                                 .font(.caption)
-                                .foregroundStyle(.orange)
+                                .foregroundStyle(.secondary)
                         }
-                        .padding(.horizontal, 16)
-                        .padding(.bottom, 12)
+                        .padding(16)
+
+                        Divider().padding(.leading, 56)
+
+                        SecureField("Enter a passphrase (4+ characters)", text: $viewModel.passphrase)
+                            .textFieldStyle(.roundedBorder)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 12)
+
+                        if !viewModel.passphrase.isEmpty && !viewModel.isPassphraseValid {
+                            HStack {
+                                Image(systemName: "exclamationmark.triangle.fill")
+                                    .foregroundStyle(.orange)
+                                Text("Passphrase must be at least 4 characters")
+                                    .font(.caption)
+                                    .foregroundStyle(.orange)
+                            }
+                            .padding(.horizontal, 16)
+                            .padding(.bottom, 12)
+                        }
                     }
-                }
-                .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16))
-                .padding(.horizontal, 20)
-                .padding(.top, 20)
+                    .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16))
+                    .padding(.horizontal, 20)
+                    .padding(.top, 20)
 
-                // Passphrase explanation
-                VStack(alignment: .leading, spacing: 8) {
-                    Label("Why is passphrase required?", systemImage: "questionmark.circle")
-                        .font(.subheadline.weight(.medium))
-                        .foregroundStyle(.secondary)
+                    // Passphrase explanation
+                    VStack(alignment: .leading, spacing: 8) {
+                        Label("Why is passphrase required?", systemImage: "questionmark.circle")
+                            .font(.subheadline.weight(.medium))
+                            .foregroundStyle(.secondary)
 
-                    Text("Without a passphrase, anyone who photographs the QR codes could intercept your key. The passphrase ensures only your intended contact can receive the pad.")
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
+                        Text("Without a passphrase, anyone who photographs the QR codes could intercept your key. The passphrase ensures only your intended contact can receive the pad.")
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(16)
+                    .background(Color(.tertiarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 12))
+                    .padding(.horizontal, 20)
+                    .padding(.top, 12)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(16)
-                .background(Color(.tertiarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 12))
-                .padding(.horizontal, 20)
-                .padding(.top, 12)
 
                 // Continue Button
                 Button {
@@ -1518,7 +1543,7 @@ private struct ReceiverSetupView: View {
     @Bindable var viewModel: ReceiverCeremonyViewModel
 
     private var canProceed: Bool {
-        viewModel.isPassphraseValid
+        viewModel.isChannelReady
     }
 
     var body: some View {
@@ -1532,10 +1557,12 @@ private struct ReceiverSetupView: View {
                         .padding(20)
                         .background(Color.accentColor.opacity(0.1), in: Circle())
 
-                    Text("Ready to Scan")
+                    Text(viewModel.channel == .bluetooth ? "Ready to Receive" : "Ready to Scan")
                         .font(.title2.bold())
 
-                    Text("Enter the passphrase spoken by the sender")
+                    Text(viewModel.channel == .bluetooth
+                         ? "Choose the same method as the other phone"
+                         : "Enter the passphrase spoken by the sender")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
@@ -1543,131 +1570,142 @@ private struct ReceiverSetupView: View {
                 .padding(.top, 24)
                 .padding(.bottom, 24)
 
-                // Passphrase Section (Required)
-                VStack(spacing: 0) {
-                    HStack {
-                        Image(systemName: "lock.shield.fill")
-                            .font(.title3)
-                            .foregroundStyle(.tint)
-                            .frame(width: 32)
-                        Text("Verbal Passphrase")
-                            .font(.subheadline.bold())
-                        Spacer()
-                        Text("Required")
-                            .font(.caption.weight(.medium))
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
-                            .background(Color.orange, in: Capsule())
-                    }
-                    .padding(16)
+                ChannelPicker(channel: $viewModel.channel)
+                    .padding(.horizontal, 20)
 
-                    Divider().padding(.leading, 56)
-
-                    SecureField("Enter the passphrase", text: $viewModel.passphrase)
-                        .textContentType(.password)
-                        .textFieldStyle(.roundedBorder)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 12)
-
-                    if !viewModel.passphrase.isEmpty && !viewModel.isPassphraseValid {
+                if viewModel.channel == .qrCodes {
+                    // Passphrase Section (Required)
+                    VStack(spacing: 0) {
                         HStack {
-                            Image(systemName: "exclamationmark.triangle.fill")
-                                .foregroundStyle(.orange)
-                            Text("Passphrase must be at least 4 characters")
-                                .font(.caption)
-                                .foregroundStyle(.orange)
+                            Image(systemName: "lock.shield.fill")
+                                .font(.title3)
+                                .foregroundStyle(.tint)
+                                .frame(width: 32)
+                            Text("Verbal Passphrase")
+                                .font(.subheadline.bold())
+                            Spacer()
+                            Text("Required")
+                                .font(.caption.weight(.medium))
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(Color.orange, in: Capsule())
                         }
-                        .padding(.horizontal, 16)
-                        .padding(.bottom, 12)
+                        .padding(16)
+
+                        Divider().padding(.leading, 56)
+
+                        SecureField("Enter the passphrase", text: $viewModel.passphrase)
+                            .textContentType(.password)
+                            .textFieldStyle(.roundedBorder)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 12)
+
+                        if !viewModel.passphrase.isEmpty && !viewModel.isPassphraseValid {
+                            HStack {
+                                Image(systemName: "exclamationmark.triangle.fill")
+                                    .foregroundStyle(.orange)
+                                Text("Passphrase must be at least 4 characters")
+                                    .font(.caption)
+                                    .foregroundStyle(.orange)
+                            }
+                            .padding(.horizontal, 16)
+                            .padding(.bottom, 12)
+                        }
                     }
-                }
-                .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16))
-                .padding(.horizontal, 20)
+                    .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16))
+                    .padding(.horizontal, 20)
 
-                // Conversation Color Section
-                VStack(spacing: 0) {
-                    HStack {
-                        Image(systemName: "paintpalette")
-                            .font(.title3)
-                            .foregroundStyle(.tint)
-                            .frame(width: 32)
-                        Text("Conversation Color")
-                            .font(.subheadline.bold())
-                        Spacer()
+                    // Conversation Color Section
+                    VStack(spacing: 0) {
+                        HStack {
+                            Image(systemName: "paintpalette")
+                                .font(.title3)
+                                .foregroundStyle(.tint)
+                                .frame(width: 32)
+                            Text("Conversation Color")
+                                .font(.subheadline.bold())
+                            Spacer()
 
-                        // Preview circle
-                        Circle()
-                            .fill(viewModel.selectedColor.color)
-                            .frame(width: 20, height: 20)
-                    }
-                    .padding(16)
+                            // Preview circle
+                            Circle()
+                                .fill(viewModel.selectedColor.color)
+                                .frame(width: 20, height: 20)
+                        }
+                        .padding(16)
 
-                    Divider().padding(.leading, 56)
+                        Divider().padding(.leading, 56)
 
-                    // Color grid
-                    LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 5), spacing: 12) {
-                        ForEach(ConversationColor.allCases) { color in
-                            Button {
-                                viewModel.selectedColor = color
-                            } label: {
-                                ZStack {
-                                    Circle()
-                                        .fill(color.color)
-                                        .frame(width: 44, height: 44)
-
-                                    if viewModel.selectedColor == color {
+                        // Color grid
+                        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 5), spacing: 12) {
+                            ForEach(ConversationColor.allCases) { color in
+                                Button {
+                                    viewModel.selectedColor = color
+                                } label: {
+                                    ZStack {
                                         Circle()
-                                            .strokeBorder(.white, lineWidth: 3)
+                                            .fill(color.color)
                                             .frame(width: 44, height: 44)
 
-                                        Image(systemName: "checkmark")
-                                            .font(.caption.bold())
-                                            .foregroundStyle(.white)
+                                        if viewModel.selectedColor == color {
+                                            Circle()
+                                                .strokeBorder(.white, lineWidth: 3)
+                                                .frame(width: 44, height: 44)
+
+                                            Image(systemName: "checkmark")
+                                                .font(.caption.bold())
+                                                .foregroundStyle(.white)
+                                        }
                                     }
                                 }
+                                .buttonStyle(.plain)
                             }
-                            .buttonStyle(.plain)
                         }
+                        .padding(16)
                     }
-                    .padding(16)
+                    .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16))
+                    .padding(.horizontal, 20)
+                    .padding(.top, 12)
+
+                    // Instructions
+                    VStack(spacing: 0) {
+                        HStack {
+                            Image(systemName: "info.circle")
+                                .font(.title3)
+                                .foregroundStyle(.tint)
+                                .frame(width: 32)
+                            Text("How it works")
+                                .font(.subheadline.bold())
+                            Spacer()
+                        }
+                        .padding(16)
+
+                        Divider().padding(.leading, 56)
+
+                        VStack(alignment: .leading, spacing: 12) {
+                            InstructionRow(number: 1, text: "Hold steady and point at the QR codes")
+                            InstructionRow(number: 2, text: "Frames are captured automatically")
+                            InstructionRow(number: 3, text: "Progress shows when complete")
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 12)
+                    }
+                    .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16))
+                    .padding(.horizontal, 20)
+                    .padding(.top, 12)
                 }
-                .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16))
-                .padding(.horizontal, 20)
-                .padding(.top, 12)
-
-                // Instructions
-                VStack(spacing: 0) {
-                    HStack {
-                        Image(systemName: "info.circle")
-                            .font(.title3)
-                            .foregroundStyle(.tint)
-                            .frame(width: 32)
-                        Text("How it works")
-                            .font(.subheadline.bold())
-                        Spacer()
-                    }
-                    .padding(16)
-
-                    Divider().padding(.leading, 56)
-
-                    VStack(alignment: .leading, spacing: 12) {
-                        InstructionRow(number: 1, text: "Hold steady and point at the QR codes")
-                        InstructionRow(number: 2, text: "Frames are captured automatically")
-                        InstructionRow(number: 3, text: "Progress shows when complete")
-                    }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 12)
-                }
-                .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16))
-                .padding(.horizontal, 20)
-                .padding(.top, 12)
 
                 // Start button
-                Button { viewModel.startScanning() } label: {
+                Button {
+                    if viewModel.channel == .bluetooth {
+                        viewModel.startBluetooth()
+                    } else {
+                        viewModel.startScanning()
+                    }
+                } label: {
                     HStack {
-                        Image(systemName: "camera.fill")
-                        Text("Start Scanning")
+                        Image(systemName: viewModel.channel == .bluetooth ? "antenna.radiowaves.left.and.right" : "camera.fill")
+                        Text(viewModel.channel == .bluetooth ? "Receive with Bluetooth" : "Start Scanning")
                     }
                     .font(.headline)
                     .foregroundStyle(.white)
@@ -1683,6 +1721,37 @@ private struct ReceiverSetupView: View {
             }
         }
         .background(Color(.systemBackground))
+    }
+}
+
+/// QR codes (🔴 Maximum) or Bluetooth (🟠 Enhanced)
+private struct ChannelPicker: View {
+    @Binding var channel: CeremonyChannel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Picker("Transfer", selection: $channel) {
+                ForEach(CeremonyChannel.allCases, id: \.self) { channel in
+                    Text(channel.displayName).tag(channel)
+                }
+            }
+            .pickerStyle(.segmented)
+
+            Text(explanation)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .padding(16)
+        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16))
+    }
+
+    private var explanation: String {
+        switch channel {
+        case .qrCodes:
+            return "🔴 Maximum security: nothing goes over the air. Needs a spoken passphrase and good light."
+        case .bluetooth:
+            return "🟠 Enhanced security: faster, protected by a post-quantum key exchange. You will compare six words."
+        }
     }
 }
 

@@ -504,6 +504,29 @@ impl FountainFrameReceiver {
     }
 }
 
+// === Ceremony Payload (Bluetooth, relay) ===
+
+/// Pad and ceremony metadata received over Bluetooth or the relay
+#[derive(Debug, Clone)]
+pub struct CeremonyPayload {
+    pub metadata: CeremonyMetadata,
+    pub pad: Vec<u8>,
+}
+
+/// Pad and ceremony metadata in one payload, for channels other than QR codes.
+pub fn encode_ceremony_payload(metadata: CeremonyMetadata, pad_bytes: Vec<u8>) -> Vec<u8> {
+    ash_core::encode_ceremony_payload(&metadata.into(), &pad_bytes)
+}
+
+/// Split a payload made by [`encode_ceremony_payload`].
+pub fn decode_ceremony_payload(payload: Vec<u8>) -> Result<CeremonyPayload, AshError> {
+    let (metadata, pad) = ash_core::decode_ceremony_payload(&payload)?;
+    Ok(CeremonyPayload {
+        metadata: metadata.into(),
+        pad,
+    })
+}
+
 // === Free Functions ===
 
 /// Create a fountain frame generator for ceremony.
