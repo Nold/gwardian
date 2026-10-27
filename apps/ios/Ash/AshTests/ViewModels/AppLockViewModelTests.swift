@@ -6,313 +6,217 @@
 //
 
 import Testing
+import Foundation
 @testable import Ash
 
 @MainActor
 struct AppLockViewModelTests {
+    private let store = FakeVaultKeyStore()
+    private let attempts = FakeLockAttemptStore()
+    private let biometric = MockBiometricService()
+    private let settings = MockSettingsService()
 
-    // MARK: - Initialization Tests
-
-    @Test func init_withBiometricLockDisabled_isNotLocked() {
-        let settings = MockSettingsService()
-        settings.isBiometricLockEnabled = false
-
-        let viewModel = AppLockViewModel(
-            biometricService: MockBiometricService(),
-            settingsService: settings
-        )
-
-        #expect(viewModel.isLocked == false)
-    }
-
-    @Test func init_withBiometricLockEnabled_isLocked() {
-        let settings = MockSettingsService()
-        settings.isBiometricLockEnabled = true
-
-        let viewModel = AppLockViewModel(
-            biometricService: MockBiometricService(),
-            settingsService: settings
-        )
-
-        #expect(viewModel.isLocked == true)
-    }
-
-    // MARK: - Biometric Properties Tests
-
-    @Test func biometricType_returnsBiometricServiceType() {
-        let biometric = MockBiometricService()
-        biometric.mockBiometricType = .faceID
-
-        let viewModel = AppLockViewModel(
+    private func makeViewModel(onConfigured: @escaping () -> Void = {}) -> AppLockViewModel {
+        AppLockViewModel(
+            vault: PasscodeVault(store: store, attempts: attempts),
             biometricService: biometric,
-            settingsService: MockSettingsService()
+            settingsService: settings,
+            onConfigured: onConfigured
         )
-
-        #expect(viewModel.biometricType == .faceID)
     }
 
-    @Test func canUseBiometrics_returnsBiometricServiceValue() {
-        let biometric = MockBiometricService()
-        biometric.mockCanUseBiometrics = true
-
-        let viewModel = AppLockViewModel(
-            biometricService: biometric,
-            settingsService: MockSettingsService()
-        )
-
-        #expect(viewModel.canUseBiometrics == true)
+    /// A view model whose code "123456" is set up, then locked
+    private func makeLocked() -> AppLockViewModel {
+        makeViewModel().configure(code: "123456")
+        return makeViewModel()
     }
 
-    // MARK: - Lock/Unlock Tests
+    // MARK: - Setup
 
-    @Test func lock_whenBiometricEnabled_locksApp() {
-        let settings = MockSettingsService()
-        settings.isBiometricLockEnabled = true
-
-        let viewModel = AppLockViewModel(
-            biometricService: MockBiometricService(),
-            settingsService: settings
-        )
-
-        // Unlock first
-        viewModel.disableBiometricLock()
-        settings.isBiometricLockEnabled = true
-        #expect(viewModel.isLocked == false)
-
-        viewModel.lock()
-
-        #expect(viewModel.isLocked == true)
+    @Test func startsInSetupWithoutCode() {
+        let viewModel = makeViewModel()
+        #expect(viewModel.phase == .setup)
+        #expect(viewModel.isLocked)
     }
 
-    @Test func lock_whenBiometricDisabled_doesNotLock() {
-        let settings = MockSettingsService()
-        settings.isBiometricLockEnabled = false
+    @Test func configureUnlocksAndRunsMigration() {
+        var migrated = false
+        let viewModel = makeViewModel(onConfigured: { migrated = true })
 
-        let viewModel = AppLockViewModel(
-            biometricService: MockBiometricService(),
-            settingsService: settings
-        )
-
-        viewModel.lock()
-
-        #expect(viewModel.isLocked == false)
+        #expect(viewModel.configure(code: "123456"))
+        #expect(viewModel.phase == .unlocked)
+        #expect(migrated)
     }
 
-    @Test func unlock_successfulAuthentication_unlocksApp() async {
-        let settings = MockSettingsService()
-        settings.isBiometricLockEnabled = true
-
-        let biometric = MockBiometricService()
-        biometric.shouldSucceed = true
-
-        let viewModel = AppLockViewModel(
-            biometricService: biometric,
-            settingsService: settings
-        )
-
-        #expect(viewModel.isLocked == true)
-
-        await viewModel.unlock()
-
-        #expect(viewModel.isLocked == false)
-        #expect(viewModel.authenticationError == nil)
+    @Test func configureRejectsShortCode() {
+        let viewModel = makeViewModel()
+        #expect(!viewModel.configure(code: "123"))
+        #expect(viewModel.phase == .setup)
+        #expect(viewModel.errorMessage != nil)
     }
 
-    @Test func unlock_failedAuthentication_remainsLocked() async {
-        let settings = MockSettingsService()
-        settings.isBiometricLockEnabled = true
-
-        let biometric = MockBiometricService()
-        biometric.shouldSucceed = false
-
-        let viewModel = AppLockViewModel(
-            biometricService: biometric,
-            settingsService: settings
-        )
-
-        await viewModel.unlock()
-
-        #expect(viewModel.isLocked == true)
-        #expect(viewModel.authenticationError != nil)
+    @Test func startsLockedWhenCodeExists() {
+        #expect(makeLocked().phase == .locked)
     }
 
-    @Test func unlock_withError_setsAuthenticationError() async {
-        let settings = MockSettingsService()
-        settings.isBiometricLockEnabled = true
+    // MARK: - Unlock
 
-        let biometric = MockBiometricService()
-        // User/system cancellation is intentionally silent, so use a real failure
-        biometric.errorToThrow = .authenticationFailed
-
-        let viewModel = AppLockViewModel(
-            biometricService: biometric,
-            settingsService: settings
-        )
-
-        await viewModel.unlock()
-
-        #expect(viewModel.isLocked == true)
-        #expect(viewModel.authenticationError != nil)
+    @Test func correctCodeUnlocks() {
+        let viewModel = makeLocked()
+        #expect(viewModel.unlock(code: "123456"))
+        #expect(viewModel.phase == .unlocked)
+        #expect(viewModel.errorMessage == nil)
     }
 
-    @Test func unlock_whenNotLocked_doesNothing() async {
-        let biometric = MockBiometricService()
-
-        let viewModel = AppLockViewModel(
-            biometricService: biometric,
-            settingsService: MockSettingsService()
-        )
-
-        #expect(viewModel.isLocked == false)
-
-        await viewModel.unlock()
-
-        #expect(biometric.authenticateCalled == false)
+    @Test func wrongCodeStaysLocked() {
+        let viewModel = makeLocked()
+        #expect(!viewModel.unlock(code: "000000"))
+        #expect(viewModel.phase == .locked)
+        #expect(viewModel.wrongCodeCount == 1)
+        #expect(viewModel.errorMessage == "Wrong code.")
     }
 
-    // MARK: - App Lifecycle Tests
+    @Test func fifthWrongCodeStartsDelay() {
+        let viewModel = makeLocked()
+        for _ in 0..<5 { viewModel.unlock(code: "000000") }
+        #expect(viewModel.retryUntil != nil)
+        #expect(!viewModel.unlock(code: "123456"))
+    }
 
-    @Test func appDidEnterBackground_withLockOnBackground_locks() {
-        let settings = MockSettingsService()
-        settings.isBiometricLockEnabled = true
+    @Test func eraseOptionShowsAttemptsLeft() {
+        let setup = makeViewModel()
+        setup.configure(code: "123456")
+        setup.setEraseAfterFailures(true)
+        let viewModel = makeViewModel()
+
+        #expect(viewModel.attemptsBeforeErase == 10)
+        viewModel.unlock(code: "000000")
+        #expect(viewModel.attemptsBeforeErase == 9)
+        #expect(viewModel.errorMessage == "Wrong code. 9 attempts left before everything is erased.")
+    }
+
+    @Test func eraseReturnsToSetup() {
+        let setup = makeViewModel()
+        setup.configure(code: "123456")
+        setup.setEraseAfterFailures(true)
+        attempts.state.failures = 9
+        let viewModel = makeViewModel()
+
+        #expect(!viewModel.unlock(code: "000000"))
+        #expect(viewModel.phase == .setup)
+        #expect(viewModel.wasErased)
+        #expect(!store.hasCodeCopy)
+
+        #expect(viewModel.configure(code: "654321"))
+        #expect(!viewModel.wasErased)
+    }
+
+    // MARK: - Lock
+
+    @Test func backgroundLocksWhenEnabled() {
+        let viewModel = makeViewModel()
+        viewModel.configure(code: "123456")
         settings.lockOnBackground = true
 
-        let viewModel = AppLockViewModel(
-            biometricService: MockBiometricService(),
-            settingsService: settings
-        )
-
-        viewModel.disableBiometricLock()
-        settings.isBiometricLockEnabled = true
-
         viewModel.appDidEnterBackground()
-
-        #expect(viewModel.isLocked == true)
+        #expect(viewModel.phase == .locked)
     }
 
-    @Test func appDidEnterBackground_withoutLockOnBackground_doesNotLock() {
-        let settings = MockSettingsService()
-        settings.isBiometricLockEnabled = true
+    @Test func backgroundKeepsUnlockedWhenDisabled() {
+        let viewModel = makeViewModel()
+        viewModel.configure(code: "123456")
         settings.lockOnBackground = false
 
-        let viewModel = AppLockViewModel(
-            biometricService: MockBiometricService(),
-            settingsService: settings
-        )
-
-        viewModel.disableBiometricLock()
-        #expect(viewModel.isLocked == false)
-
-        settings.isBiometricLockEnabled = true
         viewModel.appDidEnterBackground()
-
-        #expect(viewModel.isLocked == false)
+        #expect(viewModel.phase == .unlocked)
     }
 
-    // MARK: - Enable/Disable Biometric Lock Tests
-
-    @Test func enableBiometricLock_successfulAuth_enablesLock() async {
-        let biometric = MockBiometricService()
-        biometric.shouldSucceed = true
-
-        let settings = MockSettingsService()
-
-        let viewModel = AppLockViewModel(
-            biometricService: biometric,
-            settingsService: settings
-        )
-
-        let result = await viewModel.enableBiometricLock()
-
-        #expect(result == true)
-        #expect(settings.isBiometricLockEnabled == true)
+    @Test func lockDuringSetupKeepsSetup() {
+        let viewModel = makeViewModel()
+        viewModel.lock()
+        #expect(viewModel.phase == .setup)
     }
 
-    @Test func enableBiometricLock_failedAuth_doesNotEnable() async {
-        let biometric = MockBiometricService()
+    // MARK: - Biometrics
+
+    @Test func enablingBiometricsAsksOnceThenUnlocks() async {
+        let viewModel = makeViewModel()
+        viewModel.configure(code: "123456")
+
+        #expect(await viewModel.setBiometricUnlock(true))
+        #expect(biometric.authenticateCalled)
+        #expect(viewModel.isBiometricUnlockEnabled)
+
+        viewModel.lock()
+        await viewModel.unlockWithBiometrics()
+        #expect(viewModel.phase == .unlocked)
+    }
+
+    @Test func failedBiometricCheckDoesNotEnable() async {
+        let viewModel = makeViewModel()
+        viewModel.configure(code: "123456")
         biometric.shouldSucceed = false
 
-        let settings = MockSettingsService()
-
-        let viewModel = AppLockViewModel(
-            biometricService: biometric,
-            settingsService: settings
-        )
-
-        let result = await viewModel.enableBiometricLock()
-
-        #expect(result == false)
-        #expect(settings.isBiometricLockEnabled == false)
+        #expect(!(await viewModel.setBiometricUnlock(true)))
+        #expect(!viewModel.isBiometricUnlockEnabled)
     }
 
-    @Test func enableBiometricLock_biometricsNotAvailable_returnsFalse() async {
-        let biometric = MockBiometricService()
+    @Test func disablingBiometricsDoesNotAsk() async {
+        let viewModel = makeViewModel()
+        viewModel.configure(code: "123456")
+        await viewModel.setBiometricUnlock(true)
+        biometric.reset()
+
+        #expect(await viewModel.setBiometricUnlock(false))
+        #expect(!biometric.authenticateCalled)
+        #expect(!viewModel.isBiometricUnlockEnabled)
+    }
+
+    @Test func invalidatedBiometricsNeedTheCode() async {
+        let viewModel = makeViewModel()
+        viewModel.configure(code: "123456")
+        await viewModel.setBiometricUnlock(true)
+        viewModel.lock()
+        store.biometricsFail = true
+
+        await viewModel.unlockWithBiometrics()
+        #expect(viewModel.phase == .locked)
+    }
+
+    @Test func biometricTypeComesFromService() {
+        biometric.mockBiometricType = .touchID
         biometric.mockCanUseBiometrics = false
-
-        let viewModel = AppLockViewModel(
-            biometricService: biometric,
-            settingsService: MockSettingsService()
-        )
-
-        let result = await viewModel.enableBiometricLock()
-
-        #expect(result == false)
-        #expect(viewModel.authenticationError != nil)
+        let viewModel = makeViewModel()
+        #expect(viewModel.biometricType == .touchID)
+        #expect(!viewModel.canUseBiometrics)
     }
 
-    @Test func disableBiometricLock_disablesAndUnlocks() {
-        let settings = MockSettingsService()
-        settings.isBiometricLockEnabled = true
+    // MARK: - Settings
 
-        let viewModel = AppLockViewModel(
-            biometricService: MockBiometricService(),
-            settingsService: settings
-        )
+    @Test func changeCode() {
+        let viewModel = makeViewModel()
+        viewModel.configure(code: "123456")
 
-        #expect(viewModel.isLocked == true)
-
-        viewModel.disableBiometricLock()
-
-        #expect(viewModel.isLocked == false)
-        #expect(settings.isBiometricLockEnabled == false)
+        #expect(viewModel.changeCode(current: "123456", new: "654321"))
+        viewModel.lock()
+        #expect(!viewModel.unlock(code: "123456"))
+        #expect(viewModel.unlock(code: "654321"))
     }
 
-    // MARK: - Settings Binding Tests
+    @Test func eraseOptionToggles() {
+        let viewModel = makeViewModel()
+        viewModel.configure(code: "123456")
+        #expect(!viewModel.eraseAfterFailures)
 
-    @Test func isBiometricLockEnabled_getterReturnsSettingsValue() {
-        let settings = MockSettingsService()
-        settings.isBiometricLockEnabled = true
-
-        let viewModel = AppLockViewModel(
-            biometricService: MockBiometricService(),
-            settingsService: settings
-        )
-
-        #expect(viewModel.isBiometricLockEnabled == true)
+        viewModel.setEraseAfterFailures(true)
+        #expect(viewModel.eraseAfterFailures)
+        viewModel.setEraseAfterFailures(false)
+        #expect(!viewModel.eraseAfterFailures)
     }
 
-    @Test func lockOnBackground_getterReturnsSettingsValue() {
-        let settings = MockSettingsService()
-        settings.lockOnBackground = false
-
-        let viewModel = AppLockViewModel(
-            biometricService: MockBiometricService(),
-            settingsService: settings
-        )
-
-        #expect(viewModel.lockOnBackground == false)
-    }
-
-    @Test func lockOnBackground_setterUpdatesSettings() {
-        let settings = MockSettingsService()
-
-        let viewModel = AppLockViewModel(
-            biometricService: MockBiometricService(),
-            settingsService: settings
-        )
-
+    @Test func lockOnBackgroundUpdatesSettings() {
+        let viewModel = makeViewModel()
         viewModel.lockOnBackground = false
-
         #expect(settings.lockOnBackground == false)
     }
 }
