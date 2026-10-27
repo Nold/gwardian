@@ -85,8 +85,9 @@ tokio-stream = { version = "0.1", features = ["sync"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
-# APNS (Apple Push Notification Service)
-a2 = "0.10"
+# APNS (Apple Push Notification Service) over HTTP/2, TLS via rustls + ring
+reqwest = { version = "0.13", default-features = false, features = ["http2", "json", "rustls-no-provider"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
 
 # Configuration
 dotenvy = "0.15"
