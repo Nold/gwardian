@@ -22,7 +22,7 @@ pub struct ApnsClient {
 
 impl ApnsClient {
     /// Create a new APNS client from configuration
-    pub async fn new(config: &Config) -> Self {
+    pub fn new(config: &Config) -> Self {
         if !config.apns_configured() {
             warn!("APNS not configured - push notifications disabled");
             return Self {
@@ -159,6 +159,6 @@ impl ApnsClient {
 }
 
 /// Create a shared APNS client
-pub async fn create_client(config: &Config) -> Arc<ApnsClient> {
-    Arc::new(ApnsClient::new(config).await)
+pub fn create_client(config: &Config) -> Arc<ApnsClient> {
+    Arc::new(ApnsClient::new(config))
 }

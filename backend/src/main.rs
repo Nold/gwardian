@@ -32,7 +32,7 @@ async fn main() {
     let store = Arc::new(Store::new(config.clone()));
     store.clone().start_cleanup_task();
 
-    let apns = apns::create_client(&config).await;
+    let apns = apns::create_client(&config);
     let state = AppState::new(store, apns.clone());
 
     // Start background workers

@@ -20,7 +20,7 @@ use std::sync::Arc;
 async fn build_test_server() -> TestServer {
     let config = Config::default();
     let store = Arc::new(Store::new(config.clone()));
-    let apns = apns::create_client(&config).await;
+    let apns = apns::create_client(&config);
     let state = AppState::new(store, apns);
 
     let app = build_router(state);

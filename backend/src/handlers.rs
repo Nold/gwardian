@@ -451,7 +451,7 @@ pub async fn ack_messages(
 
     // Delete acknowledged messages from store
     for blob_id in &req.blob_ids {
-        if state.store.delete_blob(&conversation_id, blob_id).await {
+        if state.store.delete_blob(&conversation_id, blob_id) {
             acknowledged += 1;
         }
     }
