@@ -223,6 +223,24 @@ This is a known and accepted risk.
 
 Gwardian does **not** defend against a compromised operating system.
 
+#### 7.1 Keyboards and dictation
+
+Encryption protects a message once it is written, but the keyboard sees every character before that.
+
+**Capabilities**
+- A downloaded keyboard (with "full access" on iOS, by default on Android) can log and send everything typed
+- Built-in keyboards learn words for suggestions; dictation may send audio to Apple or Google
+
+**Defenses**
+- The app code is entered on Gwardian's own digit pad, never through the keyboard
+- iOS: third-party keyboards are refused inside the app (`shouldAllowExtensionPointIdentifier`); only Apple's keyboard appears
+- Android: every text field asks the keyboard not to learn what is typed (`IME_FLAG_NO_PERSONALIZED_LEARNING`; Gboard and Samsung Keyboard switch to incognito), and the conversation screen warns when the active keyboard was not preinstalled
+
+**Residual risk**
+- Android cannot forbid a keyboard; a malicious one can ignore the no-learning request
+- Dictation stays available with Apple's keyboard and on Android; users should not dictate sensitive messages
+- A keyboard built into Gwardian is a possible future option for `Maximum` groups
+
 ---
 
 ### 8. Compromised device (physical)

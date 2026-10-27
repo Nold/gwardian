@@ -11,6 +11,7 @@ import androidx.compose.ui.Modifier
 import androidx.lifecycle.lifecycleScope
 import com.monadial.ash.core.services.SettingsService
 import com.monadial.ash.ui.AshApp
+import com.monadial.ash.ui.components.keyboard.PrivateKeyboard
 import com.monadial.ash.ui.theme.AshTheme
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
@@ -34,7 +35,8 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    AshApp()
+                    // Ask keyboards not to learn anything typed in the app
+                    PrivateKeyboard { AshApp() }
                 }
             }
         }
