@@ -328,6 +328,8 @@ Without padding, an adversary observing encrypted message sizes could:
 
 Messages longer than 29 bytes (32 - 3 header) are not padded beyond their natural size.
 
+Group messages (`core/src/group.rs`) are padded the same way by the core itself, to a minimum of **64 bytes** (`GROUP_MIN_PADDED_SIZE`): messages up to 61 bytes all have the same length on the wire. Longer messages keep their natural size plus 3 bytes, so their length stays visible to the relay.
+
 ---
 
 ### Sending a message
