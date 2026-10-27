@@ -70,4 +70,16 @@ class SettingsRepositoryImpl @Inject constructor(
             AppResult.Error(AppError.Storage.WriteFailed("Failed to save lock setting", e))
         }
     }
+
+    override val familyMode: Flow<Boolean>
+        get() = settingsService.familyMode
+
+    override suspend fun setFamilyMode(enabled: Boolean): AppResult<Unit> {
+        return try {
+            settingsService.setFamilyMode(enabled)
+            AppResult.Success(Unit)
+        } catch (e: Exception) {
+            AppResult.Error(AppError.Storage.WriteFailed("Failed to save family mode", e))
+        }
+    }
 }

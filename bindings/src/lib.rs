@@ -70,6 +70,8 @@ pub enum AshError {
     InvalidPassphrase,
     #[error("QR frame failed authentication")]
     FrameAuthenticationFailed,
+    #[error("QR frames need the six words")]
+    PassphraseRequired,
     #[error("Commitment mismatch")]
     CommitmentMismatch,
     #[error("Decryption failed")]
@@ -403,11 +405,11 @@ pub struct FountainCeremonyResult {
 
 // === Fountain Frame Generator ===
 
-/// Thread-safe fountain frame generator for QR display; every frame is
-/// sealed with the ceremony passphrase.
+/// Thread-safe fountain frame generator for QR display; frames are sealed
+/// when the ceremony uses a passphrase.
 pub struct FountainFrameGenerator {
     inner: Mutex<ash_core::frame::FountainFrameGenerator>,
-    key: ash_transfer::qr::FrameKey,
+    key: Option<ash_transfer::qr::FrameKey>,
     next_index: Mutex<u32>,
 }
 
@@ -426,7 +428,10 @@ impl FountainFrameGenerator {
     /// Generate a specific block by index
     pub fn generate_frame(&self, index: u32) -> Vec<u8> {
         let frame = self.inner.lock().unwrap().generate_frame(index);
-        self.key.seal(index, &frame)
+        match &self.key {
+            Some(key) => key.seal(index, &frame),
+            None => frame,
+        }
     }
 
     /// Number of source blocks (minimum needed)
@@ -453,17 +458,19 @@ impl FountainFrameGenerator {
 /// Thread-safe fountain frame receiver for QR scanning
 pub struct FountainFrameReceiver {
     inner: Mutex<ash_core::frame::FountainFrameReceiver>,
-    passphrase: String,
+    passphrase: Option<String>,
     /// Derived from the salt of the first frame, then reused.
     key: Mutex<Option<ash_transfer::qr::FrameKey>>,
     rejected: Mutex<u32>,
 }
 
 impl FountainFrameReceiver {
-    /// Create a new receiver.
-    /// Passphrase is required and must match the sender's six words.
-    pub fn new(passphrase: String) -> Result<Self, AshError> {
-        let passphrase = ash_transfer::qr::normalize_passphrase(&passphrase)?;
+    /// Create a new receiver, with the sender's six words if it shows any.
+    pub fn new(passphrase: Option<String>) -> Result<Self, AshError> {
+        let passphrase = passphrase
+            .filter(|p| !p.trim().is_empty())
+            .map(|p| ash_transfer::qr::normalize_passphrase(&p))
+            .transpose()?;
         Ok(Self {
             inner: Mutex::new(ash_core::frame::FountainFrameReceiver::new(None)),
             passphrase,
@@ -474,6 +481,15 @@ impl FountainFrameReceiver {
 
     /// Add a scanned frame, returns true if complete
     pub fn add_frame(&self, frame_bytes: Vec<u8>) -> Result<bool, AshError> {
+        if !ash_transfer::qr::is_sealed(&frame_bytes) {
+            // Plain frames: the sender chose not to use six words
+            let mut receiver = self.inner.lock().unwrap();
+            return Ok(receiver.add_frame(&frame_bytes)?);
+        }
+        let Some(passphrase) = &self.passphrase else {
+            *self.rejected.lock().unwrap() += 1;
+            return Err(AshError::PassphraseRequired);
+        };
         let salt = ash_transfer::qr::frame_salt(&frame_bytes)?;
         let frame = {
             let mut key = self.key.lock().unwrap();
@@ -484,7 +500,7 @@ impl FountainFrameReceiver {
                 .as_ref()
                 .is_none_or(|k| k.salt() != salt && !accepted_any)
             {
-                *key = Some(ash_transfer::qr::FrameKey::derive(&self.passphrase, salt)?);
+                *key = Some(ash_transfer::qr::FrameKey::derive(passphrase, salt)?);
             }
             let opened = key.as_ref().expect("key derived above").open(&frame_bytes);
             match opened {
@@ -583,13 +599,18 @@ pub fn create_fountain_generator(
     metadata: CeremonyMetadata,
     pad_bytes: Vec<u8>,
     block_size: u32,
-    passphrase: String,
+    passphrase: Option<String>,
     method: TransferMethod,
     salt: Vec<u8>,
 ) -> Result<std::sync::Arc<FountainFrameGenerator>, AshError> {
-    let salt: [u8; ash_transfer::qr::SALT_SIZE] =
-        salt.try_into().map_err(|_| AshError::MalformedMessage)?;
-    let key = ash_transfer::qr::FrameKey::derive(&passphrase, salt)?;
+    let key = match passphrase {
+        Some(passphrase) => {
+            let salt: [u8; ash_transfer::qr::SALT_SIZE] =
+                salt.try_into().map_err(|_| AshError::MalformedMessage)?;
+            Some(ash_transfer::qr::FrameKey::derive(&passphrase, salt)?)
+        }
+        None => None,
+    };
     let core_metadata: ash_core::CeremonyMetadata = metadata.into();
     let generator = ash_core::frame::create_fountain_ceremony(
         &core_metadata,
@@ -887,13 +908,13 @@ mod tests {
             metadata,
             pad.clone(),
             256,
-            passphrase.clone(),
+            Some(passphrase.clone()),
             TransferMethod::Raptor,
             vec![9; 16],
         )
         .unwrap();
         let receiver =
-            FountainFrameReceiver::new("Able-Acid aged also area ARMY".to_string()).unwrap();
+            FountainFrameReceiver::new(Some("Able-Acid aged also area ARMY".to_string())).unwrap();
 
         assert!(!receiver.is_complete());
         assert_eq!(receiver.progress(), 0.0);
@@ -924,12 +945,12 @@ mod tests {
         let passphrase = words.join(" ");
         assert!(validate_passphrase(passphrase.clone()));
         assert!(!validate_passphrase("1234".to_string()));
-        assert!(FountainFrameReceiver::new("1234".to_string()).is_err());
+        assert!(FountainFrameReceiver::new(Some("1234".to_string())).is_err());
         assert!(create_fountain_generator(
             metadata.clone(),
             vec![1; 500],
             256,
-            "1234".to_string(),
+            Some("1234".to_string()),
             TransferMethod::Raptor,
             vec![0; 16]
         )
@@ -939,14 +960,19 @@ mod tests {
             metadata,
             vec![1; 500],
             256,
-            passphrase,
+            Some(passphrase),
             TransferMethod::Raptor,
             vec![0; 16],
         )
         .unwrap();
         let frame = generator.next_frame();
+        let without_words = FountainFrameReceiver::new(None).unwrap();
+        assert!(matches!(
+            without_words.add_frame(frame.clone()),
+            Err(AshError::PassphraseRequired)
+        ));
         let wrong =
-            FountainFrameReceiver::new("able acid aged also area army".to_string()).unwrap();
+            FountainFrameReceiver::new(Some("able acid aged also area army".to_string())).unwrap();
         assert!(matches!(
             wrong.add_frame(frame.clone()),
             Err(AshError::FrameAuthenticationFailed)
@@ -954,6 +980,35 @@ mod tests {
         assert_eq!(wrong.rejected_frames(), 1);
         // Same index, same frame: what the display cycles through
         assert_eq!(generator.generate_frame(0), frame);
+    }
+
+    #[test]
+    fn test_qr_frames_without_passphrase() {
+        let metadata = CeremonyMetadata {
+            version: 1,
+            ttl_seconds: 300,
+            disappearing_messages_seconds: 0,
+            notification_flags: 0x000B,
+            transfer_method: TransferMethod::Raptor,
+            relay_url: "https://relay.test".to_string(),
+        };
+        let pad = vec![5; 700];
+        let generator = create_fountain_generator(
+            metadata,
+            pad.clone(),
+            256,
+            None,
+            TransferMethod::Raptor,
+            vec![],
+        )
+        .unwrap();
+        // Words typed for nothing do not get in the way
+        let receiver =
+            FountainFrameReceiver::new(Some("able acid aged also area army".to_string())).unwrap();
+        while !receiver.is_complete() {
+            receiver.add_frame(generator.next_frame()).unwrap();
+        }
+        assert_eq!(receiver.get_result().unwrap().pad, pad);
     }
 
     #[test]
@@ -979,12 +1034,12 @@ mod tests {
                 metadata,
                 pad.clone(),
                 256,
-                passphrase.clone(),
+                Some(passphrase.clone()),
                 method,
                 vec![9; 16],
             )
             .unwrap();
-            let receiver = FountainFrameReceiver::new(passphrase.clone()).unwrap();
+            let receiver = FountainFrameReceiver::new(Some(passphrase.clone())).unwrap();
 
             let max_blocks = generator.source_count() as usize * 2;
             for _ in 0..max_blocks {

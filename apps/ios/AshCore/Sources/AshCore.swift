@@ -1035,14 +1035,13 @@ open class FountainFrameReceiver:
         return try! rustCall { uniffi_ash_bindings_fn_clone_fountainframereceiver(self.pointer, $0) }
     }
     /**
-     * Create a new receiver.
-     * Passphrase is required and must match the sender's six words.
+     * Create a new receiver, with the sender's six words if it shows any.
      */
-public convenience init(passphrase: String)throws  {
+public convenience init(passphrase: String?)throws  {
     let pointer =
         try rustCallWithError(FfiConverterTypeAshError.lift) {
     uniffi_ash_bindings_fn_constructor_fountainframereceiver_new(
-        FfiConverterString.lower(passphrase),$0
+        FfiConverterOptionString.lower(passphrase),$0
     )
 }
     self.init(unsafeFromRawPointer: pointer)
@@ -3363,6 +3362,11 @@ public enum AshError {
      */
     case FrameAuthenticationFailed(message: String)
     
+    /**
+     * QR frames are protected by six words the receiver did not enter
+     */
+    case PassphraseRequired(message: String)
+    
 }
 
 
@@ -3487,6 +3491,10 @@ public struct FfiConverterTypeAshError: FfiConverterRustBuffer {
             message: try FfiConverterString.read(from: &buf)
         )
         
+        case 28: return .PassphraseRequired(
+            message: try FfiConverterString.read(from: &buf)
+        )
+        
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -3552,6 +3560,8 @@ public struct FfiConverterTypeAshError: FfiConverterRustBuffer {
             writeInt(&buf, Int32(26))
         case .FrameAuthenticationFailed(_ /* message is ignored*/):
             writeInt(&buf, Int32(27))
+        case .PassphraseRequired(_ /* message is ignored*/):
+            writeInt(&buf, Int32(28))
 
         
         }
@@ -4002,6 +4012,30 @@ extension TransferMethod: Equatable, Hashable {}
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionString: FfiConverterRustBuffer {
+    typealias SwiftType = String?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterString.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterString.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypeFountainCeremonyResult: FfiConverterRustBuffer {
     typealias SwiftType = FountainCeremonyResult?
 
@@ -4362,16 +4396,17 @@ public nonisolated func calculateSourceBlocks(padBytes: UInt64, blockSize: UInt3
  * unlimited encoded blocks that can be displayed as QR codes.
  * Passphrase is required for encrypting the QR frames.
  * Method selects the transfer strategy (Raptor recommended).
- * Frames are sealed with the six-word passphrase (Argon2id +
- * ChaCha20-Poly1305) and `salt`: 16 fresh secure random bytes.
+ * With a passphrase, frames are sealed with the six words (Argon2id +
+ * ChaCha20-Poly1305) and `salt`: 16 fresh secure random bytes. Without
+ * one, frames are plain and anyone filming the screen can read them.
  */
-public nonisolated func createFountainGenerator(metadata: CeremonyMetadata, padBytes: [UInt8], blockSize: UInt32, passphrase: String, method: TransferMethod, salt: [UInt8])throws  -> FountainFrameGenerator {
+public nonisolated func createFountainGenerator(metadata: CeremonyMetadata, padBytes: [UInt8], blockSize: UInt32, passphrase: String?, method: TransferMethod, salt: [UInt8])throws  -> FountainFrameGenerator {
     return try  FfiConverterTypeFountainFrameGenerator.lift(try rustCallWithError(FfiConverterTypeAshError.lift) {
     uniffi_ash_bindings_fn_func_create_fountain_generator(
         FfiConverterTypeCeremonyMetadata.lower(metadata),
         FfiConverterSequenceUInt8.lower(padBytes),
         FfiConverterUInt32.lower(blockSize),
-        FfiConverterString.lower(passphrase),
+        FfiConverterOptionString.lower(passphrase),
         FfiConverterTypeTransferMethod.lower(method),
         FfiConverterSequenceUInt8.lower(salt),$0
     )
@@ -4677,7 +4712,7 @@ nonisolated(unsafe) private var initializationResult: InitializationResult = {
     if (uniffi_ash_bindings_checksum_func_calculate_source_blocks() != 21521) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_ash_bindings_checksum_func_create_fountain_generator() != 43423) {
+    if (uniffi_ash_bindings_checksum_func_create_fountain_generator() != 44919) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_ash_bindings_checksum_func_decode_ceremony_payload() != 16593) {
@@ -4905,7 +4940,7 @@ nonisolated(unsafe) private var initializationResult: InitializationResult = {
     if (uniffi_ash_bindings_checksum_constructor_blepacketreassembler_new() != 25701) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_ash_bindings_checksum_constructor_fountainframereceiver_new() != 34460) {
+    if (uniffi_ash_bindings_checksum_constructor_fountainframereceiver_new() != 37758) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_ash_bindings_checksum_constructor_pad_from_bytes() != 21075) {

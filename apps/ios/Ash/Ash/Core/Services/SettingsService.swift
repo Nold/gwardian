@@ -11,6 +11,7 @@ private enum SettingsKey: String {
     case relayServerURL = "ash.settings.relayServerURL"
     case defaultExtendedTTL = "ash.settings.defaultExtendedTTL"
     case hasCompletedOnboarding = "ash.settings.hasCompletedOnboarding"
+    case familyMode = "ash.settings.familyMode"
 }
 
 protocol SettingsServiceProtocol: AnyObject, Sendable {
@@ -19,6 +20,8 @@ protocol SettingsServiceProtocol: AnyObject, Sendable {
     var relayServerURL: String { get set }
     var defaultExtendedTTL: Bool { get set }
     var hasCompletedOnboarding: Bool { get set }
+    /// Family use: QR ceremonies start without the six words
+    var isFamilyModeEnabled: Bool { get set }
 }
 
 final class SettingsService: SettingsServiceProtocol, @unchecked Sendable {
@@ -68,5 +71,10 @@ final class SettingsService: SettingsServiceProtocol, @unchecked Sendable {
     var hasCompletedOnboarding: Bool {
         get { defaults.bool(forKey: SettingsKey.hasCompletedOnboarding.rawValue) }
         set { defaults.set(newValue, forKey: SettingsKey.hasCompletedOnboarding.rawValue) }
+    }
+
+    var isFamilyModeEnabled: Bool {
+        get { defaults.bool(forKey: SettingsKey.familyMode.rawValue) }
+        set { defaults.set(newValue, forKey: SettingsKey.familyMode.rawValue) }
     }
 }

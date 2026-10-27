@@ -29,6 +29,9 @@ final class ReceiverCeremonyViewModel {
     /// probably mistyped
     private(set) var passphraseLooksWrong = false
 
+    /// The codes are protected by six words that were not typed
+    private(set) var passphraseRequired = false
+
     // Progress tracking - stored properties to trigger @Observable updates
     private(set) var receivedFrameCount: Int = 0
     private(set) var progress: Double = 0.0
@@ -88,9 +91,9 @@ final class ReceiverCeremonyViewModel {
         !requiresFaceIDForPersistence
     }
 
-    /// QR codes need the spoken passphrase; Bluetooth uses its own key exchange.
+    /// Words are only needed when the other phone shows some; empty is fine.
     var isChannelReady: Bool {
-        channel == .bluetooth || isPassphraseValid
+        channel == .bluetooth || passphrase.trimmingCharacters(in: .whitespaces).isEmpty || isPassphraseValid
     }
 
     // MARK: - Received Metadata Display
@@ -139,12 +142,16 @@ final class ReceiverCeremonyViewModel {
 
         // Create fountain receiver with required passphrase
         do {
-            fountainReceiver = try dependencies.performCeremonyUseCase.createFountainReceiver(passphrase: passphrase)
+            let words = passphrase.trimmingCharacters(in: .whitespacesAndNewlines)
+            fountainReceiver = try dependencies.performCeremonyUseCase.createFountainReceiver(
+                passphrase: words.isEmpty ? nil : words
+            )
         } catch {
             Log.warning(.ceremony, "Invalid passphrase: \(error)")
             return
         }
         passphraseLooksWrong = false
+        passphraseRequired = false
 
         phase = .transferring(currentFrame: 0, totalFrames: 0)
     }
@@ -230,7 +237,9 @@ final class ReceiverCeremonyViewModel {
             // Misread or wrong passphrase: keep scanning, but say so when
             // nothing has decoded after many frames
             Log.debug(.ceremony, "Frame decode error (expected for corrupted scans): \(error)")
-            if receivedFrameCount == 0 && receiver.rejectedFrames() >= 8 {
+            if case .PassphraseRequired? = error as? AshError {
+                passphraseRequired = true
+            } else if receivedFrameCount == 0 && receiver.rejectedFrames() >= 8 {
                 passphraseLooksWrong = true
             }
         }

@@ -419,6 +419,8 @@ private fun InitiatorCeremonyScreen(
                                 viewModel.setChannel(channel)
                             }
                         },
+                        usesPassphrase = uiState.usesPassphrase,
+                        onUsesPassphraseChange = viewModel::setUsesPassphrase,
                         passphraseWords = passphraseWords,
                         onRegeneratePassphrase = viewModel::regeneratePassphrase,
                         onProceed = viewModel::proceedToOptions,
@@ -630,6 +632,7 @@ private fun ReceiverCeremonyScreen(
                         receivedBlocks = receivedBlocks,
                         totalBlocks = totalBlocks,
                         passphraseLooksWrong = uiState.passphraseLooksWrong,
+                        passphraseRequired = uiState.passphraseRequired,
                         onFrameScanned = viewModel::processScannedFrame
                     )
                 }
@@ -679,6 +682,8 @@ private fun PadSizeSelectionContent(
     onSizeSelected: (PadSize) -> Unit,
     channel: CeremonyChannel,
     onChannelChange: (CeremonyChannel) -> Unit,
+    usesPassphrase: Boolean,
+    onUsesPassphraseChange: (Boolean) -> Unit,
     passphraseWords: List<String>,
     onRegeneratePassphrase: () -> Unit,
     onProceed: () -> Unit,
@@ -757,21 +762,42 @@ private fun PadSizeSelectionContent(
                         )
                         Spacer(modifier = Modifier.width(12.dp))
                         Text(
-                            text = "Six Words to Read Aloud",
-                            style = MaterialTheme.typography.titleSmall
+                            text = "Protect with Six Words",
+                            style = MaterialTheme.typography.titleSmall,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Switch(
+                            checked = usesPassphrase,
+                            onCheckedChange = onUsesPassphraseChange,
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = Color.White,
+                                checkedTrackColor = accentColor,
+                                checkedBorderColor = accentColor
+                            )
                         )
                     }
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = "Read them to your contact, out of earshot of others. They encrypt the QR codes, " +
-                            "so filming the screen reveals nothing.",
+                        text = if (usesPassphrase) {
+                            "Read them to your contact, out of earshot of others. They encrypt the QR codes, " +
+                                "so filming the screen reveals nothing."
+                        } else {
+                            "Without the words, anyone who films the screen during the transfer can copy the pad. " +
+                                "Make sure no camera can see it."
+                        },
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = if (usesPassphrase) {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        } else {
+                            MaterialTheme.colorScheme.error
+                        }
                     )
-                    Spacer(modifier = Modifier.height(12.dp))
-                    PassphraseWords(passphraseWords)
-                    TextButton(onClick = onRegeneratePassphrase) {
-                        Text("New Words", color = accentColor)
+                    if (usesPassphrase) {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        PassphraseWords(passphraseWords)
+                        TextButton(onClick = onRegeneratePassphrase) {
+                            Text("New Words", color = accentColor)
+                        }
                     }
                 }
             }
@@ -1791,6 +1817,7 @@ private fun ScanningContent(
     receivedBlocks: Int,
     totalBlocks: Int,
     passphraseLooksWrong: Boolean,
+    passphraseRequired: Boolean,
     onFrameScanned: (String) -> Unit
 ) {
     Box(modifier = Modifier.fillMaxSize()) {
@@ -1799,9 +1826,14 @@ private fun ScanningContent(
             modifier = Modifier.fillMaxSize()
         )
 
-        if (passphraseLooksWrong) {
+        val warning = when {
+            passphraseRequired -> "The other phone protects its codes with six words. Go back and type them."
+            passphraseLooksWrong -> "Nothing decodes: check the six words with the other person."
+            else -> null
+        }
+        if (warning != null) {
             Text(
-                text = "Nothing decodes: check the six words with the other person.",
+                text = warning,
                 color = MaterialTheme.colorScheme.onErrorContainer,
                 style = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier
@@ -1926,7 +1958,7 @@ private fun ReceiverSetupContent(
                         )
                         Spacer(modifier = Modifier.width(12.dp))
                         Text(
-                            text = "The Six Words",
+                            text = "Six Words, If Shown",
                             style = MaterialTheme.typography.titleSmall
                         )
                     }
@@ -1938,7 +1970,7 @@ private fun ReceiverSetupContent(
                         placeholder = { Text("able acid aged also area army") },
                         isError = passphrase.isNotBlank() && !passphraseValid,
                         supportingText = if (passphrase.isNotBlank() && !passphraseValid) {
-                            { Text("Type the six words read by the other person") }
+                            { Text("Type the six words read by the other person, or leave empty") }
                         } else {
                             null
                         },

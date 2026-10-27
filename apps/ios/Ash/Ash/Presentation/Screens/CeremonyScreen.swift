@@ -385,44 +385,43 @@ private struct PadSizeView: View {
                     .padding(.top, 20)
 
                 if viewModel.channel == .qrCodes {
-                    // Passphrase Section (Required)
+                    // Passphrase Section (on by default, off in family mode)
                     VStack(spacing: 0) {
                         VStack(alignment: .leading, spacing: 8) {
-                            HStack {
-                                Image(systemName: "lock.shield.fill")
-                                    .font(.title3)
-                                    .foregroundStyle(.tint)
-                                    .frame(width: 32)
-                                Text("Verbal Passphrase")
-                                    .font(.subheadline.weight(.semibold))
-                                Spacer()
-                                Text("Required")
-                                    .font(.caption.weight(.medium))
-                                    .foregroundStyle(.white)
-                                    .padding(.horizontal, 8)
-                                    .padding(.vertical, 4)
-                                    .background(Color.orange, in: Capsule())
+                            Toggle(isOn: $viewModel.usesPassphrase) {
+                                HStack {
+                                    Image(systemName: "lock.shield.fill")
+                                        .font(.title3)
+                                        .foregroundStyle(.tint)
+                                        .frame(width: 32)
+                                    Text("Protect with Six Words")
+                                        .font(.subheadline.weight(.semibold))
+                                }
                             }
 
-                            Text("Read these six words to your contact before the ceremony, out of earshot of others. They encrypt the QR codes, so filming the screen reveals nothing.")
+                            Text(viewModel.usesPassphrase
+                                 ? "Read these six words to your contact, out of earshot of others. They encrypt the QR codes, so filming the screen reveals nothing."
+                                 : "Without the words, anyone who films the screen during the transfer can copy the pad. Make sure no camera can see it.")
                                 .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(viewModel.usesPassphrase ? Color.secondary : Color.orange)
                         }
                         .padding(16)
 
-                        Divider().padding(.leading, 56)
+                        if viewModel.usesPassphrase {
+                            Divider().padding(.leading, 56)
 
-                        PassphraseWordsView(words: viewModel.passphraseWords)
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 12)
+                            PassphraseWordsView(words: viewModel.passphraseWords)
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 12)
 
-                        Button {
-                            viewModel.regeneratePassphrase()
-                        } label: {
-                            Label("New Words", systemImage: "arrow.clockwise")
-                                .font(.subheadline)
+                            Button {
+                                viewModel.regeneratePassphrase()
+                            } label: {
+                                Label("New Words", systemImage: "arrow.clockwise")
+                                    .font(.subheadline)
+                            }
+                            .padding(.bottom, 12)
                         }
-                        .padding(.bottom, 12)
                     }
                     .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16))
                     .padding(.horizontal, 20)
@@ -434,7 +433,7 @@ private struct PadSizeView: View {
                             .font(.subheadline.weight(.medium))
                             .foregroundStyle(.secondary)
 
-                        Text("Without them, anyone who films the QR codes could copy your pad. The app draws the words itself so they are never easy to guess, and the other phone needs them to read the codes.")
+                        Text("Without them, anyone who films the QR codes could copy your pad. The app draws the words itself so they are never easy to guess, and the other phone needs them to read the codes. Family mode, in Settings, turns them off by default.")
                             .font(.caption)
                             .foregroundStyle(.tertiary)
                     }
@@ -1557,7 +1556,7 @@ private struct ReceiverSetupView: View {
 
                     Text(viewModel.channel == .bluetooth
                          ? "Choose the same method as the other phone"
-                         : "Type the six words read by the other person")
+                         : "If the other phone shows six words, type them")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
@@ -1576,21 +1575,18 @@ private struct ReceiverSetupView: View {
                                 .font(.title3)
                                 .foregroundStyle(.tint)
                                 .frame(width: 32)
-                            Text("Verbal Passphrase")
+                            Text("Six Words")
                                 .font(.subheadline.bold())
                             Spacer()
-                            Text("Required")
+                            Text("If shown")
                                 .font(.caption.weight(.medium))
-                                .foregroundStyle(.white)
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 4)
-                                .background(Color.orange, in: Capsule())
+                                .foregroundStyle(.secondary)
                         }
                         .padding(16)
 
                         Divider().padding(.leading, 56)
 
-                        TextField("The six words, e.g. able acid aged also area army", text: $viewModel.passphrase, axis: .vertical)
+                        TextField("Six words, only if the other phone shows them", text: $viewModel.passphrase, axis: .vertical)
                             .textInputAutocapitalization(.never)
                             .autocorrectionDisabled()
                             .textFieldStyle(.roundedBorder)
@@ -1598,7 +1594,7 @@ private struct ReceiverSetupView: View {
                             .padding(.vertical, 12)
 
                         if !viewModel.passphrase.isEmpty && !viewModel.isPassphraseValid {
-                            Text("Type the six words shown on the other phone.")
+                            Text("Type the six words shown on the other phone, or leave empty.")
                                 .font(.caption)
                                 .foregroundStyle(.orange)
                                 .padding(.horizontal, 16)
@@ -2019,6 +2015,14 @@ private struct QRScanView: View {
                 }
                 .padding(.top, 16)
                 .padding(.bottom, 12)
+
+                if viewModel.passphraseRequired {
+                    Label("The other phone protects its codes with six words. Go back and type them.", systemImage: "lock.fill")
+                        .font(.subheadline)
+                        .foregroundStyle(.orange)
+                        .padding(.horizontal, 20)
+                        .padding(.bottom, 8)
+                }
 
                 if viewModel.passphraseLooksWrong {
                     Label("Nothing decodes: check the six words with the other person.", systemImage: "exclamationmark.triangle.fill")

@@ -166,19 +166,19 @@ protocol PerformCeremonyUseCaseProtocol: Sendable {
 
     /// Create a fountain frame generator for QR display
     /// The generator produces unlimited blocks - display cycles through them
-    /// Passphrase is required for encrypting QR frames
+    /// Without a passphrase the QR frames are plain
     /// transferMethod selects the encoding strategy (Raptor recommended)
     func createFountainGenerator(
         padBytes: [UInt8],
         metadata: CeremonyMetadataSwift,
         blockSize: UInt32,
-        passphrase: String,
+        passphrase: String?,
         transferMethod: CeremonyTransferMethod
     ) async throws -> FountainFrameGenerator
 
     /// Create a fountain frame receiver for QR scanning
-    /// Passphrase is required and must match the sender's six words
-    func createFountainReceiver(passphrase: String) throws -> FountainFrameReceiver
+    /// Passphrase: the sender's six words, if its screen shows any
+    func createFountainReceiver(passphrase: String?) throws -> FountainFrameReceiver
 
     /// Generate mnemonic checksum for verification
     func generateMnemonic(from padBytes: [UInt8]) async -> [String]
@@ -247,7 +247,7 @@ final class PerformCeremonyUseCase: PerformCeremonyUseCaseProtocol, Sendable {
         padBytes: [UInt8],
         metadata: CeremonyMetadataSwift,
         blockSize: UInt32,
-        passphrase: String,
+        passphrase: String?,
         transferMethod: CeremonyTransferMethod
     ) async throws -> FountainFrameGenerator {
         // Create CeremonyMetadata for FFI
@@ -272,7 +272,7 @@ final class PerformCeremonyUseCase: PerformCeremonyUseCaseProtocol, Sendable {
         )
     }
 
-    func createFountainReceiver(passphrase: String) throws -> FountainFrameReceiver {
+    func createFountainReceiver(passphrase: String?) throws -> FountainFrameReceiver {
         return try FountainFrameReceiver(passphrase: passphrase)
     }
 
@@ -358,7 +358,7 @@ private enum Ash {
         metadata: CeremonyMetadata,
         padBytes: [UInt8],
         blockSize: UInt32,
-        passphrase: String,
+        passphrase: String?,
         method: TransferMethod,
         salt: [UInt8]
     ) throws -> FountainFrameGenerator {
@@ -382,7 +382,7 @@ private func _createFountainGenerator(
     metadata: CeremonyMetadata,
     padBytes: [UInt8],
     blockSize: UInt32,
-    passphrase: String,
+    passphrase: String?,
     method: TransferMethod,
     salt: [UInt8]
 ) throws -> FountainFrameGenerator {

@@ -102,7 +102,8 @@ class InitiatorCeremonyViewModel @Inject constructor(
     private fun loadInitialSettings() {
         viewModelScope.launch {
             val relayUrl = settingsRepository.relayServerUrl.first()
-            _uiState.update { it.copy(relayUrl = relayUrl) }
+            val familyMode = settingsRepository.familyMode.first()
+            _uiState.update { it.copy(relayUrl = relayUrl, usesPassphrase = !familyMode) }
         }
     }
 
@@ -114,6 +115,10 @@ class InitiatorCeremonyViewModel @Inject constructor(
 
     fun setChannel(channel: CeremonyChannel) {
         _uiState.update { it.copy(channel = channel) }
+    }
+
+    fun setUsesPassphrase(enabled: Boolean) {
+        _uiState.update { it.copy(usesPassphrase = enabled) }
     }
 
     /** Draw new words, for instance if they were overheard. */
@@ -276,7 +281,7 @@ class InitiatorCeremonyViewModel @Inject constructor(
         try {
             val metadata = buildMetadata(state)
 
-            val passphraseToUse = state.passphraseWords.joinToString(" ")
+            val passphraseToUse = if (state.usesPassphrase) state.passphraseWords.joinToString(" ") else null
 
             Log.d(TAG, "Creating fountain generator: blockSize=$FOUNTAIN_BLOCK_SIZE")
 
@@ -534,6 +539,7 @@ class InitiatorCeremonyViewModel @Inject constructor(
             val relayUrl = settingsRepository.relayServerUrl.first()
             _uiState.value = InitiatorCeremonyUiState(
                 relayUrl = relayUrl,
+                usesPassphrase = !settingsRepository.familyMode.first(),
                 passphraseWords = cryptoService.generateQrPassphrase()
             )
         }

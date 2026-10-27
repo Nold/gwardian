@@ -17,14 +17,15 @@ namespace ash {
     /// unlimited encoded blocks that can be displayed as QR codes.
     /// Passphrase is required for encrypting the QR frames.
     /// Method selects the transfer strategy (Raptor recommended).
-    /// Frames are sealed with the six-word passphrase (Argon2id +
-    /// ChaCha20-Poly1305) and `salt`: 16 fresh secure random bytes.
+    /// With a passphrase, frames are sealed with the six words (Argon2id +
+    /// ChaCha20-Poly1305) and `salt`: 16 fresh secure random bytes. Without
+    /// one, frames are plain and anyone filming the screen can read them.
     [Throws=AshError]
     FountainFrameGenerator create_fountain_generator(
         CeremonyMetadata metadata,
         sequence<u8> pad_bytes,
         u32 block_size,
-        string passphrase,
+        string? passphrase,
         TransferMethod method,
         sequence<u8> salt
     );
@@ -285,6 +286,8 @@ enum AshError {
     "InvalidPassphrase",
     /// QR frame failed authentication (wrong passphrase or altered frame)
     "FrameAuthenticationFailed",
+    /// QR frames are protected by six words the receiver did not enter
+    "PassphraseRequired",
 };
 
 /// Ceremony metadata transferred via QR frame 0
@@ -465,10 +468,9 @@ interface FountainFrameGenerator {
 /// Automatically detects transfer method from first received block
 /// and uses the appropriate decoder (Raptor, LT, or Sequential).
 interface FountainFrameReceiver {
-    /// Create a new receiver.
-    /// Passphrase is required and must match the sender's six words.
+    /// Create a new receiver, with the sender's six words if it shows any.
     [Throws=AshError]
-    constructor(string passphrase);
+    constructor(string? passphrase);
 
     /// Add a scanned QR frame.
     ///

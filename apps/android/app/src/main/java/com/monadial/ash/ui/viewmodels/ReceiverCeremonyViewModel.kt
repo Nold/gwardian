@@ -31,6 +31,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import uniffi.ash.AshException
 import uniffi.ash.CeremonyMetadata
 import uniffi.ash.FountainFrameReceiver
 import uniffi.ash.decodeCeremonyPayload
@@ -100,7 +101,7 @@ class ReceiverCeremonyViewModel @Inject constructor(
         // Create a new fountain receiver
         fountainReceiver?.close()
         fountainReceiver = try {
-            cryptoService.createFountainReceiver(passphrase = state.passphrase)
+            cryptoService.createFountainReceiver(passphrase = state.passphrase.trim().ifEmpty { null })
         } catch (e: Exception) {
             Log.w(TAG, "Invalid passphrase: ${e.message}")
             return
@@ -116,6 +117,7 @@ class ReceiverCeremonyViewModel @Inject constructor(
             it.copy(
                 phase = CeremonyPhase.Scanning,
                 passphraseLooksWrong = false,
+                passphraseRequired = false,
                 receivedBlocks = 0,
                 totalBlocks = 0,
                 progress = 0f
@@ -207,7 +209,9 @@ class ReceiverCeremonyViewModel @Inject constructor(
             // Misread or wrong passphrase: keep scanning, but say so when
             // nothing has decoded after many frames
             Log.e(TAG, "Failed to process frame: ${e.message}", e)
-            if (receiver.uniqueBlocksReceived() == 0u && receiver.rejectedFrames() >= 8u) {
+            if (e is AshException.PassphraseRequired) {
+                _uiState.update { it.copy(passphraseRequired = true) }
+            } else if (receiver.uniqueBlocksReceived() == 0u && receiver.rejectedFrames() >= 8u) {
                 _uiState.update { it.copy(passphraseLooksWrong = true) }
             }
         }

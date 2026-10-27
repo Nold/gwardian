@@ -43,11 +43,14 @@ final class InitiatorCeremonyViewModel {
     /// Bluetooth sending session, while `channel` is `.bluetooth`
     private(set) var bleSender: BLEPadSenderSession?
 
+    /// Seal the QR codes with six words; on unless family mode is enabled
+    var usesPassphrase = true
+
     /// Six words drawn by the app; the other person types them to read the QR codes
     private(set) var passphraseWords: [String] = []
 
-    /// Passphrase sealing the QR frames
-    var passphrase: String { passphraseWords.joined(separator: " ") }
+    /// Passphrase sealing the QR frames, if the codes are protected
+    var passphrase: String? { usesPassphrase ? passphraseWords.joined(separator: " ") : nil }
 
     var conversationName: String = ""
 
@@ -157,6 +160,7 @@ final class InitiatorCeremonyViewModel {
     init(dependencies: Dependencies) {
         self.dependencies = dependencies
         self.selectedRelayURL = dependencies.settingsService.relayServerURL
+        self.usesPassphrase = !dependencies.settingsService.isFamilyModeEnabled
         regeneratePassphrase()
         Log.debug(.ceremony, "Initiator ceremony view model initialized")
     }
@@ -165,8 +169,7 @@ final class InitiatorCeremonyViewModel {
 
     /// Passphrase is valid once six words were drawn
     var isPassphraseValid: Bool {
-        guard !passphrase.isEmpty else { return false }
-        return validatePassphrase(passphrase: passphrase)
+        validatePassphrase(passphrase: passphraseWords.joined(separator: " "))
     }
 
     /// Draw new words, for instance if they were overheard.
@@ -179,9 +182,9 @@ final class InitiatorCeremonyViewModel {
         }
     }
 
-    /// QR codes need the spoken passphrase; Bluetooth uses its own key exchange.
+    /// Bluetooth uses its own key exchange; QR codes need the words when protected.
     var isChannelReady: Bool {
-        channel == .bluetooth || isPassphraseValid
+        channel == .bluetooth || !usesPassphrase || isPassphraseValid
     }
 
     /// Computed pad size in bytes
@@ -698,6 +701,7 @@ final class InitiatorCeremonyViewModel {
         notifyDeliveryFailed = true
         persistenceConsent = false
         transferMethod = .raptor
+        usesPassphrase = !dependencies.settingsService.isFamilyModeEnabled
         regeneratePassphrase()
     }
 

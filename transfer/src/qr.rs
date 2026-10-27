@@ -13,7 +13,10 @@
 //!   same frame. The salt travels in every frame, since the receiver may
 //!   start scanning anywhere.
 //!
-//! Sealed frame: `[version: u8][salt: 16][index: u32 BE][ciphertext][tag: 16]`
+//! Sealed frame: `[0xA5][salt: 16][index: u32 BE][ciphertext][tag: 16]`.
+//! The first byte tells sealed frames apart from plain core frames, which
+//! start with the transfer method (0 to 2): the six words are optional, and
+//! the receiver learns from the frames whether it needs them.
 //!
 //! This protects the transfer against observation; it does not replace
 //! doing the ceremony out of sight. The pad itself stays a one-time pad.
@@ -33,7 +36,8 @@ pub const PASSPHRASE_RANDOM_BYTES: usize = 2 * PASSPHRASE_WORDS;
 /// Bytes of salt carried in every sealed frame.
 pub const SALT_SIZE: usize = 16;
 
-const VERSION: u8 = 1;
+/// First byte of a sealed frame; plain core frames start with 0, 1 or 2.
+const MARKER: u8 = 0xA5;
 const HEADER_SIZE: usize = 1 + SALT_SIZE + 4;
 const TAG_SIZE: usize = 16;
 /// OWASP's first recommended Argon2id setting, light enough for any phone.
@@ -167,7 +171,7 @@ impl FrameKey {
 
     fn header(&self, index: u32) -> Vec<u8> {
         let mut header = Vec::with_capacity(HEADER_SIZE);
-        header.push(VERSION);
+        header.push(MARKER);
         header.extend_from_slice(&self.salt);
         header.extend_from_slice(&index.to_be_bytes());
         header
@@ -180,12 +184,17 @@ impl FrameKey {
 ///
 /// Returns [`Error::Malformed`] if `sealed` is not a sealed frame.
 pub fn frame_salt(sealed: &[u8]) -> Result<[u8; SALT_SIZE]> {
-    if sealed.len() < HEADER_SIZE + TAG_SIZE || sealed[0] != VERSION {
+    if sealed.len() < HEADER_SIZE + TAG_SIZE || !is_sealed(sealed) {
         return Err(Error::Malformed {
             reason: "sealed QR frame",
         });
     }
     Ok(sealed[1..1 + SALT_SIZE].try_into().expect("salt size"))
+}
+
+/// Whether a scanned frame was sealed with a passphrase.
+pub fn is_sealed(frame: &[u8]) -> bool {
+    frame.first() == Some(&MARKER)
 }
 
 fn nonce(index: u32) -> Nonce {
@@ -259,5 +268,7 @@ mod tests {
         );
 
         assert!(frame_salt(b"short").is_err());
+        assert!(is_sealed(&sealed));
+        assert!(!is_sealed(&[0, 1, 2]));
     }
 }

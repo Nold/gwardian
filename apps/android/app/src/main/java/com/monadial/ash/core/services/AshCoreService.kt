@@ -38,14 +38,14 @@ class AshCoreService @Inject constructor() {
      * @param metadata Ceremony settings (TTL, disappearing messages, relay URL, etc.)
      * @param padBytes The one-time pad bytes to transfer
      * @param blockSize Size of each block (default 1000 bytes)
-     * @param passphrase The six words both people agreed on aloud
+     * @param passphrase The six words read aloud, or null for plain frames
      * @return FountainFrameGenerator that produces unlimited QR frames
      */
     fun createFountainGenerator(
         metadata: CeremonyMetadata,
         padBytes: ByteArray,
         blockSize: UInt = 1000u,
-        passphrase: String
+        passphrase: String?
     ): FountainFrameGenerator {
         // A fresh salt per ceremony: the same words never give the same key twice
         val salt = ByteArray(16).also { SecureRandom().nextBytes(it) }
@@ -62,10 +62,10 @@ class AshCoreService @Inject constructor() {
     /**
      * Create a fountain frame receiver for QR scanning during ceremony.
      *
-     * @param passphrase The six words shown on the sender's phone
+     * @param passphrase The six words shown on the sender's phone, if any
      * @return FountainFrameReceiver for collecting and decoding scanned frames
      */
-    fun createFountainReceiver(passphrase: String): FountainFrameReceiver {
+    fun createFountainReceiver(passphrase: String?): FountainFrameReceiver {
         return FountainFrameReceiver(passphrase)
     }
 

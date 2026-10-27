@@ -27,6 +27,7 @@ class SettingsService @Inject constructor(@ApplicationContext private val contex
         val LOCK_ON_BACKGROUND = booleanPreferencesKey("lock_on_background")
         val RELAY_SERVER_URL = stringPreferencesKey("relay_server_url")
         val DEFAULT_EXTENDED_TTL = booleanPreferencesKey("default_extended_ttl")
+        val FAMILY_MODE = booleanPreferencesKey("family_mode")
     }
 
     private val _isBiometricEnabled = MutableStateFlow(false)
@@ -46,6 +47,17 @@ class SettingsService @Inject constructor(@ApplicationContext private val contex
     val defaultExtendedTtl: Flow<Boolean> =
         context.dataStore.data
             .map { preferences -> preferences[Keys.DEFAULT_EXTENDED_TTL] ?: false }
+
+    /** Family use: QR ceremonies start without the six words. */
+    val familyMode: Flow<Boolean> =
+        context.dataStore.data
+            .map { preferences -> preferences[Keys.FAMILY_MODE] ?: false }
+
+    suspend fun setFamilyMode(enabled: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[Keys.FAMILY_MODE] = enabled
+        }
+    }
 
     suspend fun initialize() {
         _isBiometricEnabled.value = context.dataStore.data.first()[Keys.BIOMETRIC_ENABLED] ?: false
