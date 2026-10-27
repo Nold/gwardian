@@ -141,7 +141,8 @@ struct AppLockViewModelTests {
         settings.isBiometricLockEnabled = true
 
         let biometric = MockBiometricService()
-        biometric.errorToThrow = .userCancelled
+        // User/system cancellation is intentionally silent, so use a real failure
+        biometric.errorToThrow = .authenticationFailed
 
         let viewModel = AppLockViewModel(
             biometricService: biometric,

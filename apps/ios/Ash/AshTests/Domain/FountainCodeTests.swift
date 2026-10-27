@@ -140,6 +140,7 @@ final class FountainCodeRoundtripTests: XCTestCase {
             ttlSeconds: 86400,
             disappearingMessagesSeconds: 0,
             notificationFlags: 0x000B,
+            transferMethod: .raptor,
             relayUrl: "https://relay.test"
         )
 
@@ -184,6 +185,7 @@ final class FountainCodeRoundtripTests: XCTestCase {
             ttlSeconds: 86400,
             disappearingMessagesSeconds: 0,
             notificationFlags: 0x000B,
+            transferMethod: .raptor,
             relayUrl: "https://relay.test"
         )
 
@@ -238,6 +240,7 @@ final class FountainCodeRoundtripTests: XCTestCase {
             ttlSeconds: 86400,
             disappearingMessagesSeconds: 0,
             notificationFlags: 0x000B,
+            transferMethod: .raptor,
             relayUrl: "https://relay.test"
         )
 
@@ -276,6 +279,7 @@ final class FountainCodeRoundtripTests: XCTestCase {
             ttlSeconds: 86400,
             disappearingMessagesSeconds: 0,
             notificationFlags: 0x000B,
+            transferMethod: .raptor,
             relayUrl: "https://relay.test"
         )
 
@@ -326,6 +330,7 @@ final class QRCodeSimulationTests: XCTestCase {
             ttlSeconds: 86400,
             disappearingMessagesSeconds: 0,
             notificationFlags: 0x000B,
+            transferMethod: .raptor,
             relayUrl: "https://relay.test"
         )
 
@@ -367,6 +372,7 @@ final class QRCodeSimulationTests: XCTestCase {
             ttlSeconds: 86400,
             disappearingMessagesSeconds: 0,
             notificationFlags: 0x000B,
+            transferMethod: .raptor,
             relayUrl: "https://relay.test"
         )
 
@@ -413,6 +419,7 @@ final class CorruptedFrameTests: XCTestCase {
             ttlSeconds: 86400,
             disappearingMessagesSeconds: 0,
             notificationFlags: 0x000B,
+            transferMethod: .raptor,
             relayUrl: "https://relay.test"
         )
 
@@ -446,6 +453,7 @@ final class CorruptedFrameTests: XCTestCase {
             ttlSeconds: 86400,
             disappearingMessagesSeconds: 0,
             notificationFlags: 0x000B,
+            transferMethod: .raptor,
             relayUrl: "https://relay.test"
         )
 
