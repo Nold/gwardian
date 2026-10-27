@@ -226,6 +226,11 @@ impl MemberPad {
         Ok(pad)
     }
 
+    /// Pad bytes, consumed ranges wiped, for persistence in secure storage.
+    pub fn as_bytes(&self) -> &[u8] {
+        &self.bytes
+    }
+
     /// Consumed `[start, end)` ranges, for persistence.
     pub fn used_ranges(&self) -> &[(usize, usize)] {
         &self.used
@@ -855,6 +860,9 @@ mod tests {
         let saved = groups[1].pad(0).unwrap();
         let used = saved.used_ranges().to_vec();
         let checksums = saved.checksums().to_vec();
+        assert!(saved.as_bytes()[used[0].0..used[0].1]
+            .iter()
+            .all(|&b| b == 0));
         let pad = MemberPad::from_bytes_with_state(
             pad_bytes(0, 4096),
             &used,
