@@ -234,7 +234,7 @@ Encryption protects a message once it is written, but the keyboard sees every ch
 **Defenses**
 - The app code is entered on Gwardian's own digit pad, never through the keyboard
 - iOS: third-party keyboards are refused inside the app (`shouldAllowExtensionPointIdentifier`); only Apple's keyboard appears
-- Android: every text field asks the keyboard not to learn what is typed (`IME_FLAG_NO_PERSONALIZED_LEARNING`; Gboard and Samsung Keyboard switch to incognito), and the conversation screen warns when the active keyboard was not preinstalled
+- Android: every text field asks the keyboard not to learn what is typed (`IME_FLAG_NO_PERSONALIZED_LEARNING`; Gboard and Samsung Keyboard switch to incognito), and the conversation screen warns when the active keyboard was not preinstalled. Open-source keyboards without Internet access (HeliBoard, FlorisBoard) are trusted like preinstalled ones, matched by package name
 
 **Residual risk**
 - Android cannot forbid a keyboard; a malicious one can ignore the no-learning request

@@ -47,9 +47,22 @@ fun PrivateKeyboard(content: @Composable () -> Unit) {
 }
 
 /**
+ * Open-source keyboards without Internet access, trusted like a
+ * preinstalled one. Matched by package name only: a sideloaded app could
+ * reuse the name, which is the compromised-device case.
+ */
+private val TRUSTED_KEYBOARDS = setOf(
+    // HeliBoard
+    "helium314.keyboard",
+    // FlorisBoard
+    "dev.patrickgold.florisboard",
+    "dev.patrickgold.florisboard.beta"
+)
+
+/**
  * Name of the active keyboard when it was not built into the phone, or
- * null for a preinstalled keyboard. A downloaded keyboard can read and send
- * everything typed with it.
+ * null for a preinstalled or trusted keyboard. A downloaded keyboard can
+ * read and send everything typed with it.
  */
 fun thirdPartyKeyboardName(context: Context): String? {
     val activeId = Settings.Secure.getString(context.contentResolver, Settings.Secure.DEFAULT_INPUT_METHOD)
@@ -57,7 +70,8 @@ fun thirdPartyKeyboardName(context: Context): String? {
     val imm = context.getSystemService(InputMethodManager::class.java) ?: return null
     val keyboard = imm.enabledInputMethodList.firstOrNull { it.id == activeId } ?: return null
     val preinstalled = keyboard.serviceInfo.applicationInfo.flags and ApplicationInfo.FLAG_SYSTEM != 0
-    return if (preinstalled) null else keyboard.loadLabel(context.packageManager).toString()
+    val trusted = keyboard.packageName in TRUSTED_KEYBOARDS
+    return if (preinstalled || trusted) null else keyboard.loadLabel(context.packageManager).toString()
 }
 
 /** [thirdPartyKeyboardName], checked again each time the screen resumes. */
