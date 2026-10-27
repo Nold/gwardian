@@ -19,13 +19,13 @@ on:
 jobs:
   build:
     name: Build iOS App
-    runs-on: macos-14
+    runs-on: macos-26
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Select Xcode
-        run: sudo xcode-select -s /Applications/Xcode_15.4.app
+        run: sudo xcode-select -s /Applications/Xcode_26.6.app
 
       - name: Show Xcode version
         run: xcodebuild -version
@@ -36,7 +36,7 @@ jobs:
           targets: aarch64-apple-ios,aarch64-apple-ios-sim,x86_64-apple-ios
 
       - name: Cache Rust
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ~/.cargo/bin/
@@ -57,7 +57,7 @@ jobs:
           SKIP_SIMULATOR: "false"
 
       - name: Cache Swift packages
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/Library/Developer/Xcode/DerivedData/**/SourcePackages
           key: ${{ runner.os }}-spm-${{ hashFiles('apps/ios/Ash/Ash.xcodeproj/project.pbxproj') }}
@@ -69,16 +69,16 @@ jobs:
           xcodebuild build \
             -project Ash.xcodeproj \
             -scheme Ash \
-            -destination 'platform=iOS Simulator,name=iPhone 15,OS=latest' \
+            -destination 'generic/platform=iOS Simulator' \
             -configuration Debug \
-            CODE_SIGNING_ALLOWED=NO \
-            | xcpretty
+            -quiet \
+            CODE_SIGNING_ALLOWED=NO
 
   swiftlint:
     name: SwiftLint
-    runs-on: macos-14
+    runs-on: macos-26
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install SwiftLint
         run: brew install swiftlint
@@ -91,13 +91,13 @@ jobs:
     name: Test Bindings
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
 
       - name: Cache cargo
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ~/.cargo/bin/
