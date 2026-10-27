@@ -184,7 +184,7 @@ Gwardian explicitly assumes the backend may be hostile.
 **Defenses**
 - Human-verifiable mnemonic checksum
 - User guidance to perform the ceremony privately
-- QR frames encrypted with six spoken words drawn by the app: Argon2id + ChaCha20-Poly1305 (see [ceremony.md](ceremony.md)). A recording is useless without the words. On by default; off when the sender disables it or in family mode
+- QR frames encrypted with six spoken words drawn by the app: Argon2id + ChaCha20-Poly1305 (see [ceremony.md](ceremony.md)). A recording is useless without the words. On by default; off when the sender disables it or for a family conversation
 
 **Residual risk**
 - Full pad compromise if the ceremony is fully recorded **and** the six words are overheard, or if it is recorded with the protection turned off

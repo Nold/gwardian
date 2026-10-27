@@ -60,14 +60,4 @@ interface SettingsRepository {
      * Enable or disable lock on background.
      */
     suspend fun setLockOnBackground(enabled: Boolean): AppResult<Unit>
-
-    /**
-     * Observable family mode: QR ceremonies start without the six words.
-     */
-    val familyMode: Flow<Boolean>
-
-    /**
-     * Enable or disable family mode.
-     */
-    suspend fun setFamilyMode(enabled: Boolean): AppResult<Unit>
 }

@@ -69,7 +69,6 @@ fun SettingsScreen(
     var showBiometricWarning by remember { mutableStateOf(false) }
     var showEraseWarning by remember { mutableStateOf(false) }
     val lockOnBackground by viewModel.lockOnBackground.collectAsState()
-    val familyMode by viewModel.familyMode.collectAsState()
     val editedRelayUrl by viewModel.editedRelayUrl.collectAsState()
     val hasUnsavedChanges by viewModel.hasUnsavedChanges.collectAsState()
     val isTestingConnection by viewModel.isTestingConnection.collectAsState()
@@ -149,15 +148,6 @@ fun SettingsScreen(
                     description = "Ask for the code when the app returns",
                     checked = lockOnBackground,
                     onCheckedChange = { viewModel.setLockOnBackground(it) }
-                )
-
-                HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
-
-                SettingRow(
-                    title = "Family Mode",
-                    description = "QR ceremonies start without the six words",
-                    checked = familyMode,
-                    onCheckedChange = { viewModel.setFamilyMode(it) }
                 )
 
                 HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))

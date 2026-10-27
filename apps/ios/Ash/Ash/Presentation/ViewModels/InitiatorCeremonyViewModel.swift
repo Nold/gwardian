@@ -43,7 +43,12 @@ final class InitiatorCeremonyViewModel {
     /// Bluetooth sending session, while `channel` is `.bluetooth`
     private(set) var bleSender: BLEPadSenderSession?
 
-    /// Seal the QR codes with six words; on unless family mode is enabled
+    /// Family conversation: done at home, so the six words start off
+    var isFamilyConversation = false {
+        didSet { usesPassphrase = !isFamilyConversation }
+    }
+
+    /// Seal the QR codes with six words; on by default, off for a family conversation
     var usesPassphrase = true
 
     /// Six words drawn by the app; the other person types them to read the QR codes
@@ -160,7 +165,6 @@ final class InitiatorCeremonyViewModel {
     init(dependencies: Dependencies) {
         self.dependencies = dependencies
         self.selectedRelayURL = dependencies.settingsService.relayServerURL
-        self.usesPassphrase = !dependencies.settingsService.isFamilyModeEnabled
         regeneratePassphrase()
         Log.debug(.ceremony, "Initiator ceremony view model initialized")
     }
@@ -701,7 +705,7 @@ final class InitiatorCeremonyViewModel {
         notifyDeliveryFailed = true
         persistenceConsent = false
         transferMethod = .raptor
-        usesPassphrase = !dependencies.settingsService.isFamilyModeEnabled
+        isFamilyConversation = false
         regeneratePassphrase()
     }
 

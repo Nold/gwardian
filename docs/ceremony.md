@@ -226,7 +226,7 @@ Timeouts are enforced by the app, not `ash-core`.
 
 ## Six-word passphrase
 
-QR frames are encrypted with six words the two people say aloud (`transfer/src/qr.rs`). The protection is on by default; the sender can turn it off for a ceremony, and **family mode** (Settings) turns it off by default for families who do the ceremony at home.
+QR frames are encrypted with six words the two people say aloud (`transfer/src/qr.rs`). The protection is on by default; the sender can turn it off for a ceremony, and a **family conversation** (an option when creating the conversation) starts with it off, for families who do the ceremony at home.
 
 Sealed frames start with `0xA5` and plain frames with the transfer method (0 to 2), so the receiver learns from the frames whether it needs the words: its words field may stay empty, and if the codes turn out to be protected the app asks for them.
 

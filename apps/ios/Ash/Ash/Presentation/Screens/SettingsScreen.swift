@@ -18,7 +18,6 @@ struct SettingsScreen: View {
     @State private var isShowingBurnAllConfirmation = false
     @State private var isShowingEmergencyBurn = false
     @State private var biometricEnabled = false
-    @State private var familyMode = false
     @State private var isShowingBiometricWarning = false
     @State private var isShowingEraseWarning = false
     @State private var isShowingChangeCode = false
@@ -73,7 +72,6 @@ struct SettingsScreen: View {
             }
             .onAppear {
                 biometricEnabled = lockViewModel.isBiometricUnlockEnabled
-                familyMode = dependencies.settingsService.isFamilyModeEnabled
                 defaultRelayURL = dependencies.settingsService.relayServerURL
             }
             .sheet(isPresented: $isShowingEmergencyBurn) {
@@ -153,26 +151,6 @@ struct SettingsScreen: View {
                     isOn: Binding(
                         get: { lockViewModel.lockOnBackground },
                         set: { lockViewModel.lockOnBackground = $0 }
-                    ),
-                    isFirst: false,
-                    isLast: false
-                )
-
-                Divider()
-                    .padding(.leading, 56)
-
-                SettingsToggleRow(
-                    icon: "house.fill",
-                    iconColor: Color.ashAccent,
-                    title: "Family Mode",
-                    subtitle: "QR ceremonies start without the six words",
-                    isOn: Binding(
-                        get: { familyMode },
-                        set: { newValue in
-                            familyMode = newValue
-                            let settings = dependencies.settingsService
-                            settings.isFamilyModeEnabled = newValue
-                        }
                     ),
                     isFirst: false,
                     isLast: false

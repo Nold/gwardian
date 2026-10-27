@@ -102,8 +102,7 @@ class InitiatorCeremonyViewModel @Inject constructor(
     private fun loadInitialSettings() {
         viewModelScope.launch {
             val relayUrl = settingsRepository.relayServerUrl.first()
-            val familyMode = settingsRepository.familyMode.first()
-            _uiState.update { it.copy(relayUrl = relayUrl, usesPassphrase = !familyMode) }
+            _uiState.update { it.copy(relayUrl = relayUrl) }
         }
     }
 
@@ -115,6 +114,10 @@ class InitiatorCeremonyViewModel @Inject constructor(
 
     fun setChannel(channel: CeremonyChannel) {
         _uiState.update { it.copy(channel = channel) }
+    }
+
+    fun setFamilyConversation(enabled: Boolean) {
+        _uiState.update { it.copy(isFamilyConversation = enabled, usesPassphrase = !enabled) }
     }
 
     fun setUsesPassphrase(enabled: Boolean) {
@@ -539,7 +542,6 @@ class InitiatorCeremonyViewModel @Inject constructor(
             val relayUrl = settingsRepository.relayServerUrl.first()
             _uiState.value = InitiatorCeremonyUiState(
                 relayUrl = relayUrl,
-                usesPassphrase = !settingsRepository.familyMode.first(),
                 passphraseWords = cryptoService.generateQrPassphrase()
             )
         }

@@ -53,7 +53,10 @@ data class InitiatorCeremonyUiState(
     // Transfer channel
     val channel: CeremonyChannel = CeremonyChannel.QR_CODES,
 
-    // Six words drawn by the app, read aloud to the other person; on unless family mode
+    // Family conversation: done at home, so the six words start off
+    val isFamilyConversation: Boolean = false,
+
+    // Six words drawn by the app, read aloud to the other person
     val usesPassphrase: Boolean = true,
     val passphraseWords: List<String> = emptyList(),
 

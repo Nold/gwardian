@@ -419,6 +419,8 @@ private fun InitiatorCeremonyScreen(
                                 viewModel.setChannel(channel)
                             }
                         },
+                        isFamilyConversation = uiState.isFamilyConversation,
+                        onFamilyConversationChange = viewModel::setFamilyConversation,
                         usesPassphrase = uiState.usesPassphrase,
                         onUsesPassphraseChange = viewModel::setUsesPassphrase,
                         passphraseWords = passphraseWords,
@@ -682,6 +684,8 @@ private fun PadSizeSelectionContent(
     onSizeSelected: (PadSize) -> Unit,
     channel: CeremonyChannel,
     onChannelChange: (CeremonyChannel) -> Unit,
+    isFamilyConversation: Boolean,
+    onFamilyConversationChange: (Boolean) -> Unit,
     usesPassphrase: Boolean,
     onUsesPassphraseChange: (Boolean) -> Unit,
     passphraseWords: List<String>,
@@ -749,6 +753,30 @@ private fun PadSizeSelectionContent(
         Spacer(modifier = Modifier.height(16.dp))
 
         if (channel == CeremonyChannel.QR_CODES) {
+            OutlinedCard(modifier = Modifier.fillMaxWidth()) {
+                Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(text = "Family Conversation", style = MaterialTheme.typography.titleSmall)
+                        Text(
+                            text = "Created at home: the six words start off",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(
+                        checked = isFamilyConversation,
+                        onCheckedChange = onFamilyConversationChange,
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = Color.White,
+                            checkedTrackColor = accentColor,
+                            checkedBorderColor = accentColor
+                        )
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
             // Passphrase section
             OutlinedCard(
                 modifier = Modifier.fillMaxWidth()

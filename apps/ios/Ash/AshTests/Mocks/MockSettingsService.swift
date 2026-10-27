@@ -18,7 +18,6 @@ final class MockSettingsService: SettingsServiceProtocol, @unchecked Sendable {
     var relayServerURL: String = "http://localhost:8080"
     var defaultExtendedTTL: Bool = false
     var hasCompletedOnboarding: Bool = false
-    var isFamilyModeEnabled: Bool = false
 
     // MARK: - Call Tracking
 

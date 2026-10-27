@@ -385,7 +385,21 @@ private struct PadSizeView: View {
                     .padding(.top, 20)
 
                 if viewModel.channel == .qrCodes {
-                    // Passphrase Section (on by default, off in family mode)
+                    Toggle(isOn: $viewModel.isFamilyConversation) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Label("Family Conversation", systemImage: "house.fill")
+                                .font(.subheadline.weight(.semibold))
+                            Text("Created at home: the six words start off")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .padding(16)
+                    .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16))
+                    .padding(.horizontal, 20)
+                    .padding(.top, 20)
+
+                    // Passphrase Section (on by default, off for a family conversation)
                     VStack(spacing: 0) {
                         VStack(alignment: .leading, spacing: 8) {
                             Toggle(isOn: $viewModel.usesPassphrase) {
@@ -433,7 +447,7 @@ private struct PadSizeView: View {
                             .font(.subheadline.weight(.medium))
                             .foregroundStyle(.secondary)
 
-                        Text("Without them, anyone who films the QR codes could copy your pad. The app draws the words itself so they are never easy to guess, and the other phone needs them to read the codes. Family mode, in Settings, turns them off by default.")
+                        Text("Without them, anyone who films the QR codes could copy your pad. The app draws the words itself so they are never easy to guess, and the other phone needs them to read the codes. A family conversation starts with them off.")
                             .font(.caption)
                             .foregroundStyle(.tertiary)
                     }

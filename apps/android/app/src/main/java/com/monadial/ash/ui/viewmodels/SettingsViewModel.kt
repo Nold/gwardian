@@ -37,9 +37,6 @@ class SettingsViewModel @Inject constructor(
     private val _lockOnBackground = MutableStateFlow(true)
     val lockOnBackground: StateFlow<Boolean> = _lockOnBackground.asStateFlow()
 
-    private val _familyMode = MutableStateFlow(false)
-    val familyMode: StateFlow<Boolean> = _familyMode.asStateFlow()
-
     // Saved relay URL (from settings)
     private val _relayUrl = MutableStateFlow("")
     val relayUrl: StateFlow<String> = _relayUrl.asStateFlow()
@@ -72,11 +69,6 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             settingsRepository.lockOnBackground.collect {
                 _lockOnBackground.value = it
-            }
-        }
-        viewModelScope.launch {
-            settingsRepository.familyMode.collect {
-                _familyMode.value = it
             }
         }
         viewModelScope.launch {
@@ -132,12 +124,6 @@ class SettingsViewModel @Inject constructor(
     fun setLockOnBackground(enabled: Boolean) {
         viewModelScope.launch {
             settingsRepository.setLockOnBackground(enabled)
-        }
-    }
-
-    fun setFamilyMode(enabled: Boolean) {
-        viewModelScope.launch {
-            settingsRepository.setFamilyMode(enabled)
         }
     }
 
