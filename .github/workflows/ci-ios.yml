@@ -79,6 +79,8 @@ jobs:
       - name: Run pad transfer and app lock tests
         working-directory: apps/ios/Ash
         run: |
+          # Without pipefail the step would take tee's exit status and never fail
+          set -o pipefail
           # Newest iPhone simulator Xcode offers for this scheme: older runtimes
           # are installed too, but the app needs iOS 26.1 or later
           DEVICE_ID=$(xcodebuild -showdestinations -project Ash.xcodeproj -scheme Ash 2>/dev/null | python3 -c '
