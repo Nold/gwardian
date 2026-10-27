@@ -343,6 +343,21 @@ pub const fn pad_consumption(plaintext_len: usize) -> usize {
 /// assert_eq!(&padded[0..5], &[0x00, 0x00, 0x02, b'h', b'i']);
 /// ```
 pub fn pad_message(message: &[u8]) -> Result<Vec<u8>> {
+    pad_message_to(message, MIN_PADDED_SIZE)
+}
+
+/// Pad a message to at least `min_size` bytes, in the [`pad_message`] format.
+///
+/// # Example
+///
+/// ```
+/// use ash_core::message::{pad_message_to, unpad_message};
+///
+/// let padded = pad_message_to(b"hi", 64).unwrap();
+/// assert_eq!(padded.len(), 64);
+/// assert_eq!(unpad_message(&padded).unwrap(), b"hi");
+/// ```
+pub fn pad_message_to(message: &[u8], min_size: usize) -> Result<Vec<u8>> {
     if message.len() > u16::MAX as usize {
         return Err(Error::PayloadTooLarge {
             size: message.len(),
@@ -352,7 +367,7 @@ pub fn pad_message(message: &[u8]) -> Result<Vec<u8>> {
 
     let content_len = message.len();
     let total_needed = 1 + 2 + content_len; // marker + length + content
-    let padded_size = total_needed.max(MIN_PADDED_SIZE);
+    let padded_size = total_needed.max(min_size);
 
     let mut padded = vec![0u8; padded_size];
 
