@@ -348,7 +348,8 @@ struct VaultedKeychainServiceTests {
 
         #expect(try keychain.sealLegacyRecords() == 2)
         for key in try base.allKeys(withPrefix: "") {
-            #expect(PasscodeVault.isSealed(try #require(try base.retrieve(for: key))))
+            let raw = try #require(try base.retrieve(for: key))
+            #expect(PasscodeVault.isSealed(raw))
         }
         #expect(try keychain.retrieve(for: "pad.old1") == Data("old1".utf8))
         #expect(try keychain.retrieve(for: "conversation.old2") == Data("old2".utf8))
