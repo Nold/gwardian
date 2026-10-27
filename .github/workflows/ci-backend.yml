@@ -6,12 +6,16 @@ on:
     tags: ['v*']
     paths:
       - 'backend/**'
+      - 'core/**'
+      - 'transfer/**'
       - '.github/workflows/ci-backend.yml'
     # Note: paths filter only applies to branch pushes, not tag pushes
   pull_request:
     branches: [main]
     paths:
       - 'backend/**'
+      - 'core/**'
+      - 'transfer/**'
       - '.github/workflows/ci-backend.yml'
   workflow_dispatch:
 

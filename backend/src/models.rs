@@ -346,6 +346,15 @@ pub struct HealthResponse {
     pub version: &'static str,
 }
 
+/// Response to opening a pad transfer.
+#[derive(Debug, Serialize)]
+pub struct CreateTransferResponse {
+    pub transfer_id: String,
+    pub receiver_token: String,
+    pub sender_token: String,
+    pub expires_in_secs: u64,
+}
+
 /// Error response.
 #[derive(Debug, Serialize)]
 pub struct ErrorResponse {

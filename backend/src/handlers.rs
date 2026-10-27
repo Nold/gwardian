@@ -10,8 +10,10 @@ use crate::apns::ApnsClient;
 use crate::auth::{extract_bearer_token, AuthError, AuthStore, RegisterResult};
 use crate::models::*;
 use crate::store::{Store, StoreError};
+use crate::transfers::{TransferError, TransferLimits, TransferStore};
 use axum::{
-    extract::{Query, State},
+    body::Bytes,
+    extract::{Path, Query, State},
     http::{header::AUTHORIZATION, StatusCode},
     response::{
         sse::{Event, KeepAlive, Sse},
@@ -41,6 +43,8 @@ pub struct AppState {
     pub auth: AuthStore,
     /// Broadcast channel for SSE events
     pub broadcast_tx: broadcast::Sender<BroadcastEvent>,
+    /// Pad transfer mailboxes
+    pub transfers: Arc<TransferStore>,
 }
 
 impl AppState {
@@ -51,6 +55,7 @@ impl AppState {
             apns,
             auth: AuthStore::new(),
             broadcast_tx,
+            transfers: Arc::new(TransferStore::new(TransferLimits::default())),
         }
     }
 }
@@ -536,6 +541,86 @@ pub async fn message_stream(
     ))
 }
 
+// === Pad Transfers ===
+
+/// POST /v1/transfers - Open a pad transfer mailbox
+///
+/// Called by the device that will receive a pad. It keeps `receiver_token`
+/// and passes `transfer_id` and `sender_token` to the pad owner out of band.
+pub async fn create_transfer(
+    State(state): State<AppState>,
+) -> Result<(StatusCode, Json<CreateTransferResponse>), ApiError> {
+    let created = state.transfers.create()?;
+    debug!("Opened pad transfer");
+    Ok((
+        StatusCode::CREATED,
+        Json(CreateTransferResponse {
+            transfer_id: created.id,
+            receiver_token: created.receiver_token,
+            sender_token: created.sender_token,
+            expires_in_secs: state.transfers.limits().ttl.as_secs(),
+        }),
+    ))
+}
+
+/// POST /v1/transfers/:id/messages - Queue an opaque message for the peer
+pub async fn post_transfer_message(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    headers: axum::http::HeaderMap,
+    body: Bytes,
+) -> Result<StatusCode, ApiError> {
+    let token = extract_auth_token(&headers)?;
+    if body.is_empty() {
+        return Err(ApiError::InvalidInput("empty message"));
+    }
+    state.transfers.post(&id, &token, body)?;
+    Ok(StatusCode::ACCEPTED)
+}
+
+/// GET /v1/transfers/:id/messages - Take the oldest message for the caller
+///
+/// Returns 200 with the message as `application/octet-stream`, or 204 when
+/// nothing is waiting. Each message is delivered once.
+pub async fn take_transfer_message(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    headers: axum::http::HeaderMap,
+) -> Result<axum::response::Response, ApiError> {
+    let token = extract_auth_token(&headers)?;
+    Ok(match state.transfers.take(&id, &token)? {
+        Some(message) => (
+            [(axum::http::header::CONTENT_TYPE, "application/octet-stream")],
+            message,
+        )
+            .into_response(),
+        None => StatusCode::NO_CONTENT.into_response(),
+    })
+}
+
+/// DELETE /v1/transfers/:id - End a transfer and drop queued messages
+pub async fn close_transfer(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    headers: axum::http::HeaderMap,
+) -> Result<StatusCode, ApiError> {
+    let token = extract_auth_token(&headers)?;
+    state.transfers.close(&id, &token)?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+impl From<TransferError> for ApiError {
+    fn from(err: TransferError) -> Self {
+        match err {
+            TransferError::NotFound => ApiError::TransferNotFound,
+            TransferError::Unauthorized => ApiError::Auth(AuthError::Unauthorized),
+            TransferError::TooLarge => ApiError::PayloadTooLarge,
+            TransferError::InboxFull => ApiError::QueueFull,
+            TransferError::Capacity => ApiError::ServerAtCapacity,
+        }
+    }
+}
+
 // === Error Handling ===
 
 /// API error types
@@ -547,6 +632,8 @@ pub enum ApiError {
     QueueFull,
     /// Server at capacity, cannot register new conversations
     ServerAtCapacity,
+    /// Unknown or expired pad transfer
+    TransferNotFound,
     Internal,
     /// Authorization error (wraps AuthError)
     Auth(AuthError),
@@ -585,6 +672,11 @@ impl IntoResponse for ApiError {
                         StatusCode::SERVICE_UNAVAILABLE,
                         "SERVER_AT_CAPACITY",
                         "server at capacity, try again later",
+                    ),
+                    ApiError::TransferNotFound => (
+                        StatusCode::NOT_FOUND,
+                        "TRANSFER_NOT_FOUND",
+                        "transfer not found or expired",
                     ),
                     ApiError::Internal => (
                         StatusCode::INTERNAL_SERVER_ERROR,
