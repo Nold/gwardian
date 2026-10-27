@@ -24,14 +24,16 @@ class CryptoServiceImpl @Inject constructor(
         metadata: CeremonyMetadata,
         padBytes: ByteArray,
         blockSize: UInt,
-        passphrase: String?
+        passphrase: String
     ): FountainFrameGenerator {
         return ashCoreService.createFountainGenerator(metadata, padBytes, blockSize, passphrase)
     }
 
-    override fun createFountainReceiver(passphrase: String?): FountainFrameReceiver {
+    override fun createFountainReceiver(passphrase: String): FountainFrameReceiver {
         return ashCoreService.createFountainReceiver(passphrase)
     }
+
+    override fun generateQrPassphrase(): List<String> = ashCoreService.generateQrPassphrase()
 
     override fun generateMnemonic(padBytes: ByteArray): List<String> {
         return ashCoreService.generateMnemonic(padBytes)

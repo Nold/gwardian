@@ -23,13 +23,16 @@ interface CryptoService {
         metadata: CeremonyMetadata,
         padBytes: ByteArray,
         blockSize: UInt = 1000u,
-        passphrase: String? = null
+        passphrase: String
     ): FountainFrameGenerator
 
     /**
      * Create a fountain frame receiver for QR scanning during ceremony.
      */
-    fun createFountainReceiver(passphrase: String? = null): FountainFrameReceiver
+    fun createFountainReceiver(passphrase: String): FountainFrameReceiver
+
+    /** Six random words for the QR ceremony passphrase. */
+    fun generateQrPassphrase(): List<String>
 
     // === Mnemonic Operations ===
 

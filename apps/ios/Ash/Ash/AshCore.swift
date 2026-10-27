@@ -971,6 +971,12 @@ public protocol FountainFrameReceiverProtocol : AnyObject {
     func progress()  -> Double
     
     /**
+     * Frames rejected so far because they failed authentication: many of
+     * them usually means the passphrase was mistyped.
+     */
+    func rejectedFrames()  -> UInt32
+    
+    /**
      * Number of source blocks needed for complete decoding.
      * Returns 0 before the first block is received.
      */
@@ -1030,11 +1036,11 @@ open class FountainFrameReceiver:
     }
     /**
      * Create a new receiver.
-     * Passphrase is required and must match the sender's passphrase.
+     * Passphrase is required and must match the sender's six words.
      */
-public convenience init(passphrase: String) {
+public convenience init(passphrase: String)throws  {
     let pointer =
-        try! rustCall() {
+        try rustCallWithError(FfiConverterTypeAshError.lift) {
     uniffi_ash_bindings_fn_constructor_fountainframereceiver_new(
         FfiConverterString.lower(passphrase),$0
     )
@@ -1116,6 +1122,17 @@ open func isComplete() -> Bool {
 open func progress() -> Double {
     return try!  FfiConverterDouble.lift(try! rustCall() {
     uniffi_ash_bindings_fn_method_fountainframereceiver_progress(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+    /**
+     * Frames rejected so far because they failed authentication: many of
+     * them usually means the passphrase was mistyped.
+     */
+open func rejectedFrames() -> UInt32 {
+    return try!  FfiConverterUInt32.lift(try! rustCall() {
+    uniffi_ash_bindings_fn_method_fountainframereceiver_rejected_frames(self.uniffiClonePointer(),$0
     )
 })
 }
@@ -3336,6 +3353,16 @@ public enum AshError {
      */
     case InvalidState(message: String)
     
+    /**
+     * QR passphrase is not six words from the word list
+     */
+    case InvalidPassphrase(message: String)
+    
+    /**
+     * QR frame failed authentication (wrong passphrase or altered frame)
+     */
+    case FrameAuthenticationFailed(message: String)
+    
 }
 
 
@@ -3452,6 +3479,14 @@ public struct FfiConverterTypeAshError: FfiConverterRustBuffer {
             message: try FfiConverterString.read(from: &buf)
         )
         
+        case 26: return .InvalidPassphrase(
+            message: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 27: return .FrameAuthenticationFailed(
+            message: try FfiConverterString.read(from: &buf)
+        )
+        
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -3513,6 +3548,10 @@ public struct FfiConverterTypeAshError: FfiConverterRustBuffer {
             writeInt(&buf, Int32(24))
         case .InvalidState(_ /* message is ignored*/):
             writeInt(&buf, Int32(25))
+        case .InvalidPassphrase(_ /* message is ignored*/):
+            writeInt(&buf, Int32(26))
+        case .FrameAuthenticationFailed(_ /* message is ignored*/):
+            writeInt(&buf, Int32(27))
 
         
         }
@@ -4323,15 +4362,18 @@ public nonisolated func calculateSourceBlocks(padBytes: UInt64, blockSize: UInt3
  * unlimited encoded blocks that can be displayed as QR codes.
  * Passphrase is required for encrypting the QR frames.
  * Method selects the transfer strategy (Raptor recommended).
+ * Frames are sealed with the six-word passphrase (Argon2id +
+ * ChaCha20-Poly1305) and `salt`: 16 fresh secure random bytes.
  */
-public nonisolated func createFountainGenerator(metadata: CeremonyMetadata, padBytes: [UInt8], blockSize: UInt32, passphrase: String, method: TransferMethod)throws  -> FountainFrameGenerator {
+public nonisolated func createFountainGenerator(metadata: CeremonyMetadata, padBytes: [UInt8], blockSize: UInt32, passphrase: String, method: TransferMethod, salt: [UInt8])throws  -> FountainFrameGenerator {
     return try  FfiConverterTypeFountainFrameGenerator.lift(try rustCallWithError(FfiConverterTypeAshError.lift) {
     uniffi_ash_bindings_fn_func_create_fountain_generator(
         FfiConverterTypeCeremonyMetadata.lower(metadata),
         FfiConverterSequenceUInt8.lower(padBytes),
         FfiConverterUInt32.lower(blockSize),
         FfiConverterString.lower(passphrase),
-        FfiConverterTypeTransferMethod.lower(method),$0
+        FfiConverterTypeTransferMethod.lower(method),
+        FfiConverterSequenceUInt8.lower(salt),$0
     )
 })
 }
@@ -4495,6 +4537,17 @@ public nonisolated func generateMnemonicWithCount(padBytes: [UInt8], wordCount: 
 })
 }
 /**
+ * Draw a six-word passphrase for the QR ceremony from 12 secure
+ * random bytes.
+ */
+public nonisolated func generateQrPassphrase(random: [UInt8])throws  -> [String] {
+    return try  FfiConverterSequenceString.lift(try rustCallWithError(FfiConverterTypeAshError.lift) {
+    uniffi_ash_bindings_fn_func_generate_qr_passphrase(
+        FfiConverterSequenceUInt8.lower(random),$0
+    )
+})
+}
+/**
  * Authentication overhead per message (64 bytes for Wegman-Carter MAC)
  */
 public nonisolated func getAuthOverhead() -> UInt32 {
@@ -4513,29 +4566,11 @@ public nonisolated func getDefaultBlockSize() -> UInt32 {
 })
 }
 /**
- * Get maximum passphrase length
- */
-public nonisolated func getMaxPassphraseLength() -> UInt32 {
-    return try!  FfiConverterUInt32.lift(try! rustCall() {
-    uniffi_ash_bindings_fn_func_get_max_passphrase_length($0
-    )
-})
-}
-/**
  * Get metadata overhead constant (bytes added to pad for ceremony encoding).
  */
 public nonisolated func getMetadataOverhead() -> UInt32 {
     return try!  FfiConverterUInt32.lift(try! rustCall() {
     uniffi_ash_bindings_fn_func_get_metadata_overhead($0
-    )
-})
-}
-/**
- * Get minimum passphrase length
- */
-public nonisolated func getMinPassphraseLength() -> UInt32 {
-    return try!  FfiConverterUInt32.lift(try! rustCall() {
-    uniffi_ash_bindings_fn_func_get_min_passphrase_length($0
     )
 })
 }
@@ -4546,6 +4581,25 @@ public nonisolated func getPadSizeBytes(size: PadSize) -> UInt64 {
     return try!  FfiConverterUInt64.lift(try! rustCall() {
     uniffi_ash_bindings_fn_func_get_pad_size_bytes(
         FfiConverterTypePadSize.lower(size),$0
+    )
+})
+}
+/**
+ * Words in a QR passphrase.
+ */
+public nonisolated func getQrPassphraseWordCount() -> UInt32 {
+    return try!  FfiConverterUInt32.lift(try! rustCall() {
+    uniffi_ash_bindings_fn_func_get_qr_passphrase_word_count($0
+    )
+})
+}
+/**
+ * Canonical spelling of a valid passphrase, for display.
+ */
+public nonisolated func normalizeQrPassphrase(passphrase: String)throws  -> String {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeAshError.lift) {
+    uniffi_ash_bindings_fn_func_normalize_qr_passphrase(
+        FfiConverterString.lower(passphrase),$0
     )
 })
 }
@@ -4573,7 +4627,8 @@ public nonisolated func splitIntoBlePackets(message: [UInt8], messageId: UInt8, 
 })
 }
 /**
- * Validate passphrase meets requirements (4-64 printable ASCII chars)
+ * Whether a typed passphrase is six words from the word list (case,
+ * spaces and hyphens do not matter).
  */
 public nonisolated func validatePassphrase(passphrase: String) -> Bool {
     return try!  FfiConverterBool.lift(try! rustCall() {
@@ -4623,7 +4678,7 @@ nonisolated(unsafe) private var initializationResult: InitializationResult = {
     if (uniffi_ash_bindings_checksum_func_calculate_source_blocks() != 21521) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_ash_bindings_checksum_func_create_fountain_generator() != 65342) {
+    if (uniffi_ash_bindings_checksum_func_create_fountain_generator() != 43423) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_ash_bindings_checksum_func_decode_ceremony_payload() != 16593) {
@@ -4662,22 +4717,25 @@ nonisolated(unsafe) private var initializationResult: InitializationResult = {
     if (uniffi_ash_bindings_checksum_func_generate_mnemonic_with_count() != 38577) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_ash_bindings_checksum_func_generate_qr_passphrase() != 14393) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_ash_bindings_checksum_func_get_auth_overhead() != 18216) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_ash_bindings_checksum_func_get_default_block_size() != 39613) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_ash_bindings_checksum_func_get_max_passphrase_length() != 19825) {
-        return InitializationResult.apiChecksumMismatch
-    }
     if (uniffi_ash_bindings_checksum_func_get_metadata_overhead() != 5769) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_ash_bindings_checksum_func_get_min_passphrase_length() != 46202) {
+    if (uniffi_ash_bindings_checksum_func_get_pad_size_bytes() != 14934) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_ash_bindings_checksum_func_get_pad_size_bytes() != 14934) {
+    if (uniffi_ash_bindings_checksum_func_get_qr_passphrase_word_count() != 25289) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ash_bindings_checksum_func_normalize_qr_passphrase() != 19981) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_ash_bindings_checksum_func_secure_zero_bytes() != 4018) {
@@ -4729,6 +4787,9 @@ nonisolated(unsafe) private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_ash_bindings_checksum_method_fountainframereceiver_progress() != 18933) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ash_bindings_checksum_method_fountainframereceiver_rejected_frames() != 43267) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_ash_bindings_checksum_method_fountainframereceiver_source_count() != 43225) {
@@ -4845,7 +4906,7 @@ nonisolated(unsafe) private var initializationResult: InitializationResult = {
     if (uniffi_ash_bindings_checksum_constructor_blepacketreassembler_new() != 25701) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_ash_bindings_checksum_constructor_fountainframereceiver_new() != 53774) {
+    if (uniffi_ash_bindings_checksum_constructor_fountainframereceiver_new() != 34460) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_ash_bindings_checksum_constructor_pad_from_bytes() != 21075) {

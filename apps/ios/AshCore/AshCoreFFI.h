@@ -362,6 +362,11 @@ int8_t uniffi_ash_bindings_fn_method_fountainframereceiver_is_complete(void*_Non
 double uniffi_ash_bindings_fn_method_fountainframereceiver_progress(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_METHOD_FOUNTAINFRAMERECEIVER_REJECTED_FRAMES
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_METHOD_FOUNTAINFRAMERECEIVER_REJECTED_FRAMES
+uint32_t uniffi_ash_bindings_fn_method_fountainframereceiver_rejected_frames(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_METHOD_FOUNTAINFRAMERECEIVER_SOURCE_COUNT
 #define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_METHOD_FOUNTAINFRAMERECEIVER_SOURCE_COUNT
 uint32_t uniffi_ash_bindings_fn_method_fountainframereceiver_source_count(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
@@ -667,7 +672,7 @@ uint32_t uniffi_ash_bindings_fn_func_calculate_source_blocks(uint64_t pad_bytes,
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_FUNC_CREATE_FOUNTAIN_GENERATOR
 #define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_FUNC_CREATE_FOUNTAIN_GENERATOR
-void*_Nonnull uniffi_ash_bindings_fn_func_create_fountain_generator(RustBuffer metadata, RustBuffer pad_bytes, uint32_t block_size, RustBuffer passphrase, RustBuffer method, RustCallStatus *_Nonnull out_status
+void*_Nonnull uniffi_ash_bindings_fn_func_create_fountain_generator(RustBuffer metadata, RustBuffer pad_bytes, uint32_t block_size, RustBuffer passphrase, RustBuffer method, RustBuffer salt, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_FUNC_DECODE_CEREMONY_PAYLOAD
@@ -730,6 +735,11 @@ RustBuffer uniffi_ash_bindings_fn_func_generate_mnemonic(RustBuffer pad_bytes, R
 RustBuffer uniffi_ash_bindings_fn_func_generate_mnemonic_with_count(RustBuffer pad_bytes, uint32_t word_count, RustCallStatus *_Nonnull out_status
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_FUNC_GENERATE_QR_PASSPHRASE
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_FUNC_GENERATE_QR_PASSPHRASE
+RustBuffer uniffi_ash_bindings_fn_func_generate_qr_passphrase(RustBuffer random, RustCallStatus *_Nonnull out_status
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_FUNC_GET_AUTH_OVERHEAD
 #define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_FUNC_GET_AUTH_OVERHEAD
 uint32_t uniffi_ash_bindings_fn_func_get_auth_overhead(RustCallStatus *_Nonnull out_status
@@ -742,27 +752,26 @@ uint32_t uniffi_ash_bindings_fn_func_get_default_block_size(RustCallStatus *_Non
     
 );
 #endif
-#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_FUNC_GET_MAX_PASSPHRASE_LENGTH
-#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_FUNC_GET_MAX_PASSPHRASE_LENGTH
-uint32_t uniffi_ash_bindings_fn_func_get_max_passphrase_length(RustCallStatus *_Nonnull out_status
-    
-);
-#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_FUNC_GET_METADATA_OVERHEAD
 #define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_FUNC_GET_METADATA_OVERHEAD
 uint32_t uniffi_ash_bindings_fn_func_get_metadata_overhead(RustCallStatus *_Nonnull out_status
     
 );
 #endif
-#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_FUNC_GET_MIN_PASSPHRASE_LENGTH
-#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_FUNC_GET_MIN_PASSPHRASE_LENGTH
-uint32_t uniffi_ash_bindings_fn_func_get_min_passphrase_length(RustCallStatus *_Nonnull out_status
-    
-);
-#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_FUNC_GET_PAD_SIZE_BYTES
 #define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_FUNC_GET_PAD_SIZE_BYTES
 uint64_t uniffi_ash_bindings_fn_func_get_pad_size_bytes(RustBuffer size, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_FUNC_GET_QR_PASSPHRASE_WORD_COUNT
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_FUNC_GET_QR_PASSPHRASE_WORD_COUNT
+uint32_t uniffi_ash_bindings_fn_func_get_qr_passphrase_word_count(RustCallStatus *_Nonnull out_status
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_FUNC_NORMALIZE_QR_PASSPHRASE
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_FUNC_NORMALIZE_QR_PASSPHRASE
+RustBuffer uniffi_ash_bindings_fn_func_normalize_qr_passphrase(RustBuffer passphrase, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_FUNC_SECURE_ZERO_BYTES
@@ -1186,6 +1195,12 @@ uint16_t uniffi_ash_bindings_checksum_func_generate_mnemonic_with_count(void
     
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_FUNC_GENERATE_QR_PASSPHRASE
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_FUNC_GENERATE_QR_PASSPHRASE
+uint16_t uniffi_ash_bindings_checksum_func_generate_qr_passphrase(void
+    
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_FUNC_GET_AUTH_OVERHEAD
 #define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_FUNC_GET_AUTH_OVERHEAD
 uint16_t uniffi_ash_bindings_checksum_func_get_auth_overhead(void
@@ -1198,27 +1213,27 @@ uint16_t uniffi_ash_bindings_checksum_func_get_default_block_size(void
     
 );
 #endif
-#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_FUNC_GET_MAX_PASSPHRASE_LENGTH
-#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_FUNC_GET_MAX_PASSPHRASE_LENGTH
-uint16_t uniffi_ash_bindings_checksum_func_get_max_passphrase_length(void
-    
-);
-#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_FUNC_GET_METADATA_OVERHEAD
 #define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_FUNC_GET_METADATA_OVERHEAD
 uint16_t uniffi_ash_bindings_checksum_func_get_metadata_overhead(void
     
 );
 #endif
-#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_FUNC_GET_MIN_PASSPHRASE_LENGTH
-#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_FUNC_GET_MIN_PASSPHRASE_LENGTH
-uint16_t uniffi_ash_bindings_checksum_func_get_min_passphrase_length(void
-    
-);
-#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_FUNC_GET_PAD_SIZE_BYTES
 #define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_FUNC_GET_PAD_SIZE_BYTES
 uint16_t uniffi_ash_bindings_checksum_func_get_pad_size_bytes(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_FUNC_GET_QR_PASSPHRASE_WORD_COUNT
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_FUNC_GET_QR_PASSPHRASE_WORD_COUNT
+uint16_t uniffi_ash_bindings_checksum_func_get_qr_passphrase_word_count(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_FUNC_NORMALIZE_QR_PASSPHRASE
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_FUNC_NORMALIZE_QR_PASSPHRASE
+uint16_t uniffi_ash_bindings_checksum_func_normalize_qr_passphrase(void
     
 );
 #endif
@@ -1321,6 +1336,12 @@ uint16_t uniffi_ash_bindings_checksum_method_fountainframereceiver_is_complete(v
 #ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_METHOD_FOUNTAINFRAMERECEIVER_PROGRESS
 #define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_METHOD_FOUNTAINFRAMERECEIVER_PROGRESS
 uint16_t uniffi_ash_bindings_checksum_method_fountainframereceiver_progress(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_METHOD_FOUNTAINFRAMERECEIVER_REJECTED_FRAMES
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_METHOD_FOUNTAINFRAMERECEIVER_REJECTED_FRAMES
+uint16_t uniffi_ash_bindings_checksum_method_fountainframereceiver_rejected_frames(void
     
 );
 #endif

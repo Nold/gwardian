@@ -184,10 +184,10 @@ Gwardian explicitly assumes the backend may be hostile.
 **Defenses**
 - Human-verifiable mnemonic checksum
 - User guidance to perform the ceremony privately
-- Optional passphrase on QR frames: **weak**, an XOR keystream derived with CRC-32. It slows a casual observer but is not cryptographic protection
+- QR frames encrypted with six spoken words drawn by the app: Argon2id + ChaCha20-Poly1305 (see [ceremony.md](ceremony.md)). A recording is useless without the words
 
 **Residual risk**
-- Full pad compromise if the ceremony is fully recorded
+- Full pad compromise if the ceremony is fully recorded **and** the six words are overheard
 
 This is a known and accepted risk.
 

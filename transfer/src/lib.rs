@@ -10,6 +10,8 @@
 //!   detect an attacker in the middle, and ChaCha20-Poly1305 for the pad.
 //! - [`framing`]: splitting protocol messages into packets small enough for
 //!   Bluetooth LE.
+//! - [`qr`]: encrypting the ceremony QR codes (`Maximum` level) with a
+//!   spoken six-word passphrase, so filming the screen reveals nothing.
 //!
 //! A pad moved this way is only as strong as this cryptography, which is why
 //! it is recorded as `Standard` or `Enhanced`, never `Maximum`. This crate is
@@ -23,6 +25,7 @@
 
 pub mod error;
 pub mod framing;
+pub mod qr;
 pub mod session;
 pub mod xwing;
 

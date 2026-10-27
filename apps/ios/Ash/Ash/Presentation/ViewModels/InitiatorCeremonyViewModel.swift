@@ -43,8 +43,11 @@ final class InitiatorCeremonyViewModel {
     /// Bluetooth sending session, while `channel` is `.bluetooth`
     private(set) var bleSender: BLEPadSenderSession?
 
-    /// Required passphrase for QR frame encryption
-    var passphrase: String = ""
+    /// Six words drawn by the app; the other person types them to read the QR codes
+    private(set) var passphraseWords: [String] = []
+
+    /// Passphrase sealing the QR frames
+    var passphrase: String { passphraseWords.joined(separator: " ") }
 
     var conversationName: String = ""
 
@@ -154,15 +157,26 @@ final class InitiatorCeremonyViewModel {
     init(dependencies: Dependencies) {
         self.dependencies = dependencies
         self.selectedRelayURL = dependencies.settingsService.relayServerURL
+        regeneratePassphrase()
         Log.debug(.ceremony, "Initiator ceremony view model initialized")
     }
 
     // MARK: - Computed Properties
 
-    /// Passphrase is valid if it meets the minimum requirements (4+ chars)
+    /// Passphrase is valid once six words were drawn
     var isPassphraseValid: Bool {
         guard !passphrase.isEmpty else { return false }
         return validatePassphrase(passphrase: passphrase)
+    }
+
+    /// Draw new words, for instance if they were overheard.
+    func regeneratePassphrase() {
+        do {
+            passphraseWords = try generateQrPassphrase(random: SecureRandom.bytes(12))
+        } catch {
+            Log.error(.ceremony, "Failed to draw passphrase words: \(error)")
+            passphraseWords = []
+        }
     }
 
     /// QR codes need the spoken passphrase; Bluetooth uses its own key exchange.
@@ -684,6 +698,7 @@ final class InitiatorCeremonyViewModel {
         notifyDeliveryFailed = true
         persistenceConsent = false
         transferMethod = .raptor
+        regeneratePassphrase()
     }
 
     func cancel() {

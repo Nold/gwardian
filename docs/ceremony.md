@@ -217,43 +217,33 @@ Timeouts are enforced by the app, not `ash-core`.
 
 ### What the ceremony does NOT protect against
 
-- Visual observation of QR codes (mitigated by optional passphrase)
+- Visual observation of QR codes when the six words are overheard too
 - Compromised devices
 - Malicious participants
 - Coerced participation
 
 ---
 
-## Optional passphrase protection
+## Six-word passphrase
 
-QR frame payloads can optionally be encrypted with a verbally-shared passphrase.
+QR frames are always encrypted with six words the two people say aloud (`transfer/src/qr.rs`).
 
 ### Purpose
 
-- Protects against casual visual observation (shoulder-surfing)
-- Adds additional layer beyond physical proximity
+- Filming or photographing the screen during the ceremony reveals nothing without the words
 - **NOT** a replacement for performing the ceremony privately
 
 ### How it works
 
-1. Before ceremony, participants verbally agree on a passphrase
-2. Sender enters passphrase before generating QR codes
-3. Frame payloads are XOR'd with a derived key stream
-4. Frame headers (index, total) remain unencrypted for progress tracking
-5. Receiver enters same passphrase to decrypt frames
-
-### Passphrase requirements
-
-- 4-64 printable ASCII characters
-- Should be spoken, not typed from shared source
-- Should be memorable but unpredictable
-- Different passphrases per frame index (prevents replay)
+1. The sender's app draws six words from the core word list (512 words, 54 bits). People never choose them, so they are never weak; **New Words** draws others.
+2. The sender reads them to the receiver, out of earshot of others; the receiver types them (case, spaces and hyphens do not matter).
+3. A key is derived with **Argon2id** (19 MiB, 2 passes) from the words and a random 16-byte salt chosen per ceremony, which makes each guess of an offline attacker costly.
+4. Each frame is sealed with **ChaCha20-Poly1305**: `[version][salt: 16][index: u32][ciphertext][tag: 16]`. The salt travels in every frame because the receiver may start scanning anywhere; the frame index is the nonce and is authenticated.
+5. The receiver derives the key once from the first frame's salt. A frame with a wrong passphrase, an altered byte or from another ceremony is rejected; after many rejected frames and none decoded, the app suggests checking the words.
 
 ### Security note
 
-Passphrase encryption uses simple XOR with CRC-32 chaining for key expansion.
-This is designed for convenience against casual observation, not cryptographic security.
-The ceremony should still be performed in a private setting.
+This is computational cryptography protecting the transfer, not the pad: the pad itself remains a one-time pad. An attacker who recorded the QR codes must still guess the six words, each guess costing an Argon2id computation.
 
 ---
 

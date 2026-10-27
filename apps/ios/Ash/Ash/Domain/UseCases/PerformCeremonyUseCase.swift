@@ -177,8 +177,8 @@ protocol PerformCeremonyUseCaseProtocol: Sendable {
     ) async throws -> FountainFrameGenerator
 
     /// Create a fountain frame receiver for QR scanning
-    /// Passphrase is required and must match the sender's passphrase
-    func createFountainReceiver(passphrase: String) -> FountainFrameReceiver
+    /// Passphrase is required and must match the sender's six words
+    func createFountainReceiver(passphrase: String) throws -> FountainFrameReceiver
 
     /// Generate mnemonic checksum for verification
     func generateMnemonic(from padBytes: [UInt8]) async -> [String]
@@ -261,17 +261,19 @@ final class PerformCeremonyUseCase: PerformCeremonyUseCaseProtocol, Sendable {
         )
 
         // Create fountain generator via FFI with required passphrase and transfer method
+        // A fresh salt per ceremony: the same words never give the same key twice
         return try Ash.createFountainGenerator(
             metadata: ffiMetadata,
             padBytes: padBytes,
             blockSize: blockSize,
             passphrase: passphrase,
-            method: transferMethod.ffiMethod
+            method: transferMethod.ffiMethod,
+            salt: SecureRandom.bytes(16)
         )
     }
 
-    func createFountainReceiver(passphrase: String) -> FountainFrameReceiver {
-        return FountainFrameReceiver(passphrase: passphrase)
+    func createFountainReceiver(passphrase: String) throws -> FountainFrameReceiver {
+        return try FountainFrameReceiver(passphrase: passphrase)
     }
 
     func generateMnemonic(from padBytes: [UInt8]) async -> [String] {
@@ -357,14 +359,16 @@ private enum Ash {
         padBytes: [UInt8],
         blockSize: UInt32,
         passphrase: String,
-        method: TransferMethod
+        method: TransferMethod,
+        salt: [UInt8]
     ) throws -> FountainFrameGenerator {
         try _createFountainGenerator(
             metadata: metadata,
             padBytes: padBytes,
             blockSize: blockSize,
             passphrase: passphrase,
-            method: method
+            method: method,
+            salt: salt
         )
     }
 
@@ -379,14 +383,16 @@ private func _createFountainGenerator(
     padBytes: [UInt8],
     blockSize: UInt32,
     passphrase: String,
-    method: TransferMethod
+    method: TransferMethod,
+    salt: [UInt8]
 ) throws -> FountainFrameGenerator {
     try createFountainGenerator(
         metadata: metadata,
         padBytes: padBytes,
         blockSize: blockSize,
         passphrase: passphrase,
-        method: method
+        method: method,
+        salt: salt
     )
 }
 

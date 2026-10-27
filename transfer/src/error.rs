@@ -25,6 +25,11 @@ pub enum Error {
     /// Only `Standard` and `Enhanced` pads travel over this channel; a
     /// `Maximum` pad must be exchanged by QR code.
     LevelNotAllowed,
+    /// The QR passphrase is not six words from the word list.
+    InvalidPassphrase,
+    /// A QR frame failed authentication: wrong passphrase, or the frame was
+    /// altered or comes from another ceremony.
+    FrameAuthenticationFailed,
 }
 
 impl fmt::Display for Error {
@@ -35,6 +40,10 @@ impl fmt::Display for Error {
             Error::CommitmentMismatch => write!(f, "commitment mismatch"),
             Error::DecryptionFailed => write!(f, "sealed pad failed authentication"),
             Error::LevelNotAllowed => write!(f, "security level not allowed for this channel"),
+            Error::InvalidPassphrase => {
+                write!(f, "passphrase must be six words from the word list")
+            }
+            Error::FrameAuthenticationFailed => write!(f, "QR frame failed authentication"),
         }
     }
 }

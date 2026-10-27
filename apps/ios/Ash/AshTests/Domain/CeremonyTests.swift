@@ -311,7 +311,7 @@ final class PadSizeOptionExtensionTests: XCTestCase {
 final class CeremonyFountainCodeTests: XCTestCase {
     /// Block size for fountain codes
     private let blockSize: UInt32 = 900
-    private let testPassphrase = "test-passphrase"
+    private let testPassphrase = "able acid aged also area army"
 
     func testFountainGenerator_createsFrames() throws {
         let padBytes = [UInt8](repeating: 0xAB, count: Int(PadSizeOption.small.presetBytes ?? 64 * 1024))
@@ -330,7 +330,8 @@ final class CeremonyFountainCodeTests: XCTestCase {
             padBytes: padBytes,
             blockSize: blockSize,
             passphrase: testPassphrase,
-            method: .raptor
+            method: .raptor,
+            salt: [UInt8](repeating: 7, count: 16)
         )
 
         XCTAssertGreaterThan(generator.sourceCount(), 0)
@@ -358,10 +359,11 @@ final class CeremonyFountainCodeTests: XCTestCase {
             padBytes: padBytes,
             blockSize: blockSize,
             passphrase: testPassphrase,
-            method: .raptor
+            method: .raptor,
+            salt: [UInt8](repeating: 7, count: 16)
         )
 
-        let receiver = FountainFrameReceiver(passphrase: testPassphrase)
+        let receiver = try FountainFrameReceiver(passphrase: testPassphrase)
 
         while !receiver.isComplete() {
             let frame = generator.nextFrame()
@@ -391,11 +393,12 @@ final class CeremonyFountainCodeTests: XCTestCase {
             metadata: metadata,
             padBytes: padBytes,
             blockSize: blockSize,
-            passphrase: "custom-passphrase",
-            method: .raptor
+            passphrase: "able acid aged also area army",
+            method: .raptor,
+            salt: [UInt8](repeating: 7, count: 16)
         )
 
-        let receiver = FountainFrameReceiver(passphrase: "custom-passphrase")
+        let receiver = try FountainFrameReceiver(passphrase: "able acid aged also area army")
 
         while !receiver.isComplete() {
             let frame = generator.nextFrame()
@@ -424,10 +427,11 @@ final class CeremonyFountainCodeTests: XCTestCase {
             padBytes: originalPad,
             blockSize: blockSize,
             passphrase: testPassphrase,
-            method: .raptor
+            method: .raptor,
+            salt: [UInt8](repeating: 7, count: 16)
         )
 
-        let receiver = FountainFrameReceiver(passphrase: testPassphrase)
+        let receiver = try FountainFrameReceiver(passphrase: testPassphrase)
 
         while !receiver.isComplete() {
             let frame = generator.nextFrame()

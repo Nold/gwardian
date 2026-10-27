@@ -25,19 +25,20 @@ final class FountainCodeRoundtripTests: XCTestCase {
         )
 
         // Create generator with required passphrase
-        let testPassphrase = "test-passphrase"
+        let testPassphrase = "able acid aged also area army"
         let generator = try createFountainGenerator(
             metadata: metadata,
             padBytes: padBytes,
             blockSize: 256,
             passphrase: testPassphrase,
-            method: .raptor
+            method: .raptor,
+            salt: [UInt8](repeating: 7, count: 16)
         )
 
         XCTAssertGreaterThan(generator.sourceCount(), 0)
 
         // Create receiver with matching passphrase
-        let receiver = FountainFrameReceiver(passphrase: testPassphrase)
+        let receiver = try FountainFrameReceiver(passphrase: testPassphrase)
 
         // Feed frames until complete
         var frameCount = 0
@@ -60,7 +61,7 @@ final class FountainCodeRoundtripTests: XCTestCase {
 
     func testRoundtrip_withPassphrase_succeeds() throws {
         let padBytes = [UInt8]((0..<500).map { UInt8($0 % 256) })
-        let passphrase = "test-passphrase"
+        let passphrase = "able acid aged also area army"
         let metadata = CeremonyMetadata(
             version: 1,
             ttlSeconds: 3600,
@@ -75,10 +76,11 @@ final class FountainCodeRoundtripTests: XCTestCase {
             padBytes: padBytes,
             blockSize: 128,
             passphrase: passphrase,
-            method: .raptor
+            method: .raptor,
+            salt: [UInt8](repeating: 7, count: 16)
         )
 
-        let receiver = FountainFrameReceiver(passphrase: passphrase)
+        let receiver = try FountainFrameReceiver(passphrase: passphrase)
 
         while !receiver.isComplete() {
             let frame = generator.nextFrame()
@@ -107,12 +109,13 @@ final class FountainCodeRoundtripTests: XCTestCase {
             metadata: metadata,
             padBytes: padBytes,
             blockSize: 128,
-            passphrase: "correct-passphrase",
-            method: .raptor
+            passphrase: "able acid aged also area army",
+            method: .raptor,
+            salt: [UInt8](repeating: 7, count: 16)
         )
 
         // Receiver with wrong passphrase
-        let receiver = FountainFrameReceiver(passphrase: "wrong-passphrase")
+        let receiver = try FountainFrameReceiver(passphrase: "able acid aged also area back")
 
         // Try to receive frames (ignoring errors)
         for _ in 0..<100 {
@@ -144,13 +147,14 @@ final class FountainCodeRoundtripTests: XCTestCase {
             relayUrl: "https://relay.test"
         )
 
-        let testPassphrase = "test-passphrase"
+        let testPassphrase = "able acid aged also area army"
         let generator = try createFountainGenerator(
             metadata: metadata,
             padBytes: padBytes,
             blockSize: 256,
             passphrase: testPassphrase,
-            method: .raptor
+            method: .raptor,
+            salt: [UInt8](repeating: 7, count: 16)
         )
 
         let sourceCount = Int(generator.sourceCount())
@@ -164,7 +168,7 @@ final class FountainCodeRoundtripTests: XCTestCase {
         // Shuffle frames to simulate out-of-order reception
         frames.shuffle()
 
-        let receiver = FountainFrameReceiver(passphrase: testPassphrase)
+        let receiver = try FountainFrameReceiver(passphrase: testPassphrase)
 
         for frame in frames {
             if try receiver.addFrame(frameBytes: frame) {
@@ -189,13 +193,14 @@ final class FountainCodeRoundtripTests: XCTestCase {
             relayUrl: "https://relay.test"
         )
 
-        let testPassphrase = "test-passphrase"
+        let testPassphrase = "able acid aged also area army"
         let generator = try createFountainGenerator(
             metadata: metadata,
             padBytes: padBytes,
             blockSize: 128,
             passphrase: testPassphrase,
-            method: .raptor
+            method: .raptor,
+            salt: [UInt8](repeating: 7, count: 16)
         )
 
         let sourceCount = Int(generator.sourceCount())
@@ -206,7 +211,7 @@ final class FountainCodeRoundtripTests: XCTestCase {
             frames.append(generator.nextFrame())
         }
 
-        let receiver = FountainFrameReceiver(passphrase: testPassphrase)
+        let receiver = try FountainFrameReceiver(passphrase: testPassphrase)
 
         // Only use every other frame
         for (i, frame) in frames.enumerated() {
@@ -244,16 +249,17 @@ final class FountainCodeRoundtripTests: XCTestCase {
             relayUrl: "https://relay.test"
         )
 
-        let testPassphrase = "test-passphrase"
+        let testPassphrase = "able acid aged also area army"
         let generator = try createFountainGenerator(
             metadata: metadata,
             padBytes: padBytes,
             blockSize: 256,
             passphrase: testPassphrase,
-            method: .raptor
+            method: .raptor,
+            salt: [UInt8](repeating: 7, count: 16)
         )
 
-        let receiver = FountainFrameReceiver(passphrase: testPassphrase)
+        let receiver = try FountainFrameReceiver(passphrase: testPassphrase)
 
         XCTAssertEqual(receiver.progress(), 0.0)
         XCTAssertEqual(receiver.blocksReceived(), 0)
@@ -283,16 +289,17 @@ final class FountainCodeRoundtripTests: XCTestCase {
             relayUrl: "https://relay.test"
         )
 
-        let testPassphrase = "test-passphrase"
+        let testPassphrase = "able acid aged also area army"
         let generator = try createFountainGenerator(
             metadata: metadata,
             padBytes: padBytes,
             blockSize: 256,
             passphrase: testPassphrase,
-            method: .raptor
+            method: .raptor,
+            salt: [UInt8](repeating: 7, count: 16)
         )
 
-        let receiver = FountainFrameReceiver(passphrase: testPassphrase)
+        let receiver = try FountainFrameReceiver(passphrase: testPassphrase)
 
         // Add the same frame multiple times
         let frame = generator.nextFrame()
@@ -334,16 +341,17 @@ final class QRCodeSimulationTests: XCTestCase {
             relayUrl: "https://relay.test"
         )
 
-        let testPassphrase = "test-passphrase"
+        let testPassphrase = "able acid aged also area army"
         let generator = try createFountainGenerator(
             metadata: metadata,
             padBytes: padBytes,
             blockSize: 256,
             passphrase: testPassphrase,
-            method: .raptor
+            method: .raptor,
+            salt: [UInt8](repeating: 7, count: 16)
         )
 
-        let receiver = FountainFrameReceiver(passphrase: testPassphrase)
+        let receiver = try FountainFrameReceiver(passphrase: testPassphrase)
 
         while !receiver.isComplete() {
             // Generate frame
@@ -376,19 +384,20 @@ final class QRCodeSimulationTests: XCTestCase {
             relayUrl: "https://relay.test"
         )
 
-        let testPassphrase = "test-passphrase"
+        let testPassphrase = "able acid aged also area army"
         let generator = try createFountainGenerator(
             metadata: metadata,
             padBytes: padBytes,
             blockSize: blockSize,
             passphrase: testPassphrase,
-            method: .raptor
+            method: .raptor,
+            salt: [UInt8](repeating: 7, count: 16)
         )
 
         let sourceCount = generator.sourceCount()
         print("Pad size: \(padSize), Source blocks: \(sourceCount)")
 
-        let receiver = FountainFrameReceiver(passphrase: testPassphrase)
+        let receiver = try FountainFrameReceiver(passphrase: testPassphrase)
 
         var frameCount: UInt32 = 0
         while !receiver.isComplete() {
@@ -423,13 +432,14 @@ final class CorruptedFrameTests: XCTestCase {
             relayUrl: "https://relay.test"
         )
 
-        let testPassphrase = "test-passphrase"
+        let testPassphrase = "able acid aged also area army"
         let generator = try createFountainGenerator(
             metadata: metadata,
             padBytes: padBytes,
             blockSize: 128,
             passphrase: testPassphrase,
-            method: .raptor
+            method: .raptor,
+            salt: [UInt8](repeating: 7, count: 16)
         )
 
         var frame = generator.nextFrame()
@@ -439,7 +449,7 @@ final class CorruptedFrameTests: XCTestCase {
             frame[15] ^= 0xFF
         }
 
-        let receiver = FountainFrameReceiver(passphrase: testPassphrase)
+        let receiver = try FountainFrameReceiver(passphrase: testPassphrase)
 
         XCTAssertThrowsError(try receiver.addFrame(frameBytes: frame)) { error in
             XCTAssertTrue(error is AshError)
@@ -457,19 +467,20 @@ final class CorruptedFrameTests: XCTestCase {
             relayUrl: "https://relay.test"
         )
 
-        let testPassphrase = "test-passphrase"
+        let testPassphrase = "able acid aged also area army"
         let generator = try createFountainGenerator(
             metadata: metadata,
             padBytes: padBytes,
             blockSize: 128,
             passphrase: testPassphrase,
-            method: .raptor
+            method: .raptor,
+            salt: [UInt8](repeating: 7, count: 16)
         )
 
         let frame = generator.nextFrame()
         let truncatedFrame = Array(frame.prefix(10))
 
-        let receiver = FountainFrameReceiver(passphrase: testPassphrase)
+        let receiver = try FountainFrameReceiver(passphrase: testPassphrase)
 
         XCTAssertThrowsError(try receiver.addFrame(frameBytes: truncatedFrame)) { error in
             XCTAssertTrue(error is AshError)
@@ -494,13 +505,14 @@ final class TransferMethodDetectionTests: XCTestCase {
             relayUrl: "https://relay.test"
         )
 
-        let testPassphrase = "test-passphrase"
+        let testPassphrase = "able acid aged also area army"
         let generator = try createFountainGenerator(
             metadata: metadata,
             padBytes: padBytes,
             blockSize: 256,
             passphrase: testPassphrase,
-            method: .lt
+            method: .lt,
+            salt: [UInt8](repeating: 7, count: 16)
         )
 
         // Generate many frames
@@ -510,7 +522,7 @@ final class TransferMethodDetectionTests: XCTestCase {
         }
 
         // Simulate starting scan from frame 30 (skipping 0-29)
-        let receiver = FountainFrameReceiver(passphrase: testPassphrase)
+        let receiver = try FountainFrameReceiver(passphrase: testPassphrase)
 
         // First frame received is frame 30 - should detect method immediately
         _ = try receiver.addFrame(frameBytes: frames[30])
@@ -536,7 +548,7 @@ final class TransferMethodDetectionTests: XCTestCase {
     /// Test that all transfer methods are correctly detected
     func testTransferMethod_allMethodsDetected() throws {
         let padBytes = [UInt8](repeating: 0x42, count: 1000)
-        let testPassphrase = "test-passphrase"
+        let testPassphrase = "able acid aged also area army"
 
         for method: TransferMethod in [.raptor, .lt, .sequential] {
             let metadata = CeremonyMetadata(
@@ -553,13 +565,14 @@ final class TransferMethodDetectionTests: XCTestCase {
                 padBytes: padBytes,
                 blockSize: 256,
                 passphrase: testPassphrase,
-                method: method
+                method: method,
+                salt: [UInt8](repeating: 7, count: 16)
             )
 
             // Generate a frame (any frame)
             let frame = generator.generateFrame(index: 5)
 
-            let receiver = FountainFrameReceiver(passphrase: testPassphrase)
+            let receiver = try FountainFrameReceiver(passphrase: testPassphrase)
             _ = try receiver.addFrame(frameBytes: frame)
 
             // Verify method is detected correctly
@@ -579,16 +592,17 @@ final class TransferMethodDetectionTests: XCTestCase {
             relayUrl: "https://relay.test"
         )
 
-        let testPassphrase = "test-passphrase"
+        let testPassphrase = "able acid aged also area army"
         let generator = try createFountainGenerator(
             metadata: metadata,
             padBytes: padBytes,
             blockSize: 256,
             passphrase: testPassphrase,
-            method: .sequential
+            method: .sequential,
+            salt: [UInt8](repeating: 7, count: 16)
         )
 
-        let receiver = FountainFrameReceiver(passphrase: testPassphrase)
+        let receiver = try FountainFrameReceiver(passphrase: testPassphrase)
 
         // Complete the transfer
         while !receiver.isComplete() {
@@ -606,7 +620,7 @@ final class TransferMethodDetectionTests: XCTestCase {
     /// Test roundtrip with each transfer method
     func testTransferMethod_roundtripAllMethods() throws {
         let padBytes = [UInt8]((0..<2000).map { UInt8($0 % 256) })
-        let testPassphrase = "test-passphrase"
+        let testPassphrase = "able acid aged also area army"
 
         for method: TransferMethod in [.raptor, .lt, .sequential] {
             let metadata = CeremonyMetadata(
@@ -623,10 +637,11 @@ final class TransferMethodDetectionTests: XCTestCase {
                 padBytes: padBytes,
                 blockSize: 256,
                 passphrase: testPassphrase,
-                method: method
+                method: method,
+                salt: [UInt8](repeating: 7, count: 16)
             )
 
-            let receiver = FountainFrameReceiver(passphrase: testPassphrase)
+            let receiver = try FountainFrameReceiver(passphrase: testPassphrase)
 
             let maxFrames = Int(generator.sourceCount()) * 3
             var frameCount = 0
