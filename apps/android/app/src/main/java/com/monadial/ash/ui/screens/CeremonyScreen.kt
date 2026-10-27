@@ -8,6 +8,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -26,6 +27,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -102,6 +104,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -371,8 +375,7 @@ private fun InitiatorCeremonyScreen(
     val totalFrames = uiState.totalFrames
     val connectionTestResult = uiState.connectionTestResult
     val isTestingConnection = uiState.isTestingConnection
-    val passphraseEnabled = uiState.passphraseEnabled
-    val passphrase = uiState.passphrase
+    val passphraseWords = uiState.passphraseWords
     val isPaused = uiState.isPaused
     val fps = uiState.fps
 
@@ -416,10 +419,12 @@ private fun InitiatorCeremonyScreen(
                                 viewModel.setChannel(channel)
                             }
                         },
-                        passphraseEnabled = passphraseEnabled,
-                        onPassphraseToggle = viewModel::setPassphraseEnabled,
-                        passphrase = passphrase,
-                        onPassphraseChange = viewModel::setPassphrase,
+                        isFamilyConversation = uiState.isFamilyConversation,
+                        onFamilyConversationChange = viewModel::setFamilyConversation,
+                        usesPassphrase = uiState.usesPassphrase,
+                        onUsesPassphraseChange = viewModel::setUsesPassphrase,
+                        passphraseWords = passphraseWords,
+                        onRegeneratePassphrase = viewModel::regeneratePassphrase,
                         onProceed = viewModel::proceedToOptions,
                         accentColor = accentColor
                     )
@@ -565,7 +570,6 @@ private fun ReceiverCeremonyScreen(
     val selectedColor = uiState.selectedColor
     val receivedBlocks = uiState.receivedBlocks
     val totalBlocks = uiState.totalBlocks
-    val passphraseEnabled = uiState.passphraseEnabled
     val passphrase = uiState.passphrase
 
     Scaffold(
@@ -598,9 +602,9 @@ private fun ReceiverCeremonyScreen(
                     ReceiverSetupContent(
                         channel = uiState.channel,
                         onChannelChange = viewModel::setChannel,
-                        passphraseEnabled = passphraseEnabled,
-                        onPassphraseToggle = viewModel::setPassphraseEnabled,
                         passphrase = passphrase,
+                        passphraseValid = uiState.isPassphraseValid,
+                        canStart = uiState.canStartScanning,
                         onPassphraseChange = viewModel::setPassphrase,
                         selectedColor = selectedColor,
                         onColorChange = viewModel::setSelectedColor,
@@ -629,6 +633,8 @@ private fun ReceiverCeremonyScreen(
                     ScanningContent(
                         receivedBlocks = receivedBlocks,
                         totalBlocks = totalBlocks,
+                        passphraseLooksWrong = uiState.passphraseLooksWrong,
+                        passphraseRequired = uiState.passphraseRequired,
                         onFrameScanned = viewModel::processScannedFrame
                     )
                 }
@@ -678,10 +684,12 @@ private fun PadSizeSelectionContent(
     onSizeSelected: (PadSize) -> Unit,
     channel: CeremonyChannel,
     onChannelChange: (CeremonyChannel) -> Unit,
-    passphraseEnabled: Boolean,
-    onPassphraseToggle: (Boolean) -> Unit,
-    passphrase: String,
-    onPassphraseChange: (String) -> Unit,
+    isFamilyConversation: Boolean,
+    onFamilyConversationChange: (Boolean) -> Unit,
+    usesPassphrase: Boolean,
+    onUsesPassphraseChange: (Boolean) -> Unit,
+    passphraseWords: List<String>,
+    onRegeneratePassphrase: () -> Unit,
     onProceed: () -> Unit,
     accentColor: Color
 ) {
@@ -745,54 +753,79 @@ private fun PadSizeSelectionContent(
         Spacer(modifier = Modifier.height(16.dp))
 
         if (channel == CeremonyChannel.QR_CODES) {
+            OutlinedCard(modifier = Modifier.fillMaxWidth()) {
+                Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(text = "Family Conversation", style = MaterialTheme.typography.titleSmall)
+                        Text(
+                            text = "Created at home: the six words start off",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(
+                        checked = isFamilyConversation,
+                        onCheckedChange = onFamilyConversationChange,
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = Color.White,
+                            checkedTrackColor = accentColor,
+                            checkedBorderColor = accentColor
+                        )
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
             // Passphrase section
             OutlinedCard(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(
                             imageVector = Icons.Outlined.Lock,
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Spacer(modifier = Modifier.width(12.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "Passphrase Protection",
-                                style = MaterialTheme.typography.titleSmall
-                            )
-                            Text(
-                                text = "Encrypt QR codes with shared secret",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
+                        Text(
+                            text = "Protect with Six Words",
+                            style = MaterialTheme.typography.titleSmall,
+                            modifier = Modifier.weight(1f)
+                        )
                         Switch(
-                            checked = passphraseEnabled,
-                            onCheckedChange = onPassphraseToggle,
-                            colors =
-                            SwitchDefaults.colors(
+                            checked = usesPassphrase,
+                            onCheckedChange = onUsesPassphraseChange,
+                            colors = SwitchDefaults.colors(
                                 checkedThumbColor = Color.White,
                                 checkedTrackColor = accentColor,
                                 checkedBorderColor = accentColor
                             )
                         )
                     }
-
-                    if (passphraseEnabled) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = if (usesPassphrase) {
+                            "Read them to your contact, out of earshot of others. They encrypt the QR codes, " +
+                                "so filming the screen reveals nothing."
+                        } else {
+                            "Without the words, anyone who films the screen during the transfer can copy the pad. " +
+                                "Make sure no camera can see it."
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (usesPassphrase) {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        } else {
+                            MaterialTheme.colorScheme.error
+                        }
+                    )
+                    if (usesPassphrase) {
                         Spacer(modifier = Modifier.height(12.dp))
-                        OutlinedTextField(
-                            value = passphrase,
-                            onValueChange = onPassphraseChange,
-                            label = { Text("Passphrase") },
-                            placeholder = { Text("Enter shared secret") },
-                            modifier = Modifier.fillMaxWidth(),
-                            singleLine = true
-                        )
+                        PassphraseWords(passphraseWords)
+                        TextButton(onClick = onRegeneratePassphrase) {
+                            Text("New Words", color = accentColor)
+                        }
                     }
                 }
             }
@@ -1808,12 +1841,36 @@ private fun TransferringContent(
 // ============================================================================
 
 @Composable
-private fun ScanningContent(receivedBlocks: Int, totalBlocks: Int, onFrameScanned: (String) -> Unit) {
+private fun ScanningContent(
+    receivedBlocks: Int,
+    totalBlocks: Int,
+    passphraseLooksWrong: Boolean,
+    passphraseRequired: Boolean,
+    onFrameScanned: (String) -> Unit
+) {
     Box(modifier = Modifier.fillMaxSize()) {
         QRScannerView(
             onQRCodeScanned = onFrameScanned,
             modifier = Modifier.fillMaxSize()
         )
+
+        val warning = when {
+            passphraseRequired -> "The other phone protects its codes with six words. Go back and type them."
+            passphraseLooksWrong -> "Nothing decodes: check the six words with the other person."
+            else -> null
+        }
+        if (warning != null) {
+            Text(
+                text = warning,
+                color = MaterialTheme.colorScheme.onErrorContainer,
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(16.dp)
+                    .background(MaterialTheme.colorScheme.errorContainer, RoundedCornerShape(12.dp))
+                    .padding(12.dp)
+            )
+        }
 
         ScanProgressOverlay(
             receivedBlocks = receivedBlocks,
@@ -1835,9 +1892,9 @@ private fun ScanningContent(receivedBlocks: Int, totalBlocks: Int, onFrameScanne
 private fun ReceiverSetupContent(
     channel: CeremonyChannel,
     onChannelChange: (CeremonyChannel) -> Unit,
-    passphraseEnabled: Boolean,
-    onPassphraseToggle: (Boolean) -> Unit,
     passphrase: String,
+    passphraseValid: Boolean,
+    canStart: Boolean,
     onPassphraseChange: (String) -> Unit,
     selectedColor: ConversationColor,
     onColorChange: (ConversationColor) -> Unit,
@@ -1921,50 +1978,36 @@ private fun ReceiverSetupContent(
             // Passphrase
             OutlinedCard(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(16.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(
                             imageVector = Icons.Outlined.Lock,
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Spacer(modifier = Modifier.width(12.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "Passphrase Protected",
-                                style = MaterialTheme.typography.titleSmall
-                            )
-                            Text(
-                                text = "Enable if sender used a passphrase",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        Switch(
-                            checked = passphraseEnabled,
-                            onCheckedChange = onPassphraseToggle,
-                            colors =
-                            SwitchDefaults.colors(
-                                checkedThumbColor = Color.White,
-                                checkedTrackColor = accentColor,
-                                checkedBorderColor = accentColor
-                            )
+                        Text(
+                            text = "Six Words, If Shown",
+                            style = MaterialTheme.typography.titleSmall
                         )
                     }
-
-                    if (passphraseEnabled) {
-                        Spacer(modifier = Modifier.height(12.dp))
-                        OutlinedTextField(
-                            value = passphrase,
-                            onValueChange = onPassphraseChange,
-                            label = { Text("Passphrase") },
-                            placeholder = { Text("Enter shared secret") },
-                            modifier = Modifier.fillMaxWidth(),
-                            singleLine = true
-                        )
-                    }
+                    Spacer(modifier = Modifier.height(12.dp))
+                    OutlinedTextField(
+                        value = passphrase,
+                        onValueChange = onPassphraseChange,
+                        label = { Text("Words shown on the other phone") },
+                        placeholder = { Text("able acid aged also area army") },
+                        isError = passphrase.isNotBlank() && !passphraseValid,
+                        supportingText = if (passphrase.isNotBlank() && !passphraseValid) {
+                            { Text("Type the six words read by the other person, or leave empty") }
+                        } else {
+                            null
+                        },
+                        keyboardOptions = KeyboardOptions(
+                            capitalization = KeyboardCapitalization.None,
+                            autoCorrectEnabled = false
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    )
                 }
             }
         }
@@ -2008,6 +2051,7 @@ private fun ReceiverSetupContent(
 
         Button(
             onClick = onStartScanning,
+            enabled = canStart,
             modifier = Modifier.fillMaxWidth(),
             colors =
             ButtonDefaults.buttonColors(
@@ -2307,6 +2351,33 @@ private fun FailedContent(error: CeremonyError, onRetry: () -> Unit, onCancel: (
 
             TextButton(onClick = onCancel) {
                 Text("Cancel")
+            }
+        }
+    }
+}
+
+/** The six passphrase words, numbered, large enough to read aloud. */
+@Composable
+private fun PassphraseWords(words: List<String>) {
+    words.chunked(2).forEachIndexed { row, pair ->
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+            pair.forEachIndexed { column, word ->
+                Row(
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(vertical = 4.dp)
+                        .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(8.dp))
+                        .padding(10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        "${row * 2 + column + 1}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(word, style = MaterialTheme.typography.titleMedium, fontFamily = FontFamily.Monospace)
+                }
             }
         }
     }

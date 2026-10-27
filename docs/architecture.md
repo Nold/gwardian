@@ -84,7 +84,7 @@ The shared core is responsible for:
 - Ceremony metadata encoding/decoding
 - Frame encoding and decoding (basic and extended formats)
 - Frame integrity validation (CRC-32)
-- Optional passphrase-based frame encryption
+- Frame encryption with six spoken words (Argon2id + ChaCha20-Poly1305, in `transfer/`)
 - Authorization token derivation (conversation ID, auth token, burn token)
 - Mnemonic checksum generation (6 words, 512-word custom wordlist)
 - Deterministic behavior across platforms

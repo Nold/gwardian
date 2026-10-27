@@ -53,9 +53,12 @@ data class InitiatorCeremonyUiState(
     // Transfer channel
     val channel: CeremonyChannel = CeremonyChannel.QR_CODES,
 
-    // Passphrase protection
-    val passphraseEnabled: Boolean = false,
-    val passphrase: String = "",
+    // Family conversation: done at home, so the six words start off
+    val isFamilyConversation: Boolean = false,
+
+    // Six words drawn by the app, read aloud to the other person
+    val usesPassphrase: Boolean = true,
+    val passphraseWords: List<String> = emptyList(),
 
     // Playback controls
     val isPaused: Boolean = false,
@@ -90,12 +93,19 @@ data class ReceiverCeremonyUiState(
     // Transfer channel
     val channel: CeremonyChannel = CeremonyChannel.QR_CODES,
 
-    // Passphrase protection
-    val passphraseEnabled: Boolean = false,
-    val passphrase: String = ""
+    // The six words typed from the sender's phone
+    val passphrase: String = "",
+    val isPassphraseValid: Boolean = false,
+
+    /** Many frames failed authentication and none decoded: words mistyped? */
+    val passphraseLooksWrong: Boolean = false,
+
+    /** The codes are protected by six words that were not typed */
+    val passphraseRequired: Boolean = false
 ) {
+    /** Words are only needed when the other phone shows some; empty is fine. */
     val canStartScanning: Boolean
-        get() = channel == CeremonyChannel.BLUETOOTH || !passphraseEnabled || passphrase.isNotBlank()
+        get() = channel == CeremonyChannel.BLUETOOTH || passphrase.isBlank() || isPassphraseValid
 
     val progressPercentage: Int
         get() = (progress * 100).toInt()

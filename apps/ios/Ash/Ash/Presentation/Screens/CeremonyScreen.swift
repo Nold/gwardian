@@ -385,47 +385,55 @@ private struct PadSizeView: View {
                     .padding(.top, 20)
 
                 if viewModel.channel == .qrCodes {
-                    // Passphrase Section (Required)
-                    VStack(spacing: 0) {
-                        VStack(alignment: .leading, spacing: 8) {
-                            HStack {
-                                Image(systemName: "lock.shield.fill")
-                                    .font(.title3)
-                                    .foregroundStyle(.tint)
-                                    .frame(width: 32)
-                                Text("Verbal Passphrase")
-                                    .font(.subheadline.weight(.semibold))
-                                Spacer()
-                                Text("Required")
-                                    .font(.caption.weight(.medium))
-                                    .foregroundStyle(.white)
-                                    .padding(.horizontal, 8)
-                                    .padding(.vertical, 4)
-                                    .background(Color.orange, in: Capsule())
-                            }
-
-                            Text("Speak this passphrase to your contact before the ceremony. It encrypts the QR codes so they cannot be intercepted.")
+                    Toggle(isOn: $viewModel.isFamilyConversation) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Label("Family Conversation", systemImage: "house.fill")
+                                .font(.subheadline.weight(.semibold))
+                            Text("Created at home: the six words start off")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
+                    }
+                    .padding(16)
+                    .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16))
+                    .padding(.horizontal, 20)
+                    .padding(.top, 20)
+
+                    // Passphrase Section (on by default, off for a family conversation)
+                    VStack(spacing: 0) {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Toggle(isOn: $viewModel.usesPassphrase) {
+                                HStack {
+                                    Image(systemName: "lock.shield.fill")
+                                        .font(.title3)
+                                        .foregroundStyle(.tint)
+                                        .frame(width: 32)
+                                    Text("Protect with Six Words")
+                                        .font(.subheadline.weight(.semibold))
+                                }
+                            }
+
+                            Text(viewModel.usesPassphrase
+                                 ? "Read these six words to your contact, out of earshot of others. They encrypt the QR codes, so filming the screen reveals nothing."
+                                 : "Without the words, anyone who films the screen during the transfer can copy the pad. Make sure no camera can see it.")
+                                .font(.caption)
+                                .foregroundStyle(viewModel.usesPassphrase ? Color.secondary : Color.orange)
+                        }
                         .padding(16)
 
-                        Divider().padding(.leading, 56)
+                        if viewModel.usesPassphrase {
+                            Divider().padding(.leading, 56)
 
-                        SecureField("Enter a passphrase (4+ characters)", text: $viewModel.passphrase)
-                            .textFieldStyle(.roundedBorder)
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 12)
+                            PassphraseWordsView(words: viewModel.passphraseWords)
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 12)
 
-                        if !viewModel.passphrase.isEmpty && !viewModel.isPassphraseValid {
-                            HStack {
-                                Image(systemName: "exclamationmark.triangle.fill")
-                                    .foregroundStyle(.orange)
-                                Text("Passphrase must be at least 4 characters")
-                                    .font(.caption)
-                                    .foregroundStyle(.orange)
+                            Button {
+                                viewModel.regeneratePassphrase()
+                            } label: {
+                                Label("New Words", systemImage: "arrow.clockwise")
+                                    .font(.subheadline)
                             }
-                            .padding(.horizontal, 16)
                             .padding(.bottom, 12)
                         }
                     }
@@ -435,11 +443,11 @@ private struct PadSizeView: View {
 
                     // Passphrase explanation
                     VStack(alignment: .leading, spacing: 8) {
-                        Label("Why is passphrase required?", systemImage: "questionmark.circle")
+                        Label("Why six words?", systemImage: "questionmark.circle")
                             .font(.subheadline.weight(.medium))
                             .foregroundStyle(.secondary)
 
-                        Text("Without a passphrase, anyone who photographs the QR codes could intercept your key. The passphrase ensures only your intended contact can receive the pad.")
+                        Text("Without them, anyone who films the QR codes could copy your pad. The app draws the words itself so they are never easy to guess, and the other phone needs them to read the codes. A family conversation starts with them off.")
                             .font(.caption)
                             .foregroundStyle(.tertiary)
                     }
@@ -1562,7 +1570,7 @@ private struct ReceiverSetupView: View {
 
                     Text(viewModel.channel == .bluetooth
                          ? "Choose the same method as the other phone"
-                         : "Enter the passphrase spoken by the sender")
+                         : "If the other phone shows six words, type them")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
@@ -1581,36 +1589,30 @@ private struct ReceiverSetupView: View {
                                 .font(.title3)
                                 .foregroundStyle(.tint)
                                 .frame(width: 32)
-                            Text("Verbal Passphrase")
+                            Text("Six Words")
                                 .font(.subheadline.bold())
                             Spacer()
-                            Text("Required")
+                            Text("If shown")
                                 .font(.caption.weight(.medium))
-                                .foregroundStyle(.white)
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 4)
-                                .background(Color.orange, in: Capsule())
+                                .foregroundStyle(.secondary)
                         }
                         .padding(16)
 
                         Divider().padding(.leading, 56)
 
-                        SecureField("Enter the passphrase", text: $viewModel.passphrase)
-                            .textContentType(.password)
+                        TextField("Six words, only if the other phone shows them", text: $viewModel.passphrase, axis: .vertical)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
                             .textFieldStyle(.roundedBorder)
                             .padding(.horizontal, 16)
                             .padding(.vertical, 12)
 
                         if !viewModel.passphrase.isEmpty && !viewModel.isPassphraseValid {
-                            HStack {
-                                Image(systemName: "exclamationmark.triangle.fill")
-                                    .foregroundStyle(.orange)
-                                Text("Passphrase must be at least 4 characters")
-                                    .font(.caption)
-                                    .foregroundStyle(.orange)
-                            }
-                            .padding(.horizontal, 16)
-                            .padding(.bottom, 12)
+                            Text("Type the six words shown on the other phone, or leave empty.")
+                                .font(.caption)
+                                .foregroundStyle(.orange)
+                                .padding(.horizontal, 16)
+                                .padding(.bottom, 8)
                         }
                     }
                     .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16))
@@ -1724,6 +1726,29 @@ private struct ReceiverSetupView: View {
     }
 }
 
+/// The six passphrase words, numbered, large enough to read aloud
+private struct PassphraseWordsView: View {
+    let words: [String]
+
+    var body: some View {
+        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
+            ForEach(Array(words.enumerated()), id: \.offset) { index, word in
+                HStack(spacing: 8) {
+                    Text("\(index + 1)")
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                    Text(word)
+                        .font(.title3.weight(.semibold).monospaced())
+                    Spacer(minLength: 0)
+                }
+                .padding(10)
+                .background(Color(.tertiarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 10))
+            }
+        }
+        .accessibilityElement(children: .combine)
+    }
+}
+
 /// QR codes (🔴 Maximum) or Bluetooth (🟠 Enhanced)
 private struct ChannelPicker: View {
     @Binding var channel: CeremonyChannel
@@ -1748,7 +1773,7 @@ private struct ChannelPicker: View {
     private var explanation: String {
         switch channel {
         case .qrCodes:
-            return "🔴 Maximum security: nothing goes over the air. Needs a spoken passphrase and good light."
+            return "🔴 Maximum security: nothing goes over the air. Needs six spoken words and good light."
         case .bluetooth:
             return "🟠 Enhanced security: faster, protected by a post-quantum key exchange. You will compare six words."
         }
@@ -2004,6 +2029,22 @@ private struct QRScanView: View {
                 }
                 .padding(.top, 16)
                 .padding(.bottom, 12)
+
+                if viewModel.passphraseRequired {
+                    Label("The other phone protects its codes with six words. Go back and type them.", systemImage: "lock.fill")
+                        .font(.subheadline)
+                        .foregroundStyle(.orange)
+                        .padding(.horizontal, 20)
+                        .padding(.bottom, 8)
+                }
+
+                if viewModel.passphraseLooksWrong {
+                    Label("Nothing decodes: check the six words with the other person.", systemImage: "exclamationmark.triangle.fill")
+                        .font(.subheadline)
+                        .foregroundStyle(.orange)
+                        .padding(.horizontal, 20)
+                        .padding(.bottom, 8)
+                }
 
                 // Camera view - larger
                 ZStack {
@@ -2769,14 +2810,12 @@ private enum CeremonyPreview {
     }
 
     static var initiatorVM: InitiatorCeremonyViewModel {
-        let vm = InitiatorCeremonyViewModel(dependencies: dependencies)
-        vm.passphrase = "secret"
-        return vm
+        InitiatorCeremonyViewModel(dependencies: dependencies)
     }
 
     static var receiverVM: ReceiverCeremonyViewModel {
         let vm = ReceiverCeremonyViewModel(dependencies: dependencies)
-        vm.passphrase = "secret"
+        vm.passphrase = "able acid aged also area army"
         return vm
     }
 }

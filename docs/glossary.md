@@ -354,13 +354,12 @@ Larger pads allow more messages but require longer ceremony transfer times.
 ---
 
 ### Passphrase (Ceremony)
-An optional verbally-shared secret used to encrypt QR frame payloads during ceremony.
+Six words drawn by the sender's app and read aloud to the receiver, who types them. They encrypt the QR frames during the ceremony.
 
 Properties:
-- 4-64 printable ASCII characters
-- XOR'd with derived key stream
-- Different key per frame index
-- Protects against casual visual observation
+- Six words from the core word list (54 bits), never chosen by people
+- Key derived with Argon2id and a random per-ceremony salt
+- Frames sealed with ChaCha20-Poly1305; the frame index is the nonce
 
 **NOT** a replacement for performing the ceremony privately.
 

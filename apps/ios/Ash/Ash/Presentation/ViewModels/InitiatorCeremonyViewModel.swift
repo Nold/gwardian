@@ -43,8 +43,19 @@ final class InitiatorCeremonyViewModel {
     /// Bluetooth sending session, while `channel` is `.bluetooth`
     private(set) var bleSender: BLEPadSenderSession?
 
-    /// Required passphrase for QR frame encryption
-    var passphrase: String = ""
+    /// Family conversation: done at home, so the six words start off
+    var isFamilyConversation = false {
+        didSet { usesPassphrase = !isFamilyConversation }
+    }
+
+    /// Seal the QR codes with six words; on by default, off for a family conversation
+    var usesPassphrase = true
+
+    /// Six words drawn by the app; the other person types them to read the QR codes
+    private(set) var passphraseWords: [String] = []
+
+    /// Passphrase sealing the QR frames, if the codes are protected
+    var passphrase: String? { usesPassphrase ? passphraseWords.joined(separator: " ") : nil }
 
     var conversationName: String = ""
 
@@ -154,20 +165,30 @@ final class InitiatorCeremonyViewModel {
     init(dependencies: Dependencies) {
         self.dependencies = dependencies
         self.selectedRelayURL = dependencies.settingsService.relayServerURL
+        regeneratePassphrase()
         Log.debug(.ceremony, "Initiator ceremony view model initialized")
     }
 
     // MARK: - Computed Properties
 
-    /// Passphrase is valid if it meets the minimum requirements (4+ chars)
+    /// Passphrase is valid once six words were drawn
     var isPassphraseValid: Bool {
-        guard !passphrase.isEmpty else { return false }
-        return validatePassphrase(passphrase: passphrase)
+        validatePassphrase(passphrase: passphraseWords.joined(separator: " "))
     }
 
-    /// QR codes need the spoken passphrase; Bluetooth uses its own key exchange.
+    /// Draw new words, for instance if they were overheard.
+    func regeneratePassphrase() {
+        do {
+            passphraseWords = try generateQrPassphrase(random: SecureRandom.bytes(12))
+        } catch {
+            Log.error(.ceremony, "Failed to draw passphrase words: \(error)")
+            passphraseWords = []
+        }
+    }
+
+    /// Bluetooth uses its own key exchange; QR codes need the words when protected.
     var isChannelReady: Bool {
-        channel == .bluetooth || isPassphraseValid
+        channel == .bluetooth || !usesPassphrase || isPassphraseValid
     }
 
     /// Computed pad size in bytes
@@ -684,6 +705,8 @@ final class InitiatorCeremonyViewModel {
         notifyDeliveryFailed = true
         persistenceConsent = false
         transferMethod = .raptor
+        isFamilyConversation = false
+        regeneratePassphrase()
     }
 
     func cancel() {

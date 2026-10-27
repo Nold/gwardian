@@ -25,6 +25,13 @@ final class ReceiverCeremonyViewModel {
     private(set) var fountainReceiver: FountainFrameReceiver?
     private(set) var sourceBlockCount: Int = 0
 
+    /// Many frames failed authentication and none decoded: the words were
+    /// probably mistyped
+    private(set) var passphraseLooksWrong = false
+
+    /// The codes are protected by six words that were not typed
+    private(set) var passphraseRequired = false
+
     // Progress tracking - stored properties to trigger @Observable updates
     private(set) var receivedFrameCount: Int = 0
     private(set) var progress: Double = 0.0
@@ -61,7 +68,7 @@ final class ReceiverCeremonyViewModel {
 
     // MARK: - Computed Properties
 
-    /// Passphrase is valid if it meets the minimum requirements (4+ chars)
+    /// Passphrase is valid once it is six words from the word list
     var isPassphraseValid: Bool {
         guard !passphrase.isEmpty else { return false }
         return validatePassphrase(passphrase: passphrase)
@@ -84,9 +91,9 @@ final class ReceiverCeremonyViewModel {
         !requiresFaceIDForPersistence
     }
 
-    /// QR codes need the spoken passphrase; Bluetooth uses its own key exchange.
+    /// Words are only needed when the other phone shows some; empty is fine.
     var isChannelReady: Bool {
-        channel == .bluetooth || isPassphraseValid
+        channel == .bluetooth || passphrase.trimmingCharacters(in: .whitespaces).isEmpty || isPassphraseValid
     }
 
     // MARK: - Received Metadata Display
@@ -134,7 +141,17 @@ final class ReceiverCeremonyViewModel {
         Log.info(.ceremony, "Starting QR scan with passphrase")
 
         // Create fountain receiver with required passphrase
-        fountainReceiver = dependencies.performCeremonyUseCase.createFountainReceiver(passphrase: passphrase)
+        do {
+            let words = passphrase.trimmingCharacters(in: .whitespacesAndNewlines)
+            fountainReceiver = try dependencies.performCeremonyUseCase.createFountainReceiver(
+                passphrase: words.isEmpty ? nil : words
+            )
+        } catch {
+            Log.warning(.ceremony, "Invalid passphrase: \(error)")
+            return
+        }
+        passphraseLooksWrong = false
+        passphraseRequired = false
 
         phase = .transferring(currentFrame: 0, totalFrames: 0)
     }
@@ -217,9 +234,14 @@ final class ReceiverCeremonyViewModel {
                 Task { await reconstructAndVerify() }
             }
         } catch {
-            // CRC mismatch or invalid frame - just ignore and continue scanning
-            // This is expected for corrupted scans or wrong passphrase
+            // Misread or wrong passphrase: keep scanning, but say so when
+            // nothing has decoded after many frames
             Log.debug(.ceremony, "Frame decode error (expected for corrupted scans): \(error)")
+            if case .PassphraseRequired? = error as? AshError {
+                passphraseRequired = true
+            } else if receivedFrameCount == 0 && receiver.rejectedFrames() >= 8 {
+                passphraseLooksWrong = true
+            }
         }
     }
 

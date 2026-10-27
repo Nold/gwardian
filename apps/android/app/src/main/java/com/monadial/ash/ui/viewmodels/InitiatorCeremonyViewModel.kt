@@ -96,6 +96,7 @@ class InitiatorCeremonyViewModel @Inject constructor(
 
     init {
         loadInitialSettings()
+        regeneratePassphrase()
     }
 
     private fun loadInitialSettings() {
@@ -115,17 +116,17 @@ class InitiatorCeremonyViewModel @Inject constructor(
         _uiState.update { it.copy(channel = channel) }
     }
 
-    fun setPassphraseEnabled(enabled: Boolean) {
-        _uiState.update {
-            it.copy(
-                passphraseEnabled = enabled,
-                passphrase = if (!enabled) "" else it.passphrase
-            )
-        }
+    fun setFamilyConversation(enabled: Boolean) {
+        _uiState.update { it.copy(isFamilyConversation = enabled, usesPassphrase = !enabled) }
     }
 
-    fun setPassphrase(value: String) {
-        _uiState.update { it.copy(passphrase = value) }
+    fun setUsesPassphrase(enabled: Boolean) {
+        _uiState.update { it.copy(usesPassphrase = enabled) }
+    }
+
+    /** Draw new words, for instance if they were overheard. */
+    fun regeneratePassphrase() {
+        _uiState.update { it.copy(passphraseWords = cryptoService.generateQrPassphrase()) }
     }
 
     fun proceedToOptions() {
@@ -283,11 +284,9 @@ class InitiatorCeremonyViewModel @Inject constructor(
         try {
             val metadata = buildMetadata(state)
 
-            val passphraseToUse = if (state.passphraseEnabled) {
-                state.passphrase.ifEmpty { null }
-            } else null
+            val passphraseToUse = if (state.usesPassphrase) state.passphraseWords.joinToString(" ") else null
 
-            Log.d(TAG, "Creating fountain generator: blockSize=$FOUNTAIN_BLOCK_SIZE, passphraseEnabled=${state.passphraseEnabled}")
+            Log.d(TAG, "Creating fountain generator: blockSize=$FOUNTAIN_BLOCK_SIZE")
 
             val generator = withContext(Dispatchers.Default) {
                 cryptoService.createFountainGenerator(metadata, padBytes, FOUNTAIN_BLOCK_SIZE, passphraseToUse)
@@ -541,7 +540,10 @@ class InitiatorCeremonyViewModel @Inject constructor(
 
         viewModelScope.launch {
             val relayUrl = settingsRepository.relayServerUrl.first()
-            _uiState.value = InitiatorCeremonyUiState(relayUrl = relayUrl)
+            _uiState.value = InitiatorCeremonyUiState(
+                relayUrl = relayUrl,
+                passphraseWords = cryptoService.generateQrPassphrase()
+            )
         }
 
         collectedEntropy.clear()

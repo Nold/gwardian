@@ -1,5 +1,6 @@
 package com.monadial.ash.core.services
 
+import java.security.SecureRandom
 import javax.inject.Inject
 import javax.inject.Singleton
 import uniffi.ash.AuthTokens
@@ -19,6 +20,7 @@ import uniffi.ash.deriveBurnToken
 import uniffi.ash.deriveConversationId
 import uniffi.ash.encrypt
 import uniffi.ash.generateMnemonic
+import uniffi.ash.generateQrPassphrase
 import uniffi.ash.validatePassphrase
 
 /**
@@ -36,33 +38,41 @@ class AshCoreService @Inject constructor() {
      * @param metadata Ceremony settings (TTL, disappearing messages, relay URL, etc.)
      * @param padBytes The one-time pad bytes to transfer
      * @param blockSize Size of each block (default 1000 bytes)
-     * @param passphrase Optional passphrase for additional encryption
+     * @param passphrase The six words read aloud, or null for plain frames
      * @return FountainFrameGenerator that produces unlimited QR frames
      */
     fun createFountainGenerator(
         metadata: CeremonyMetadata,
         padBytes: ByteArray,
         blockSize: UInt = 1000u,
-        passphrase: String? = null
+        passphrase: String?
     ): FountainFrameGenerator {
-        // The core always encrypts frames; no passphrase means an empty one
+        // A fresh salt per ceremony: the same words never give the same key twice
+        val salt = ByteArray(16).also { SecureRandom().nextBytes(it) }
         return createFountainGenerator(
             metadata = metadata,
             padBytes = padBytes.map { it.toUByte() },
             blockSize = blockSize,
-            passphrase = passphrase.orEmpty(),
-            method = TransferMethod.RAPTOR
+            passphrase = passphrase,
+            method = TransferMethod.RAPTOR,
+            salt = salt.map { it.toUByte() }
         )
     }
 
     /**
      * Create a fountain frame receiver for QR scanning during ceremony.
      *
-     * @param passphrase Optional passphrase if the sender used one
+     * @param passphrase The six words shown on the sender's phone, if any
      * @return FountainFrameReceiver for collecting and decoding scanned frames
      */
-    fun createFountainReceiver(passphrase: String? = null): FountainFrameReceiver {
-        return FountainFrameReceiver(passphrase.orEmpty())
+    fun createFountainReceiver(passphrase: String?): FountainFrameReceiver {
+        return FountainFrameReceiver(passphrase)
+    }
+
+    /** Six random words for the QR ceremony passphrase. */
+    fun generateQrPassphrase(): List<String> {
+        val random = ByteArray(12).also { SecureRandom().nextBytes(it) }
+        return generateQrPassphrase(random.map { it.toUByte() })
     }
 
     // === Mnemonic Operations ===
@@ -160,7 +170,7 @@ class AshCoreService @Inject constructor() {
     // === Passphrase Validation ===
 
     /**
-     * Validate that a passphrase meets requirements (4-64 printable ASCII chars).
+     * Whether a typed passphrase is six words from the word list.
      *
      * @param passphrase The passphrase to validate
      * @return true if valid, false otherwise

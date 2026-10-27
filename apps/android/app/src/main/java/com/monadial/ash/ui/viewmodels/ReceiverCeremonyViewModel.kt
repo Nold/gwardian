@@ -31,6 +31,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import uniffi.ash.AshException
 import uniffi.ash.CeremonyMetadata
 import uniffi.ash.FountainFrameReceiver
 import uniffi.ash.decodeCeremonyPayload
@@ -83,17 +84,10 @@ class ReceiverCeremonyViewModel @Inject constructor(
         _uiState.update { it.copy(conversationName = name) }
     }
 
-    fun setPassphraseEnabled(enabled: Boolean) {
-        _uiState.update {
-            it.copy(
-                passphraseEnabled = enabled,
-                passphrase = if (!enabled) "" else it.passphrase
-            )
-        }
-    }
-
     fun setPassphrase(value: String) {
-        _uiState.update { it.copy(passphrase = value) }
+        _uiState.update {
+            it.copy(passphrase = value, isPassphraseValid = cryptoService.validatePassphrase(value))
+        }
     }
 
     fun setSelectedColor(color: ConversationColor) {
@@ -104,13 +98,14 @@ class ReceiverCeremonyViewModel @Inject constructor(
 
     fun startScanning() {
         val state = _uiState.value
-        val passphraseToUse = if (state.passphraseEnabled) {
-            state.passphrase.ifEmpty { null }
-        } else null
-
         // Create a new fountain receiver
         fountainReceiver?.close()
-        fountainReceiver = cryptoService.createFountainReceiver(passphrase = passphraseToUse)
+        fountainReceiver = try {
+            cryptoService.createFountainReceiver(passphrase = state.passphrase.trim().ifEmpty { null })
+        } catch (e: Exception) {
+            Log.w(TAG, "Invalid passphrase: ${e.message}")
+            return
+        }
 
         // Reset internal state
         receivedMetadata = null
@@ -121,13 +116,15 @@ class ReceiverCeremonyViewModel @Inject constructor(
         _uiState.update {
             it.copy(
                 phase = CeremonyPhase.Scanning,
+                passphraseLooksWrong = false,
+                passphraseRequired = false,
                 receivedBlocks = 0,
                 totalBlocks = 0,
                 progress = 0f
             )
         }
 
-        Log.d(TAG, "Started scanning with new fountain receiver, passphraseEnabled=${state.passphraseEnabled}")
+        Log.d(TAG, "Started scanning with new fountain receiver")
     }
 
     // MARK: - Bluetooth
@@ -209,7 +206,14 @@ class ReceiverCeremonyViewModel @Inject constructor(
                 reconstructAndVerify()
             }
         } catch (e: Exception) {
+            // Misread or wrong passphrase: keep scanning, but say so when
+            // nothing has decoded after many frames
             Log.e(TAG, "Failed to process frame: ${e.message}", e)
+            if (e is AshException.PassphraseRequired) {
+                _uiState.update { it.copy(passphraseRequired = true) }
+            } else if (receiver.uniqueBlocksReceived() == 0u && receiver.rejectedFrames() >= 8u) {
+                _uiState.update { it.copy(passphraseLooksWrong = true) }
+            }
         }
     }
 

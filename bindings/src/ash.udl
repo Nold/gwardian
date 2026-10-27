@@ -17,13 +17,17 @@ namespace ash {
     /// unlimited encoded blocks that can be displayed as QR codes.
     /// Passphrase is required for encrypting the QR frames.
     /// Method selects the transfer strategy (Raptor recommended).
+    /// With a passphrase, frames are sealed with the six words (Argon2id +
+    /// ChaCha20-Poly1305) and `salt`: 16 fresh secure random bytes. Without
+    /// one, frames are plain and anyone filming the screen can read them.
     [Throws=AshError]
     FountainFrameGenerator create_fountain_generator(
         CeremonyMetadata metadata,
         sequence<u8> pad_bytes,
         u32 block_size,
-        string passphrase,
-        TransferMethod method
+        string? passphrase,
+        TransferMethod method,
+        sequence<u8> salt
     );
 
     /// Pad and ceremony metadata in one payload, for channels other than
@@ -105,16 +109,23 @@ namespace ash {
     /// Generate mnemonic with custom word count
     sequence<string> generate_mnemonic_with_count(sequence<u8> pad_bytes, u32 word_count);
 
-    // === Passphrase Validation ===
+    // === QR Passphrase ===
 
-    /// Validate passphrase meets requirements (4-64 printable ASCII chars)
+    /// Draw a six-word passphrase for the QR ceremony from 12 secure
+    /// random bytes.
+    [Throws=AshError]
+    sequence<string> generate_qr_passphrase(sequence<u8> random);
+
+    /// Whether a typed passphrase is six words from the word list (case,
+    /// spaces and hyphens do not matter).
     boolean validate_passphrase(string passphrase);
 
-    /// Get minimum passphrase length
-    u32 get_min_passphrase_length();
+    /// Canonical spelling of a valid passphrase, for display.
+    [Throws=AshError]
+    string normalize_qr_passphrase(string passphrase);
 
-    /// Get maximum passphrase length
-    u32 get_max_passphrase_length();
+    /// Words in a QR passphrase.
+    u32 get_qr_passphrase_word_count();
 
     // === Authorization Token Operations ===
 
@@ -271,6 +282,12 @@ enum AshError {
     "MalformedMessage",
     /// Transfer step called out of order
     "InvalidState",
+    /// QR passphrase is not six words from the word list
+    "InvalidPassphrase",
+    /// QR frame failed authentication (wrong passphrase or altered frame)
+    "FrameAuthenticationFailed",
+    /// QR frames are protected by six words the receiver did not enter
+    "PassphraseRequired",
 };
 
 /// Ceremony metadata transferred via QR frame 0
@@ -451,9 +468,9 @@ interface FountainFrameGenerator {
 /// Automatically detects transfer method from first received block
 /// and uses the appropriate decoder (Raptor, LT, or Sequential).
 interface FountainFrameReceiver {
-    /// Create a new receiver.
-    /// Passphrase is required and must match the sender's passphrase.
-    constructor(string passphrase);
+    /// Create a new receiver, with the sender's six words if it shows any.
+    [Throws=AshError]
+    constructor(string? passphrase);
 
     /// Add a scanned QR frame.
     ///
@@ -462,6 +479,10 @@ interface FountainFrameReceiver {
     /// Transfer method is auto-detected from block 0.
     [Throws=AshError]
     boolean add_frame(sequence<u8> frame_bytes);
+
+    /// Frames rejected so far because they failed authentication: many of
+    /// them usually means the passphrase was mistyped.
+    u32 rejected_frames();
 
     /// Check if decoding is complete.
     boolean is_complete();

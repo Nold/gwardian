@@ -33,6 +33,8 @@ class CryptoServiceImpl @Inject constructor(
         return ashCoreService.createFountainReceiver(passphrase)
     }
 
+    override fun generateQrPassphrase(): List<String> = ashCoreService.generateQrPassphrase()
+
     override fun generateMnemonic(padBytes: ByteArray): List<String> {
         return ashCoreService.generateMnemonic(padBytes)
     }

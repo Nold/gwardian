@@ -166,19 +166,19 @@ protocol PerformCeremonyUseCaseProtocol: Sendable {
 
     /// Create a fountain frame generator for QR display
     /// The generator produces unlimited blocks - display cycles through them
-    /// Passphrase is required for encrypting QR frames
+    /// Without a passphrase the QR frames are plain
     /// transferMethod selects the encoding strategy (Raptor recommended)
     func createFountainGenerator(
         padBytes: [UInt8],
         metadata: CeremonyMetadataSwift,
         blockSize: UInt32,
-        passphrase: String,
+        passphrase: String?,
         transferMethod: CeremonyTransferMethod
     ) async throws -> FountainFrameGenerator
 
     /// Create a fountain frame receiver for QR scanning
-    /// Passphrase is required and must match the sender's passphrase
-    func createFountainReceiver(passphrase: String) -> FountainFrameReceiver
+    /// Passphrase: the sender's six words, if its screen shows any
+    func createFountainReceiver(passphrase: String?) throws -> FountainFrameReceiver
 
     /// Generate mnemonic checksum for verification
     func generateMnemonic(from padBytes: [UInt8]) async -> [String]
@@ -247,7 +247,7 @@ final class PerformCeremonyUseCase: PerformCeremonyUseCaseProtocol, Sendable {
         padBytes: [UInt8],
         metadata: CeremonyMetadataSwift,
         blockSize: UInt32,
-        passphrase: String,
+        passphrase: String?,
         transferMethod: CeremonyTransferMethod
     ) async throws -> FountainFrameGenerator {
         // Create CeremonyMetadata for FFI
@@ -261,17 +261,19 @@ final class PerformCeremonyUseCase: PerformCeremonyUseCaseProtocol, Sendable {
         )
 
         // Create fountain generator via FFI with required passphrase and transfer method
+        // A fresh salt per ceremony: the same words never give the same key twice
         return try Ash.createFountainGenerator(
             metadata: ffiMetadata,
             padBytes: padBytes,
             blockSize: blockSize,
             passphrase: passphrase,
-            method: transferMethod.ffiMethod
+            method: transferMethod.ffiMethod,
+            salt: SecureRandom.bytes(16)
         )
     }
 
-    func createFountainReceiver(passphrase: String) -> FountainFrameReceiver {
-        return FountainFrameReceiver(passphrase: passphrase)
+    func createFountainReceiver(passphrase: String?) throws -> FountainFrameReceiver {
+        return try FountainFrameReceiver(passphrase: passphrase)
     }
 
     func generateMnemonic(from padBytes: [UInt8]) async -> [String] {
@@ -356,15 +358,17 @@ private enum Ash {
         metadata: CeremonyMetadata,
         padBytes: [UInt8],
         blockSize: UInt32,
-        passphrase: String,
-        method: TransferMethod
+        passphrase: String?,
+        method: TransferMethod,
+        salt: [UInt8]
     ) throws -> FountainFrameGenerator {
         try _createFountainGenerator(
             metadata: metadata,
             padBytes: padBytes,
             blockSize: blockSize,
             passphrase: passphrase,
-            method: method
+            method: method,
+            salt: salt
         )
     }
 
@@ -378,15 +382,17 @@ private func _createFountainGenerator(
     metadata: CeremonyMetadata,
     padBytes: [UInt8],
     blockSize: UInt32,
-    passphrase: String,
-    method: TransferMethod
+    passphrase: String?,
+    method: TransferMethod,
+    salt: [UInt8]
 ) throws -> FountainFrameGenerator {
     try createFountainGenerator(
         metadata: metadata,
         padBytes: padBytes,
         blockSize: blockSize,
         passphrase: passphrase,
-        method: method
+        method: method,
+        salt: salt
     )
 }
 
