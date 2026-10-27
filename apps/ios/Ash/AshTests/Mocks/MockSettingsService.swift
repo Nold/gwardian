@@ -17,6 +17,7 @@ final class MockSettingsService: SettingsServiceProtocol, @unchecked Sendable {
     var isScreenshotProtectionEnabled: Bool = true
     var relayServerURL: String = "http://localhost:8080"
     var defaultExtendedTTL: Bool = false
+    var hasCompletedOnboarding: Bool = false
 
     // MARK: - Call Tracking
 
@@ -32,6 +33,7 @@ final class MockSettingsService: SettingsServiceProtocol, @unchecked Sendable {
         isScreenshotProtectionEnabled = true
         relayServerURL = "http://localhost:8080"
         defaultExtendedTTL = false
+        hasCompletedOnboarding = false
         biometricLockEnabledSetCount = 0
         lockOnBackgroundSetCount = 0
         screenshotProtectionEnabledSetCount = 0
