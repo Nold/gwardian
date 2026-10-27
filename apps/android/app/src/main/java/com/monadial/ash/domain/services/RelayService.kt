@@ -81,7 +81,9 @@ interface RelayService {
         conversationId: String,
         authTokenHash: String,
         burnTokenHash: String,
-        relayUrl: String? = null
+        relayUrl: String? = null,
+        ttlSeconds: Long? = null,
+        members: Int = 2
     ): AppResult<Unit>
 
     // === Device Registration ===

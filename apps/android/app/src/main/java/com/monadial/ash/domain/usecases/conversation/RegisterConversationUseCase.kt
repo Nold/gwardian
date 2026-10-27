@@ -38,7 +38,8 @@ class RegisterConversationUseCase @Inject constructor(
                 conversationId = conversation.id,
                 authTokenHash = authTokenHash,
                 burnTokenHash = burnTokenHash,
-                relayUrl = conversation.relayUrl
+                relayUrl = conversation.relayUrl,
+                ttlSeconds = conversation.messageRetention.seconds
             )
 
             when (result) {

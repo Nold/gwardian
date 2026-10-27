@@ -23,6 +23,9 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Groups
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.LocalFireDepartment
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
@@ -30,6 +33,8 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
@@ -45,6 +50,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -59,7 +65,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.monadial.ash.domain.entities.Conversation
+import com.monadial.ash.domain.entities.GroupConversation
 import com.monadial.ash.ui.viewmodels.ConversationsViewModel
+import com.monadial.ash.ui.viewmodels.GroupListViewModel
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -69,13 +77,21 @@ import java.util.Locale
 fun ConversationsScreen(
     onConversationClick: (String) -> Unit,
     onNewConversation: () -> Unit,
+    onNewGroup: () -> Unit,
+    onJoinGroup: () -> Unit,
     onSettingsClick: () -> Unit,
-    viewModel: ConversationsViewModel = hiltViewModel()
+    viewModel: ConversationsViewModel = hiltViewModel(),
+    groupListViewModel: GroupListViewModel = hiltViewModel()
 ) {
     val conversations by viewModel.conversations.collectAsState()
+    val groups by groupListViewModel.groups.collectAsState()
     val isRefreshing by viewModel.isRefreshing.collectAsState()
-    var showNewConversationSheet by remember { mutableStateOf(false) }
+    var showNewMenu by remember { mutableStateOf(false) }
     var conversationToBurn by remember { mutableStateOf<Conversation?>(null) }
+    var groupForInfo by remember { mutableStateOf<GroupConversation?>(null) }
+
+    // Back from a group ceremony: show the new group
+    LaunchedEffect(Unit) { groupListViewModel.refresh() }
 
     Scaffold(
         topBar = {
@@ -89,25 +105,55 @@ fun ConversationsScreen(
             )
         },
         floatingActionButton = {
-            FloatingActionButton(
-                onClick = { showNewConversationSheet = true }
-            ) {
-                Icon(Icons.Default.Add, contentDescription = "New Conversation")
+            Box {
+                FloatingActionButton(onClick = { showNewMenu = true }) {
+                    Icon(Icons.Default.Add, contentDescription = "New")
+                }
+                // Two-person conversation, or a group to create or join
+                DropdownMenu(expanded = showNewMenu, onDismissRequest = { showNewMenu = false }) {
+                    DropdownMenuItem(
+                        text = { Text("New Conversation") },
+                        leadingIcon = { Icon(Icons.Default.Person, contentDescription = null) },
+                        onClick = {
+                            showNewMenu = false
+                            onNewConversation()
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("New Group") },
+                        leadingIcon = { Icon(Icons.Default.Groups, contentDescription = null) },
+                        onClick = {
+                            showNewMenu = false
+                            onNewGroup()
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Join a Group") },
+                        leadingIcon = { Icon(Icons.Default.QrCodeScanner, contentDescription = null) },
+                        onClick = {
+                            showNewMenu = false
+                            onJoinGroup()
+                        }
+                    )
+                }
             }
         }
     ) { padding ->
         PullToRefreshBox(
             isRefreshing = isRefreshing,
-            onRefresh = { viewModel.refresh() },
+            onRefresh = {
+                viewModel.refresh()
+                groupListViewModel.refresh()
+            },
             modifier =
             Modifier
                 .fillMaxSize()
                 .padding(padding)
         ) {
-            if (conversations.isEmpty() && !isRefreshing) {
+            if (conversations.isEmpty() && groups.isEmpty() && !isRefreshing) {
                 EmptyConversationsView(
                     modifier = Modifier.fillMaxSize(),
-                    onNewConversation = { showNewConversationSheet = true }
+                    onNewConversation = { showNewMenu = true }
                 )
             } else {
                 LazyColumn(
@@ -115,6 +161,9 @@ fun ConversationsScreen(
                     contentPadding = PaddingValues(16.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
+                    items(groups, key = { "group-" + it.id }) { group ->
+                        GroupCard(group = group, onClick = { groupForInfo = group })
+                    }
                     items(conversations, key = { it.id }) { conversation ->
                         SwipeableConversationCard(
                             conversation = conversation,
@@ -126,11 +175,17 @@ fun ConversationsScreen(
             }
         }
 
-        // Navigate directly to ceremony screen which handles role selection
-        if (showNewConversationSheet) {
-            showNewConversationSheet = false
-            onNewConversation()
-        }
+    }
+
+    groupForInfo?.let { group ->
+        GroupInfoDialog(
+            group = group,
+            onDismiss = { groupForInfo = null },
+            onDelete = {
+                groupListViewModel.delete(group)
+                groupForInfo = null
+            }
+        )
     }
 
     // Burn confirmation dialog
@@ -172,6 +227,78 @@ fun ConversationsScreen(
             }
         )
     }
+}
+
+@Composable
+private fun GroupCard(group: GroupConversation, onClick: () -> Unit) {
+    Card(
+        onClick = onClick,
+        shape = RoundedCornerShape(12.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Default.Groups, contentDescription = null, tint = Color(group.color.toColorLong()))
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    group.displayName,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    "${group.members.size} members",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
+}
+
+/** Members and settings; deleting only affects this phone. */
+@Composable
+private fun GroupInfoDialog(group: GroupConversation, onDismiss: () -> Unit, onDelete: () -> Unit) {
+    var confirming by remember { mutableStateOf(false) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = { Icon(Icons.Default.Groups, contentDescription = null) },
+        title = { Text(group.displayName) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                group.members.forEach { member ->
+                    val you = if (member.index == group.me) " (you)" else ""
+                    val creator = if (member.index == 0) " · creator" else ""
+                    Text("${member.index + 1}. ${member.name}$you$creator")
+                }
+                Spacer(Modifier.height(8.dp))
+                Text("Messages wait on the relay: ${group.messageRetention.displayName}", style = MaterialTheme.typography.bodySmall)
+                Text("Disappearing messages: ${group.disappearingMessages.displayName}", style = MaterialTheme.typography.bodySmall)
+                if (confirming) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        "Delete the group and its pads from this phone? The other members keep theirs. This cannot be undone.",
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            if (confirming) {
+                Button(
+                    onClick = onDelete,
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) { Text("Delete") }
+            } else {
+                TextButton(onClick = { confirming = true }) {
+                    Text("Delete from This Phone", color = MaterialTheme.colorScheme.error)
+                }
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Close") }
+        }
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
