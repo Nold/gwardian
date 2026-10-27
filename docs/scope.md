@@ -16,6 +16,26 @@ This document must be read together with:
 
 ---
 
+## Gwardian v2: deliberate scope changes
+
+Gwardian is a fork of ASH. Following the change policy below, these departures from the v1 scope are made deliberately, with their rationale and tradeoffs. Everything else in this document still applies. The security impact is reviewed in `threat-model.md` (sections marked "new in v2").
+
+| v1 rule | v2 change | Rationale | Tradeoff |
+|---|---|---|---|
+| Group chats out of scope | **In scope**: one sending pad per member, every member holds copies of the others' (`ash-core::group`) | Families and teams need groups; a pad per member keeps pad non-reuse without coordination | Authenticity is per group, not per member; removing a member requires new pads |
+| OTP only | **Messages stay OTP only.** Computational cryptography is allowed solely to *transfer a pad*, in the separate `ash-transfer` crate | Lets people start or refresh a conversation without meeting in person | Pads moved this way rest on computational assumptions |
+| Key exchange protocols and key derivation functions out of scope | **In scope for pad transfer only**: X-Wing (ML-KEM-768 + X25519), HKDF-SHA256, ChaCha20-Poly1305 | Post-quantum hybrid protection for transfers that cannot be done by QR code | New dependencies to trust and audit |
+| Bluetooth-based pairing out of scope | **In scope**: Bluetooth LE pad transfer (`docs/ble-transfer.md`) | Faster than QR codes, no screen to film | Weaker than QR codes, labelled `Enhanced` |
+| One security level | **Three levels**, `Maximum` (QR), `Enhanced` (Bluetooth), `Standard` (relay), always shown, never lowered without consent | Users choose convenience knowingly, per conversation | The UI must make levels clear |
+| iOS only | **Android in scope**, interoperable with iOS | Families and companies use both | A second app to maintain and audit |
+
+Unchanged:
+- No crypto agility: every algorithm is fixed by the protocol version.
+- `Maximum` remains reachable only by QR code and keeps ASH's information-theoretic guarantees.
+- `ash-core` keeps no computational cryptography and no dependencies.
+
+---
+
 ## What ASH *is*
 
 ASH is a secure, ephemeral messaging application designed for **high-security, low-frequency communication**.

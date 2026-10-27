@@ -1,39 +1,40 @@
-# ASH — Threat Model (v1)
+# Gwardian — Threat Model (v2)
 
-This document describes the **explicit threat model** for ASH version 1.
+This document describes the **explicit threat model** for Gwardian, a fork of ASH v1 that adds group conversations, three security levels and remote or Bluetooth pad transfer.
 
 Its purpose is to:
 - make security assumptions visible
 - prevent false expectations
 - guide implementation decisions
 - align contributors (human and AI)
-- provide clarity for users and reviewers
+- provide clarity for users, reviewers and auditors
 
-ASH is designed to reduce risk, not eliminate it.
+Gwardian is designed to reduce risk, not eliminate it.
+
+Sections marked **(new in v2)** cover what Gwardian adds on top of ASH v1. Everything else is inherited from ASH and still holds.
 
 ---
 
 ## Security philosophy
 
-ASH assumes:
+Gwardian assumes:
 - humans make mistakes
 - software systems are fallible
 - infrastructure should not be trusted
 - security must be understandable by users
 
-ASH intentionally favors:
+Gwardian intentionally favors:
 - small, auditable components
 - explicit user actions
 - offline-first security guarantees
 - minimal reliance on third parties
+- **visible security levels**: the user always sees how strong a conversation is
 
-ASH does **not** promise absolute security.
+Gwardian does **not** promise absolute security.
 
 ---
 
 ## Assets to protect
-
-ASH aims to protect the following assets:
 
 1. **Message confidentiality**
    - Message contents must remain unreadable to anyone except participants.
@@ -45,28 +46,55 @@ ASH aims to protect the following assets:
 3. **Conversation integrity**
    - Messages must not be silently altered without detection.
 
-4. **User understanding**
+4. **Security level honesty** (new in v2)
+   - The level shown for a conversation must never overstate how its pads were distributed.
+   - The level must never drop without the user's explicit consent.
+
+5. **User understanding**
    - Users must be able to reason about what is happening.
    - Security must not rely on invisible background behavior.
 
 ---
 
+## Security levels (new in v2)
+
+Each member's pad records the channel it was distributed over. A message is as safe as its sender's pad; a group is as safe as its weakest pad.
+
+| Level | How the pad was distributed | Confidentiality rests on | Recorded traffic decryptable later? |
+|---|---|---|---|
+| **Maximum** | In person, by QR code (ASH ceremony) | One-Time Pad only, no computational assumption | No, as long as the pad stays secret |
+| **Enhanced** | In person, over Bluetooth LE | X-Wing (ML-KEM-768 + X25519) and ChaCha20-Poly1305 protecting the transfer, then One-Time Pad | Only by breaking both ML-KEM-768 and X25519 on a recording of that transfer |
+| **Standard** | Remotely, through the relay | Same as Enhanced | Same as Enhanced, and the relay itself can record the transfer |
+
+Rules enforced by the core:
+- The level of a group is the minimum of its pads' levels.
+- Adding a member or replacing a pad with a weaker one fails (`SecurityDowngrade`) unless the app calls the explicit `*_allow_downgrade` variant after the user agreed.
+- A `Maximum` pad is refused by the transfer channels; it can only be exchanged by QR code.
+
+Rule the apps must follow:
+- **A pad is distributed over one kind of channel only.** If an owner hands a pad to one member by QR code and to another through the relay, every copy is only `Standard`. To add someone remotely, the owner generates a new pad.
+
+---
+
 ## Trust boundaries
 
-ASH has **strict trust boundaries**:
-
 ### Trusted
-- The shared Rust core (`ash-core`)
-- The user performing the ceremony correctly
+- The shared Rust core (`ash-core`): OTP, Wegman-Carter MAC, groups, levels. No dependencies, no computational cryptography.
+- The transfer crate (`ash-transfer`) and its cryptographic dependencies (new in v2):
+  - `libcrux-ml-kem` and `libcrux-sha3` (formally verified with hax and F*)
+  - `x25519-dalek`, `hkdf`, `sha2`, `chacha20poly1305` (RustCrypto)
+- The users performing the ceremony or the word comparison correctly
 - The operating system *to a limited extent*
 
 ### Partially trusted
-- The iOS application runtime
-- Device secure storage (Keychain / equivalent)
+- The iOS and Android application runtimes
+- Device secure storage (Keychain / Keystore)
+- The platforms' secure random number generators, which supply all randomness
 
 ### Not trusted
-- Backend infrastructure
+- Backend infrastructure, including the transfer mailboxes
 - Network transport
+- Bluetooth radio and anyone within range
 - Push notification services
 - Other devices
 - Physical environment
@@ -75,10 +103,6 @@ ASH has **strict trust boundaries**:
 ---
 
 ## Attacker models
-
-ASH considers the following attackers.
-
----
 
 ### 1. Network attacker (passive)
 
@@ -94,62 +118,52 @@ ASH considers the following attackers.
 - Backend ignorance of contents
 
 **Residual risk**
-- Metadata leakage (timing, size)
+- Metadata leakage (timing, size, who talks to whom)
 
 ---
 
 ### 2. Network attacker (active)
 
 **Capabilities**
-- Modifies packets
-- Drops packets
-- Replays packets
-- Forges messages
+- Modifies, drops, replays or forges packets
 
 **Defenses**
-- **Wegman-Carter 256-bit authentication** (information-theoretic)
+- **Wegman-Carter 256-bit authentication** (information-theoretic), forgery probability ~2^-128
 - Frame integrity checks (CRC)
-- Deterministic pad consumption
-- Message ordering constraints
+- Group frames: the sender id and pad offset select the authentication key, so altering either fails verification
+- A pad range is consumed only after authentication, so forged frames cannot burn pad bytes
+- Each pad range is accepted once: replays are rejected
 
 **Residual risk**
 - Denial of service (not prevented)
-
-**Note:** Message authentication uses a 256-bit Wegman-Carter MAC with dual GF(2^128)
-polynomial hashing. This provides information-theoretic authentication — an attacker
-cannot forge valid messages regardless of computational power. Forgery probability
-is ~2^-128.
 
 ---
 
 ### 3. Backend compromise
 
 **Capabilities**
-- Full access to backend storage
-- Access to logs and memory
-- Ability to inject or drop messages
+- Full access to backend storage, logs and memory
+- Ability to inject, drop or delay messages and transfer mailbox contents
 
 **Defenses**
-- Backend never sees plaintext
-- No keys stored on backend
-- Encrypted blobs only
-- Burn propagation is best-effort
+- Backend never sees plaintext or pads
+- No keys stored on backend; transfer mailboxes store only SHA-256 hashes of their tokens
+- Transfer mailboxes expire after 10 minutes and are never persisted
+- An active attack on a remote transfer is exposed by the word comparison (see 11)
 
 **Residual risk**
-- Message delay
-- Message loss
+- Message delay or loss
 - Metadata observation
+- Recording of `Standard` transfers for a later cryptanalytic attack (see 12)
 
-ASH explicitly assumes the backend may be hostile.
+Gwardian explicitly assumes the backend may be hostile.
 
 ---
 
 ### 4. Malicious or curious service provider
 
 **Capabilities**
-- Observes infrastructure behavior
-- Inspects memory and storage
-- Accesses logs
+- Observes infrastructure behavior, inspects memory, storage and logs
 
 **Defenses**
 - No secrets stored server-side
@@ -164,16 +178,16 @@ ASH explicitly assumes the backend may be hostile.
 ### 5. Shoulder-surfing / visual observation
 
 **Capabilities**
-- Observes screens during ceremony
+- Observes screens during a QR ceremony
 - Records QR codes visually
 
 **Defenses**
-- Optional passphrase-encrypted QR frames
 - Human-verifiable mnemonic checksum
-- User guidance to perform ceremony privately
+- User guidance to perform the ceremony privately
+- Optional passphrase on QR frames: **weak**, an XOR keystream derived with CRC-32. It slows a casual observer but is not cryptographic protection
 
 **Residual risk**
-- Full pad compromise if ceremony is fully recorded
+- Full pad compromise if the ceremony is fully recorded
 
 This is a known and accepted risk.
 
@@ -182,136 +196,221 @@ This is a known and accepted risk.
 ### 6. Compromised backend + delayed attack
 
 **Capabilities**
-- Records encrypted traffic
-- Attempts later decryption
+- Records encrypted traffic and attempts later decryption
 
 **Defenses**
-- Information-theoretic security of OTP
-- No key reuse
-- No key escrow
+- `Maximum` pads: information-theoretic security of OTP, no key reuse, no key escrow
+- `Enhanced` / `Standard` pads: see 12
 
 **Residual risk**
-- None, assuming pad secrecy is maintained
+- None for `Maximum`, assuming pad secrecy is maintained
 
 ---
 
 ### 7. Compromised device (software)
 
 **Capabilities**
-- Malware on device
-- Screen recording
-- Memory inspection
-- Keychain access
+- Malware, screen recording, memory inspection, Keychain / Keystore access
 
 **Defenses**
-- Best-effort memory wipe
+- Best-effort memory wipe (pad bytes are wiped in Rust after use and on drop)
 - Limited data lifetime
 - No background decryption
 
 **Residual risk**
 - Full compromise possible
+- Pad bytes handed to the app across the FFI boundary cannot be wiped by Rust; apps keep them only in secure storage
 
-ASH does **not** defend against a compromised operating system.
+Gwardian does **not** defend against a compromised operating system.
 
 ---
 
 ### 8. Compromised device (physical)
 
 **Capabilities**
-- Physical access to device
-- Forensic tools
-- Cold boot attacks
+- Physical access to the device, forensic tools, cold boot attacks
+- A relative or colleague who knows the phone's passcode or has enrolled a fingerprint or face
 
 **Defenses**
 - Ephemeral message lifecycle (default)
 - Best-effort wipe
 - Reliance on OS protections
+- **Planned:** an app-specific 6-digit code required to open Gwardian, pads bound to it in secure hardware, optional biometric shortcut disabled when the phone's biometric enrollment changes, increasing delays after wrong codes, and optional wipe after 10 wrong codes
 
 **Residual risk**
 - Partial or full recovery possible
-- **Higher risk with persistent mode** — see [persistent-messages.md](persistent-messages.md)
+- **Until the app lock ships, anyone who can unlock the phone can open the app**
+- Higher risk with persistent mode — see [persistent-messages.md](persistent-messages.md)
 
-ASH does **not** claim forensic resistance.
-
-> **Note**: Conversations with persistent storage enabled have increased forensic exposure.
-> Encrypted message blobs are stored on disk and may be recoverable until the conversation is burned.
+Gwardian does **not** claim forensic resistance.
 
 ---
 
 ### 9. Malicious conversation participant
 
 **Capabilities**
-- Screenshots
-- Recording
-- Copying messages
-- Exporting data
+- Screenshots, recording, copying or exporting messages
 
 **Defenses**
 - None
 
-ASH explicitly does **not** defend against a malicious participant.
+Gwardian explicitly does **not** defend against a malicious participant. Trust between participants is required.
 
-Trust between participants is required.
+---
+
+### 10. Malicious group member (new in v2)
+
+**Capabilities**
+- Holds a copy of every member's pad
+- Can read every group message
+- Can create validly authenticated messages under another member's id
+- Can send forged frames to push a member into the `Suspect` health state
+- Keeps all pad copies after being removed
+
+**Defenses**
+- Each member encrypts only with their own pad, so honest members never reuse each other's bytes
+- Health tracking reports members whose messages repeatedly fail authentication
+
+**Residual risk**
+- **Authenticity is per group, not per member**: a member can impersonate another member
+- A member who sends with another member's pad causes pad reuse for that pad
+- Removing a member does not revoke anything: remaining members must exchange new pads
+
+Groups should only include people who already trust each other, as for any participant (see 9).
+
+---
+
+### 11. Attacker on a transfer channel (new in v2)
+
+**Capabilities**
+- Passive: records a remote transfer through the relay, or a Bluetooth transfer within radio range
+- Active: runs a separate exchange with each side (attacker in the middle), including a malicious relay
+
+**Defenses**
+- Hybrid key exchange X-Wing (ML-KEM-768 + X25519), following draft-connolly-cfrg-xwing-kem and checked against its official test vectors; the ML-KEM public key is validated (FIPS 203)
+- Six words derived from the whole transcript, compared by the two people aloud or over a call
+- The sender commits to its nonce before seeing the receiver's, so an attacker in the middle cannot search for matching words: one chance in 2^54 per attempt
+- Pad sealed with ChaCha20-Poly1305 under an HKDF-SHA256 key bound to the transcript; the security level is authenticated, so a `Standard` pad cannot be passed off as `Enhanced`
+- The receiving app keeps the sealed pad closed until its own user confirms the words
+- Any protocol error ends the transfer, which starts over with fresh keys
+
+**Residual risk**
+- **Users who confirm without really comparing the words defeat the protection against an active attacker**
+- Confidentiality of the transfer rests on computational assumptions (see 12)
+- Denial of service: blocking the relay or jamming Bluetooth prevents transfers
+
+---
+
+### 12. Harvest now, decrypt later (new in v2)
+
+**Capabilities**
+- Records `Enhanced` or `Standard` transfers today
+- Attempts decryption years later, for example with a large quantum computer
+
+**Defenses**
+- X-Wing stays secure as long as either ML-KEM-768 or X25519 resists; ML-KEM-768 is designed to resist quantum computers
+- Once delivered, the pad itself is used as a One-Time Pad: messages add no computational assumption beyond the transfer
+- Users can upgrade a conversation to `Maximum` at any time by exchanging new pads by QR code
+
+**Residual risk**
+- If both ML-KEM-768 and X25519 are broken, recorded `Enhanced` / `Standard` transfers reveal those pads and every message encrypted with them
+
+This is why these levels are shown as weaker than `Maximum`.
+
+---
+
+### 13. Abuse of the transfer mailboxes (new in v2)
+
+**Capabilities**
+- Opens many mailboxes without authentication
+- Fills mailboxes with large messages
+
+**Defenses**
+- At most 10,000 concurrent mailboxes, each expiring after 10 minutes
+- Messages capped at 2 MiB, 4 waiting per direction, 256 MiB in total
+- Mailbox ids are 128-bit random, tokens 256-bit random
+
+**Residual risk**
+- Temporary denial of the remote transfer service; HTTP-layer rate limiting (required by the backend contract) is expected in front of the relay
+
+---
+
+### 14. Local pad corruption (new in v2)
+
+**Capabilities**
+- Storage faults or a failed restore damage a pad copy on one device
+
+**Defenses**
+- A CRC-32 per 4 KiB chunk is checked before pad bytes are used, which tells a damaged local copy (`PadCorrupted`) apart from a message altered in transit (`AuthenticationFailed`)
+- Damaged pads are never used to encrypt
+- Only the affected member's pad needs to be exchanged again
+
+**Residual risk**
+- Messages from that member are unreadable until a new pad is exchanged
+
+The checksums are stored with the pad and reveal nothing to anyone who could not already read it. They detect accidents, not attacks: an attacker who can modify local storage can already read the pads.
 
 ---
 
 ## Out-of-scope threats (explicit)
 
-ASH does **not** defend against:
+Gwardian does **not** defend against:
 
 - A compromised operating system
-- A malicious participant
+- A malicious participant or group member
 - Physical device seizure
 - Advanced forensic analysis
 - Network anonymity attacks
 - Traffic correlation attacks
-- Coercion or legal compulsion
+- Coercion or legal compulsion (a duress code is planned, not implemented)
 - Side-channel attacks
-- Supply-chain attacks
+- Supply-chain attacks, including on the cryptographic dependencies of `ash-transfer`
 - Rogue OS updates
+- Users who skip the word comparison or the mnemonic check
 
 ---
 
-## Security guarantees (what ASH *does* provide)
+## Security guarantees (what Gwardian *does* provide)
 
-ASH provides the following guarantees **if used correctly**:
+Gwardian provides the following guarantees **if used correctly**:
 
 - Message confidentiality against network and backend observers
-- Information-theoretic security via One-Time Pad
-- **Information-theoretic message authentication** via Wegman-Carter MAC
-- **256-bit authentication tags** using dual GF(2^128) polynomial hashing
-- **Traffic analysis protection** via mandatory 32-byte message padding
-- Pad non-reuse enforcement by design
-- Detection of accidental corruption
-- Detection of message tampering or forgery
-- Human-verifiable ceremony correctness
+- Information-theoretic security via One-Time Pad for `Maximum` conversations
+- Post-quantum hybrid protection (ML-KEM-768 + X25519) for pads exchanged at `Enhanced` and `Standard` levels
+- **Information-theoretic message authentication** via Wegman-Carter MAC, 256-bit tags
+- **Traffic analysis protection** via mandatory 32-byte message padding, when the app pads messages before encryption (group frames do not pad by themselves)
+- Pad non-reuse enforcement by design, including across group members
+- A security level that is always shown and never drops without consent
+- Detection of accidental corruption, distinguished from tampering
+- Detection of message tampering or forgery by outsiders
+- Human-verifiable ceremony and transfer correctness
 - Minimal attack surface
 
 ---
 
 ## User responsibility (important)
 
-ASH requires users to:
-- perform the ceremony carefully
+Gwardian requires users to:
+- perform the QR ceremony carefully, in private
 - verify the mnemonic checksum
-- avoid public or recorded environments
+- **really compare the six words** during a Bluetooth or remote transfer, aloud or over a call, before confirming
+- understand the level shown for each conversation, and meet in person to upgrade it when it matters
 - understand that screenshots cannot be prevented
-- trust conversation participants
+- trust conversation and group participants
 
-ASH makes security *visible*, not automatic.
+Gwardian makes security *visible*, not automatic.
 
 ---
 
 ## Design consequences
 
-This threat model explains why ASH:
+This threat model explains why Gwardian:
 
-- uses QR codes instead of Bluetooth
-- avoids background syncing
-- avoids convenience features
-- avoids accounts and recovery
-- avoids cloud storage
-- avoids analytics
+- keeps QR codes as the only way to reach `Maximum`
+- allows Bluetooth and remote transfer only as weaker, clearly labelled levels
+- keeps the transfer cryptography out of the OTP core
+- avoids background syncing, accounts and recovery
+- avoids cloud storage and analytics
 
 Every inconvenience is deliberate.
 
@@ -319,9 +418,9 @@ Every inconvenience is deliberate.
 
 ## Final note
 
-ASH is designed to make **security tradeoffs explicit**.
+Gwardian is designed to make **security tradeoffs explicit**.
 
 If a threat is not listed here, it is **not defended against**.
 
-Security is not a promise —  
+Security is not a promise —
 it is a set of clearly defined limits.
