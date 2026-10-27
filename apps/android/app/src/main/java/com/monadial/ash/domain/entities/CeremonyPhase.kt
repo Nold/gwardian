@@ -19,6 +19,9 @@ sealed class CeremonyPhase {
 
     data class Transferring(val currentFrame: Int, val totalFrames: Int) : CeremonyPhase()
 
+    /** Pad and settings going over Bluetooth; progress is in the BLE session */
+    data object BluetoothTransfer : CeremonyPhase()
+
     data class Verifying(val mnemonic: List<String>) : CeremonyPhase()
 
     data class Completed(val conversation: Conversation) : CeremonyPhase()
@@ -29,6 +32,15 @@ sealed class CeremonyPhase {
     data object ConfiguringReceiver : CeremonyPhase()
 
     data object Scanning : CeremonyPhase()
+}
+
+/** How the pad travels from one phone to the other */
+enum class CeremonyChannel {
+    /** 🔴 Maximum: QR codes, nothing goes over the air */
+    QR_CODES,
+
+    /** 🟠 Enhanced: Bluetooth, protected by a post-quantum key exchange */
+    BLUETOOTH
 }
 
 enum class CeremonyError {

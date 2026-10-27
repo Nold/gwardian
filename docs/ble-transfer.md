@@ -51,3 +51,21 @@ Protocol messages are larger than one BLE write, so each is split with `split_in
 8. Either side disconnects. A disconnect before step 7 completes cancels the transfer.
 
 All randomness (receiver seed, encapsulation seed, nonces, the 4-character code) comes from the platform's secure random number generator.
+
+## Ceremony payload
+
+In the conversation ceremony, the sealed bytes carry the conversation settings with the pad, since Bluetooth has none of the QR ceremony framing:
+
+```
+[metadata_len: u16 BE][ceremony metadata (see ceremony.md)][pad]
+```
+
+Both apps build it with `encode_ceremony_payload` and read it with `decode_ceremony_payload` from the Rust core. The conversation is created as soon as the transfer completes: unlike QR codes, there is no mnemonic verification step, because the six words already ruled out anyone in the middle and the sealed transfer rejects any altered byte.
+
+## Screens
+
+- Both people choose **Bluetooth** instead of QR codes when starting a conversation.
+- The receiver shows its code (`GW-XXXX`) in large letters.
+- The sender lists nearby codes with their signal strength; the person taps the one shown on the other phone.
+- Both screens show the six words with **The Words Match** / **They Are Different**. A difference stops the transfer: someone may be in the middle.
+- A progress bar follows the transfer, then the conversation is created.

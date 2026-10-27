@@ -60,6 +60,27 @@ struct PadTransferFlowTests {
         #expect(!receiver.hasSealedPad)
     }
 
+    @Test func ceremonyPayload_carriesSettingsWithThePad() throws {
+        let pad = try SecureRandom.bytes(4096)
+        let metadata = CeremonyMetadata(
+            version: 1,
+            ttlSeconds: 3600,
+            disappearingMessagesSeconds: 300,
+            notificationFlags: 0x1234,
+            transferMethod: .raptor,
+            relayUrl: "https://relay.example.com"
+        )
+        let payload = encodeCeremonyPayload(metadata: metadata, padBytes: pad)
+
+        let decoded = try decodeCeremonyPayload(payload: overBLE(payload))
+        #expect(decoded.pad == pad)
+        #expect(decoded.metadata.ttlSeconds == 3600)
+        #expect(decoded.metadata.disappearingMessagesSeconds == 300)
+        #expect(decoded.metadata.notificationFlags == 0x1234)
+        #expect(decoded.metadata.relayUrl == "https://relay.example.com")
+        #expect(throws: (any Error).self) { try decodeCeremonyPayload(payload: [0, 1]) }
+    }
+
     @Test func receiverConfirmingFirst_opensWhenPadArrives() throws {
         let receiver = try PadReceiverFlow()
         let sender = try PadSenderFlow(offer: receiver.offer)

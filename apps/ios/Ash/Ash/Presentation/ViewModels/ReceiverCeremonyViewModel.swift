@@ -29,6 +29,12 @@ final class ReceiverCeremonyViewModel {
     private(set) var receivedFrameCount: Int = 0
     private(set) var progress: Double = 0.0
 
+    /// How the pad comes from the other phone
+    var channel: CeremonyChannel = .qrCodes
+
+    /// Bluetooth receiving session, while `channel` is `.bluetooth`
+    private(set) var bleReceiver: BLEPadReceiverSession?
+
     // Configuration state
     /// Required passphrase for QR frame decryption (must match sender's passphrase)
     var passphrase: String = ""
@@ -76,6 +82,11 @@ final class ReceiverCeremonyViewModel {
     /// Blocked if persistence requires Face ID
     var canProceedWithVerification: Bool {
         !requiresFaceIDForPersistence
+    }
+
+    /// QR codes need the spoken passphrase; Bluetooth uses its own key exchange.
+    var isChannelReady: Bool {
+        channel == .bluetooth || isPassphraseValid
     }
 
     // MARK: - Received Metadata Display
@@ -126,6 +137,46 @@ final class ReceiverCeremonyViewModel {
         fountainReceiver = dependencies.performCeremonyUseCase.createFountainReceiver(passphrase: passphrase)
 
         phase = .transferring(currentFrame: 0, totalFrames: 0)
+    }
+
+    // MARK: - Bluetooth
+
+    /// Advertise a code and wait for the other phone to send the pad.
+    func startBluetooth() {
+        dependencies.hapticService.medium()
+        let session = BLEPadReceiverSession()
+        bleReceiver = session
+        phase = .bluetoothTransfer
+        session.start()
+    }
+
+    /// The pad and settings arrived and were authenticated.
+    func bluetoothCompleted() {
+        guard phase == .bluetoothTransfer, let received = bleReceiver?.receivedPad else { return }
+        bleReceiver = nil
+        do {
+            let payload = try decodeCeremonyPayload(payload: received.pad)
+            dependencies.hapticService.success()
+            // No mnemonic step: the six words already ruled out anyone in the
+            // middle, and the sealed transfer rejects any altered byte
+            apply(metadata: payload.metadata, pad: payload.pad, showVerification: false)
+            Task { _ = await finalize() }
+        } catch {
+            Log.error(.ceremony, "Invalid Bluetooth payload: \(error)")
+            phase = .failed(.padReconstructionFailed)
+        }
+    }
+
+    /// The six words differed: the exchange may be intercepted.
+    func bluetoothWordsRejected() {
+        bleReceiver?.cancel()
+        bleReceiver = nil
+        rejectVerification()
+    }
+
+    /// Advertise a new code after a failure.
+    func retryBluetooth() {
+        bleReceiver?.start()
     }
 
     // MARK: - Frame Processing
@@ -183,33 +234,38 @@ final class ReceiverCeremonyViewModel {
         }
 
         Log.info(.ceremony, "Reconstructed pad: \(result.pad.count) bytes using \(result.blocksUsed) blocks")
+        apply(metadata: result.metadata, pad: result.pad)
+    }
 
-        // Extract metadata
+    /// Take the settings chosen by the initiator, then show the words to compare.
+    private func apply(metadata ffiMetadata: CeremonyMetadata, pad: [UInt8], showVerification: Bool = true) {
+        let flags = ffiMetadata.notificationFlags
         let metadata = CeremonyMetadataSwift(
-            ttlSeconds: result.metadata.ttlSeconds,
-            disappearingMessagesSeconds: result.metadata.disappearingMessagesSeconds,
-            conversationFlags: result.metadata.notificationFlags,
-            relayURL: result.metadata.relayUrl
+            ttlSeconds: ffiMetadata.ttlSeconds,
+            disappearingMessagesSeconds: ffiMetadata.disappearingMessagesSeconds,
+            conversationFlags: flags,
+            relayURL: ffiMetadata.relayUrl
         )
         receivedMetadata = metadata
-        generatedPadBytes = result.pad
+        generatedPadBytes = pad
 
         // Decode color from conversation flags (bits 12-15) and apply it
-        let decodedColor = ConversationFlagsConstants.decodeColor(from: result.metadata.notificationFlags)
+        let decodedColor = ConversationFlagsConstants.decodeColor(from: flags)
         selectedColor = decodedColor
 
         // Decode persistence consent from conversation flags (bit 4)
-        receivedPersistenceConsent = ConversationFlagsConstants.hasPersistenceConsent(result.metadata.notificationFlags)
+        receivedPersistenceConsent = ConversationFlagsConstants.hasPersistenceConsent(flags)
 
         // Decode message padding settings from conversation flags (bits 5-7)
-        receivedMessagePaddingEnabled = ConversationFlagsConstants.hasMessagePadding(result.metadata.notificationFlags)
-        receivedMessagePaddingSize = ConversationFlagsConstants.decodePaddingSize(from: result.metadata.notificationFlags)
+        receivedMessagePaddingEnabled = ConversationFlagsConstants.hasMessagePadding(flags)
+        receivedMessagePaddingSize = ConversationFlagsConstants.decodePaddingSize(from: flags)
 
         let paddingDesc = receivedMessagePaddingEnabled ? receivedMessagePaddingSize.displayName : "off"
         Log.info(.ceremony, "Decoded metadata: ttl=\(metadata.ttlSeconds)s, disappearing=\(metadata.disappearingMessagesSeconds)s, color=\(decodedColor.rawValue), padding=\(paddingDesc), persistence=\(receivedPersistenceConsent)")
 
+        guard showVerification else { return }
         // Generate mnemonic for verification
-        let mnemonic = generateMnemonic(padBytes: result.pad)
+        let mnemonic = generateMnemonic(padBytes: pad)
         phase = .verifying(mnemonic: mnemonic)
     }
 
@@ -218,10 +274,19 @@ final class ReceiverCeremonyViewModel {
     func confirmVerification() async -> Conversation? {
         dependencies.hapticService.success()
 
-        guard let padBytes = generatedPadBytes,
-              case .verifying = phase else {
+        guard case .verifying = phase else {
             Log.error(.ceremony, "Invalid state for verification confirmation")
             phase = .failed(.checksumMismatch)
+            return nil
+        }
+        return await finalize()
+    }
+
+    /// Create the conversation from the transferred pad and settings.
+    private func finalize() async -> Conversation? {
+        guard let padBytes = generatedPadBytes else {
+            Log.error(.ceremony, "No pad bytes to finalize")
+            phase = .failed(.padReconstructionFailed)
             return nil
         }
 
@@ -294,6 +359,8 @@ final class ReceiverCeremonyViewModel {
 
     func cancel() {
         Log.info(.ceremony, "Ceremony cancelled")
+        bleReceiver?.cancel()
+        bleReceiver = nil
         phase = .failed(.cancelled)
     }
 }

@@ -37,6 +37,12 @@ final class InitiatorCeremonyViewModel {
     var entropyProgress: Double = 0.0
     var collectedEntropy: [UInt8] = []
 
+    /// How the pad is sent to the other phone
+    var channel: CeremonyChannel = .qrCodes
+
+    /// Bluetooth sending session, while `channel` is `.bluetooth`
+    private(set) var bleSender: BLEPadSenderSession?
+
     /// Required passphrase for QR frame encryption
     var passphrase: String = ""
 
@@ -157,6 +163,11 @@ final class InitiatorCeremonyViewModel {
     var isPassphraseValid: Bool {
         guard !passphrase.isEmpty else { return false }
         return validatePassphrase(passphrase: passphrase)
+    }
+
+    /// QR codes need the spoken passphrase; Bluetooth uses its own key exchange.
+    var isChannelReady: Bool {
+        channel == .bluetooth || isPassphraseValid
     }
 
     /// Computed pad size in bytes
@@ -331,6 +342,11 @@ final class InitiatorCeremonyViewModel {
                 relayURL: selectedRelayURL
             )
 
+            if channel == .bluetooth {
+                startBluetooth(padBytes: padBytes, metadata: metadata)
+                return
+            }
+
             Log.debug(.ceremony, "Creating fountain generator: serverTTL=\(serverRetention.displayName), disappearing=\(disappearingMessages.displayName), flags=0x\(String(flagsWithColor, radix: 16)), color=\(selectedColor.rawValue)")
 
             // Passphrase is required for ceremony encryption
@@ -355,6 +371,50 @@ final class InitiatorCeremonyViewModel {
             Log.error(.ceremony, "Pad generation failed: \(error)")
             phase = .failed(.qrGenerationFailed)
         }
+    }
+
+    // MARK: - Bluetooth
+
+    /// Send the pad and settings over Bluetooth instead of QR codes.
+    private func startBluetooth(padBytes: [UInt8], metadata: CeremonyMetadataSwift) {
+        let payload = encodeCeremonyPayload(
+            metadata: CeremonyMetadata(
+                version: 1,
+                ttlSeconds: metadata.ttlSeconds,
+                disappearingMessagesSeconds: metadata.disappearingMessagesSeconds,
+                notificationFlags: metadata.conversationFlags,
+                transferMethod: transferMethod.ffiMethod,
+                relayUrl: metadata.relayURL
+            ),
+            padBytes: padBytes
+        )
+        let session = BLEPadSenderSession(pad: payload)
+        bleSender = session
+        phase = .bluetoothTransfer
+        Log.info(.ceremony, "Sending pad over Bluetooth (\(payload.count) bytes)")
+        session.start()
+    }
+
+    /// The other phone received and authenticated the pad.
+    /// No mnemonic step: the six words already ruled out anyone in the
+    /// middle, and the sealed transfer rejects any altered byte.
+    func bluetoothCompleted() {
+        guard phase == .bluetoothTransfer else { return }
+        bleSender = nil
+        dependencies.hapticService.success()
+        Task { _ = await finalize() }
+    }
+
+    /// The six words differed: the exchange may be intercepted.
+    func bluetoothWordsRejected() {
+        bleSender?.cancel()
+        bleSender = nil
+        rejectVerification()
+    }
+
+    /// Start looking for the other phone again after a failure.
+    func retryBluetooth() {
+        bleSender?.start()
     }
 
     /// Start streaming QR display - generates on-demand with minimal caching
@@ -543,10 +603,19 @@ final class InitiatorCeremonyViewModel {
     func confirmVerification() async -> Conversation? {
         dependencies.hapticService.success()
 
-        guard let padBytes = generatedPadBytes,
-              case .verifying = phase else {
+        guard case .verifying = phase else {
             Log.error(.ceremony, "Invalid state for verification confirmation")
             phase = .failed(.checksumMismatch)
+            return nil
+        }
+        return await finalize()
+    }
+
+    /// Create the conversation from the transferred pad and settings.
+    private func finalize() async -> Conversation? {
+        guard let padBytes = generatedPadBytes else {
+            Log.error(.ceremony, "No pad bytes to finalize")
+            phase = .failed(.padReconstructionFailed)
             return nil
         }
 
@@ -592,6 +661,8 @@ final class InitiatorCeremonyViewModel {
     func reset() {
         Log.debug(.ceremony, "Resetting initiator ceremony state")
         stopDisplayCycling()
+        bleSender?.cancel()
+        bleSender = nil
         phase = .selectingPadSize
         generatedPadBytes = nil
         fountainGenerator = nil
@@ -618,6 +689,8 @@ final class InitiatorCeremonyViewModel {
     func cancel() {
         Log.info(.ceremony, "Ceremony cancelled")
         stopDisplayCycling()
+        bleSender?.cancel()
+        bleSender = nil
         phase = .failed(.cancelled)
     }
 

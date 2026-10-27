@@ -1,6 +1,7 @@
 package com.monadial.ash.ui.state
 
 import android.graphics.Bitmap
+import com.monadial.ash.domain.entities.CeremonyChannel
 import com.monadial.ash.domain.entities.CeremonyPhase
 import com.monadial.ash.domain.entities.ConsentState
 import com.monadial.ash.domain.entities.ConversationColor
@@ -49,6 +50,9 @@ data class InitiatorCeremonyUiState(
     val connectionTestResult: ConnectionTestResult? = null,
     val isTestingConnection: Boolean = false,
 
+    // Transfer channel
+    val channel: CeremonyChannel = CeremonyChannel.QR_CODES,
+
     // Passphrase protection
     val passphraseEnabled: Boolean = false,
     val passphrase: String = "",
@@ -83,12 +87,15 @@ data class ReceiverCeremonyUiState(
     val totalBlocks: Int = 0,
     val progress: Float = 0f,
 
+    // Transfer channel
+    val channel: CeremonyChannel = CeremonyChannel.QR_CODES,
+
     // Passphrase protection
     val passphraseEnabled: Boolean = false,
     val passphrase: String = ""
 ) {
     val canStartScanning: Boolean
-        get() = !passphraseEnabled || passphrase.isNotBlank()
+        get() = channel == CeremonyChannel.BLUETOOTH || !passphraseEnabled || passphrase.isNotBlank()
 
     val progressPercentage: Int
         get() = (progress * 100).toInt()

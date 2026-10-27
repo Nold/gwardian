@@ -1,10 +1,15 @@
 package com.monadial.ash.ui.viewmodels
 
+import android.content.Context
 import android.graphics.Bitmap
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.monadial.ash.core.services.bletransfer.BlePadSenderSession
+import com.monadial.ash.core.services.bletransfer.BleTransferState
+import com.monadial.ash.core.services.bletransfer.toUBytes
 import com.monadial.ash.domain.services.QRCodeService
+import com.monadial.ash.domain.entities.CeremonyChannel
 import com.monadial.ash.domain.entities.CeremonyError
 import com.monadial.ash.domain.entities.CeremonyPhase
 import com.monadial.ash.domain.entities.ConsentState
@@ -23,6 +28,7 @@ import com.monadial.ash.domain.usecases.conversation.RegisterConversationUseCase
 import com.monadial.ash.ui.state.ConnectionTestResult
 import com.monadial.ash.ui.state.InitiatorCeremonyUiState
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import java.security.SecureRandom
 import javax.inject.Inject
 import kotlinx.coroutines.Dispatchers
@@ -39,6 +45,7 @@ import kotlinx.coroutines.withContext
 import uniffi.ash.CeremonyMetadata
 import uniffi.ash.FountainFrameGenerator
 import uniffi.ash.TransferMethod
+import uniffi.ash.encodeCeremonyPayload
 
 /**
  * ViewModel for the initiator (sender) ceremony flow.
@@ -51,6 +58,7 @@ import uniffi.ash.TransferMethod
  */
 @HiltViewModel
 class InitiatorCeremonyViewModel @Inject constructor(
+    @ApplicationContext private val context: Context,
     private val settingsRepository: SettingsRepository,
     private val qrCodeService: QRCodeService,
     private val conversationRepository: ConversationRepository,
@@ -81,6 +89,11 @@ class InitiatorCeremonyViewModel @Inject constructor(
     private var fountainGenerator: FountainFrameGenerator? = null
     private var isGeneratingPad: Boolean = false
 
+    /** Bluetooth sending session, while the channel is Bluetooth */
+    private val _bleSender = MutableStateFlow<BlePadSenderSession?>(null)
+    val bleSender: StateFlow<BlePadSenderSession?> = _bleSender.asStateFlow()
+    private var bleJob: Job? = null
+
     init {
         loadInitialSettings()
     }
@@ -96,6 +109,10 @@ class InitiatorCeremonyViewModel @Inject constructor(
 
     fun selectPadSize(size: PadSize) {
         _uiState.update { it.copy(selectedPadSize = size) }
+    }
+
+    fun setChannel(channel: CeremonyChannel) {
+        _uiState.update { it.copy(channel = channel) }
     }
 
     fun setPassphraseEnabled(enabled: Boolean) {
@@ -223,7 +240,11 @@ class InitiatorCeremonyViewModel @Inject constructor(
                 mnemonic = cryptoService.generateMnemonic(padBytes)
                 Log.d(TAG, "Generated mnemonic: ${mnemonic.joinToString(" ")}")
 
-                preGenerateQRCodes(padBytes)
+                if (_uiState.value.channel == CeremonyChannel.BLUETOOTH) {
+                    startBluetooth(padBytes)
+                } else {
+                    preGenerateQRCodes(padBytes)
+                }
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to generate pad: ${e.message}", e)
                 _uiState.update { it.copy(phase = CeremonyPhase.Failed(CeremonyError.QR_GENERATION_FAILED)) }
@@ -260,14 +281,7 @@ class InitiatorCeremonyViewModel @Inject constructor(
         val state = _uiState.value
 
         try {
-            val metadata = CeremonyMetadata(
-                version = 1u,
-                ttlSeconds = state.serverRetention.seconds.toULong(),
-                disappearingMessagesSeconds = (state.disappearingMessages.seconds ?: 0).toUInt(),
-                notificationFlags = buildNotificationFlags(state.selectedColor),
-                transferMethod = TransferMethod.RAPTOR,
-                relayUrl = state.relayUrl
-            )
+            val metadata = buildMetadata(state)
 
             val passphraseToUse = if (state.passphraseEnabled) {
                 state.passphrase.ifEmpty { null }
@@ -299,6 +313,53 @@ class InitiatorCeremonyViewModel @Inject constructor(
             Log.e(TAG, "Failed to generate QR codes: ${e.message}", e)
             _uiState.update { it.copy(phase = CeremonyPhase.Failed(CeremonyError.QR_GENERATION_FAILED)) }
         }
+    }
+
+    private fun buildMetadata(state: InitiatorCeremonyUiState) = CeremonyMetadata(
+        version = 1u,
+        ttlSeconds = state.serverRetention.seconds.toULong(),
+        disappearingMessagesSeconds = (state.disappearingMessages.seconds ?: 0).toUInt(),
+        notificationFlags = buildNotificationFlags(state.selectedColor),
+        transferMethod = TransferMethod.RAPTOR,
+        relayUrl = state.relayUrl
+    )
+
+    // MARK: - Bluetooth
+
+    /** Send the pad and settings over Bluetooth instead of QR codes. */
+    private fun startBluetooth(padBytes: ByteArray) {
+        val payload = encodeCeremonyPayload(buildMetadata(_uiState.value), padBytes.toUBytes())
+        val session = BlePadSenderSession(context, ByteArray(payload.size) { payload[it].toByte() })
+        _bleSender.value = session
+        _uiState.update { it.copy(phase = CeremonyPhase.BluetoothTransfer) }
+        bleJob?.cancel()
+        bleJob = viewModelScope.launch {
+            session.state.first { it is BleTransferState.Completed }
+            _bleSender.value = null
+            // No mnemonic step: the six words already ruled out anyone in the
+            // middle, and the sealed transfer rejects any altered byte
+            confirmVerification()
+        }
+        Log.d(TAG, "Sending pad over Bluetooth (${payload.size} bytes)")
+        session.start()
+    }
+
+    /** The six words differed: the exchange may be intercepted. */
+    fun bluetoothWordsRejected() {
+        stopBluetooth()
+        rejectVerification()
+    }
+
+    /** Start looking for the other phone again after a failure. */
+    fun retryBluetooth() {
+        _bleSender.value?.start()
+    }
+
+    private fun stopBluetooth() {
+        bleJob?.cancel()
+        bleJob = null
+        _bleSender.value?.cancel()
+        _bleSender.value = null
     }
 
     private suspend fun generateQRImages(generator: FountainFrameGenerator, sourceCount: Int): List<Bitmap> {
@@ -499,6 +560,7 @@ class InitiatorCeremonyViewModel @Inject constructor(
     private fun cleanupResources() {
         fountainGenerator?.close()
         fountainGenerator = null
+        stopBluetooth()
     }
 
     override fun onCleared() {

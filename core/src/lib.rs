@@ -126,7 +126,10 @@ pub mod wordlist;
 pub(crate) mod otp;
 
 // Re-export main types at crate root
-pub use ceremony::{CeremonyMetadata, NotificationFlags, DEFAULT_TTL_SECONDS, METADATA_VERSION};
+pub use ceremony::{
+    decode_ceremony_payload, encode_ceremony_payload, CeremonyMetadata, NotificationFlags,
+    DEFAULT_TTL_SECONDS, METADATA_VERSION,
+};
 pub use error::{Error, Result};
 pub use fountain::{
     EncodedBlock, FountainDecoder, FountainEncoder, LegacyLTDecoder, LegacyLTEncoder,
