@@ -78,6 +78,8 @@ android {
     testOptions {
         unitTests.all {
             it.useJUnitPlatform()
+            // Host build of the Rust bindings, for tests that run the real protocol
+            it.systemProperty("jna.library.path", rootProject.file("../../bindings/target/release").absolutePath)
         }
         unitTests.isReturnDefaultValues = true
     }
@@ -206,6 +208,7 @@ dependencies {
 
     // Testing
     testImplementation(libs.junit.jupiter.api)
+    testImplementation(libs.jna)
     testRuntimeOnly(libs.junit.jupiter.engine)
     testImplementation(libs.junit.jupiter.params)
     testImplementation(libs.mockk)

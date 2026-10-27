@@ -88,6 +88,10 @@ jobs:
             exit 1
           fi
 
+      - name: Build host Rust bindings for unit tests
+        working-directory: bindings
+        run: cargo build --release --lib
+
       - name: Run Unit Tests
         working-directory: apps/android
         run: |
