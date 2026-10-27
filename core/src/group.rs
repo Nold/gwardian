@@ -38,6 +38,23 @@
 //! - A range is accepted at most once: replays are rejected.
 //! - Messages may arrive out of order or be lost without desynchronizing.
 //!
+//! # Corruption Handling
+//!
+//! Each pad keeps a CRC-32 per `CHECKSUM_CHUNK_SIZE` chunk, computed on import
+//! and updated as bytes are wiped. Chunks are checked before their bytes are
+//! used, which tells two failures apart:
+//!
+//! - `PadCorrupted`: this device's copy of the pad is damaged.
+//! - `AuthenticationFailed`: the copy is intact, so the message was altered
+//!   in transit or the sender's own copy is damaged.
+//!
+//! [`Group::health`] reports members whose pad is damaged locally or whose
+//! messages repeatedly fail authentication. The fix is to exchange that
+//! member's pad again, in person, and install it with [`Group::replace_pad`].
+//!
+//! The checksums are stored next to the pad itself, so they reveal nothing to
+//! anyone who could not already read the pad.
+//!
 //! # Limitations
 //!
 //! - Authenticity is per group, not per member: every member holds every pad,
@@ -65,8 +82,9 @@
 //! assert_eq!(bob.decrypt(&frame).unwrap(), b"Hello");
 //! ```
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
+use crate::crc;
 use crate::error::{Error, Result};
 use crate::mac::{AuthKey, AUTH_KEY_SIZE};
 use crate::message::{MessageFrame, MessageType, MAX_CIPHERTEXT_LEN};
@@ -81,6 +99,13 @@ pub const GROUP_FRAME_VERSION: u8 = 1;
 /// Group header size in bytes (version + sender + offset).
 pub const GROUP_HEADER_SIZE: usize = 10;
 
+/// Size of the pad chunks covered by one integrity checksum.
+pub const CHECKSUM_CHUNK_SIZE: usize = 4096;
+
+/// Consecutive authentication failures after which a member is reported
+/// as [`MemberHealth::Suspect`].
+pub const SUSPECT_THRESHOLD: u32 = 3;
+
 /// A member's sending pad, tracking which byte ranges have been consumed.
 ///
 /// The owner consumes it sequentially when sending. Holders of a copy
@@ -89,6 +114,8 @@ pub struct MemberPad {
     bytes: Vec<u8>,
     /// Consumed `[start, end)` ranges, sorted and non-overlapping.
     used: Vec<(usize, usize)>,
+    /// CRC-32 of each `CHECKSUM_CHUNK_SIZE` chunk, consumed bytes zeroed.
+    checksums: Vec<u32>,
 }
 
 impl Drop for MemberPad {
@@ -100,24 +127,66 @@ impl Drop for MemberPad {
 impl MemberPad {
     /// Create a fresh pad from raw bytes.
     pub fn from_bytes(bytes: Vec<u8>) -> Self {
+        let checksums = bytes
+            .chunks(CHECKSUM_CHUNK_SIZE)
+            .map(crc::compute)
+            .collect();
         Self {
             bytes,
             used: Vec::new(),
+            checksums,
         }
     }
 
-    /// Restore a pad with its consumed ranges, as returned by `used_ranges`.
-    pub fn from_bytes_with_state(bytes: Vec<u8>, used: &[(usize, usize)]) -> Self {
-        let mut pad = Self::from_bytes(bytes);
-        for &(start, end) in used {
-            pad.mark_used(start, end);
+    /// Restore a pad with the state returned by `used_ranges` and `checksums`.
+    ///
+    /// Consumed ranges are wiped, so `bytes` may be stored either before or
+    /// after wiping. Integrity is checked lazily as bytes are used; call
+    /// [`MemberPad::verify`] to check the whole pad up front.
+    ///
+    /// # Errors
+    ///
+    /// `PadCorrupted` if the number of checksums does not match the pad size.
+    pub fn from_bytes_with_state(
+        bytes: Vec<u8>,
+        used: &[(usize, usize)],
+        checksums: &[u32],
+    ) -> Result<Self> {
+        if checksums.len() != bytes.len().div_ceil(CHECKSUM_CHUNK_SIZE) {
+            return Err(Error::PadCorrupted { offset: 0 });
         }
-        pad
+        let mut pad = Self {
+            bytes,
+            used: Vec::new(),
+            checksums: checksums.to_vec(),
+        };
+        for &(start, end) in used {
+            let end = end.min(pad.bytes.len());
+            if start < end {
+                secure_zero(&mut pad.bytes[start..end]);
+                pad.mark_used(start, end);
+            }
+        }
+        Ok(pad)
     }
 
     /// Consumed `[start, end)` ranges, for persistence.
     pub fn used_ranges(&self) -> &[(usize, usize)] {
         &self.used
+    }
+
+    /// Integrity checksums, for persistence alongside the pad.
+    pub fn checksums(&self) -> &[u32] {
+        &self.checksums
+    }
+
+    /// Check the whole pad against its checksums.
+    ///
+    /// # Errors
+    ///
+    /// `PadCorrupted` with the offset of the first damaged chunk.
+    pub fn verify(&self) -> Result<()> {
+        self.verify_range(0, self.bytes.len())
     }
 
     /// Total pad size in bytes.
@@ -158,10 +227,34 @@ impl MemberPad {
         Ok(end)
     }
 
-    /// Consume `[start, end)`: wipe the bytes and record the range.
+    /// Check the chunks overlapping `[start, end)`.
+    fn verify_range(&self, start: usize, end: usize) -> Result<()> {
+        if start >= end {
+            return Ok(());
+        }
+        for chunk in start / CHECKSUM_CHUNK_SIZE..end.div_ceil(CHECKSUM_CHUNK_SIZE) {
+            if crc::compute(self.chunk(chunk)) != self.checksums[chunk] {
+                return Err(Error::PadCorrupted {
+                    offset: chunk * CHECKSUM_CHUNK_SIZE,
+                });
+            }
+        }
+        Ok(())
+    }
+
+    fn chunk(&self, index: usize) -> &[u8] {
+        let start = index * CHECKSUM_CHUNK_SIZE;
+        &self.bytes[start..(start + CHECKSUM_CHUNK_SIZE).min(self.bytes.len())]
+    }
+
+    /// Consume `[start, end)`: wipe the bytes, record the range and update
+    /// the checksums of the affected chunks.
     fn burn(&mut self, start: usize, end: usize) {
         secure_zero(&mut self.bytes[start..end]);
         self.mark_used(start, end);
+        for chunk in start / CHECKSUM_CHUNK_SIZE..end.div_ceil(CHECKSUM_CHUNK_SIZE) {
+            self.checksums[chunk] = crc::compute(self.chunk(chunk));
+        }
     }
 
     fn mark_used(&mut self, start: usize, end: usize) {
@@ -225,10 +318,30 @@ impl GroupFrame {
     }
 }
 
+/// Integrity status of a member's pad, as seen from this device.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MemberHealth {
+    /// No problem detected.
+    Healthy,
+    /// This device's copy of the member's pad failed its checksum.
+    CorruptedLocally,
+    /// Several consecutive messages from the member failed authentication:
+    /// their own copy may be damaged, or someone is forging messages in
+    /// their name.
+    Suspect {
+        /// Number of failures since the last authenticated message.
+        consecutive_failures: u32,
+    },
+}
+
 /// A member's view of a group: their own pad plus copies of everyone else's.
 pub struct Group {
     me: MemberId,
     pads: BTreeMap<MemberId, MemberPad>,
+    /// Consecutive authentication failures per sender.
+    failures: BTreeMap<MemberId, u32>,
+    /// Members whose local pad copy failed its checksum.
+    corrupted: BTreeSet<MemberId>,
 }
 
 impl Group {
@@ -236,7 +349,12 @@ impl Group {
     pub fn new(me: MemberId, own_pad: MemberPad) -> Self {
         let mut pads = BTreeMap::new();
         pads.insert(me, own_pad);
-        Self { me, pads }
+        Self {
+            me,
+            pads,
+            failures: BTreeMap::new(),
+            corrupted: BTreeSet::new(),
+        }
     }
 
     /// This device's member id.
@@ -271,7 +389,55 @@ impl Group {
         if member == self.me {
             return None;
         }
+        self.failures.remove(&member);
+        self.corrupted.remove(&member);
         self.pads.remove(&member)
+    }
+
+    /// Install a freshly exchanged pad for a member, including this device,
+    /// and clear their health status.
+    ///
+    /// # Errors
+    ///
+    /// `UnknownMember` if the member is not in the group.
+    pub fn replace_pad(&mut self, member: MemberId, pad: MemberPad) -> Result<()> {
+        let slot = self
+            .pads
+            .get_mut(&member)
+            .ok_or(Error::UnknownMember { member })?;
+        *slot = pad;
+        self.failures.remove(&member);
+        self.corrupted.remove(&member);
+        Ok(())
+    }
+
+    /// Integrity status of a member's pad, or `None` if not a member.
+    pub fn health(&self, member: MemberId) -> Option<MemberHealth> {
+        if !self.pads.contains_key(&member) {
+            return None;
+        }
+        if self.corrupted.contains(&member) {
+            return Some(MemberHealth::CorruptedLocally);
+        }
+        match self.failures.get(&member) {
+            Some(&n) if n >= SUSPECT_THRESHOLD => Some(MemberHealth::Suspect {
+                consecutive_failures: n,
+            }),
+            _ => Some(MemberHealth::Healthy),
+        }
+    }
+
+    /// Check every pad against its checksums, for example after loading the
+    /// group from storage. Returns the members whose pad is damaged.
+    pub fn check_integrity(&mut self) -> Vec<MemberId> {
+        let damaged: Vec<MemberId> = self
+            .pads
+            .iter()
+            .filter(|(_, pad)| pad.verify().is_err())
+            .map(|(&member, _)| member)
+            .collect();
+        self.corrupted.extend(damaged.iter().copied());
+        damaged
     }
 
     /// Whether a message of `plaintext_len` bytes fits in this device's pad.
@@ -291,6 +457,10 @@ impl Group {
         let pad = self.pads.get_mut(&me).expect("own pad is always present");
         let start = pad.next_send_offset();
         let end = pad.check_range(start, AUTH_KEY_SIZE + plaintext.len())?;
+        if let Err(e) = pad.verify_range(start, end) {
+            self.corrupted.insert(me);
+            return Err(e);
+        }
 
         let auth_key = AuthKey::from_slice(&pad.bytes[start..start + AUTH_KEY_SIZE]);
         let result = MessageFrame::encrypt(
@@ -311,7 +481,8 @@ impl Group {
 
     /// Verify and decrypt a message from another member.
     ///
-    /// The pad range is consumed only if authentication succeeds.
+    /// The pad range is consumed only if authentication succeeds. Integrity
+    /// and authentication failures are recorded for [`Group::health`].
     pub fn decrypt(&mut self, frame: &GroupFrame) -> Result<Vec<u8>> {
         let pad = self
             .pads
@@ -324,12 +495,24 @@ impl Group {
             available: 0,
         })?;
         let end = pad.check_range(start, AUTH_KEY_SIZE + frame.frame.ciphertext.len())?;
+        if let Err(e) = pad.verify_range(start, end) {
+            self.corrupted.insert(frame.sender);
+            return Err(e);
+        }
 
         let auth_key = AuthKey::from_slice(&pad.bytes[start..start + AUTH_KEY_SIZE]);
-        let plaintext = frame
+        let plaintext = match frame
             .frame
-            .decrypt(&pad.bytes[start + AUTH_KEY_SIZE..end], &auth_key)?;
+            .decrypt(&pad.bytes[start + AUTH_KEY_SIZE..end], &auth_key)
+        {
+            Ok(plaintext) => plaintext,
+            Err(e) => {
+                *self.failures.entry(frame.sender).or_insert(0) += 1;
+                return Err(e);
+            }
+        };
         pad.burn(start, end);
+        self.failures.remove(&frame.sender);
         Ok(plaintext)
     }
 
@@ -533,20 +716,142 @@ mod tests {
         let m2 = send(&mut groups[0], b"two");
         groups[1].decrypt(&m2).unwrap();
 
-        // Receiver restarts: rebuild sender's pad copy from saved state
-        let used = groups[1].pad(0).unwrap().used_ranges().to_vec();
+        // Receiver restarts: rebuild sender's pad copy from saved state.
+        // The original (unwiped) bytes are given back: used ranges get wiped.
+        let saved = groups[1].pad(0).unwrap();
+        let used = saved.used_ranges().to_vec();
+        let checksums = saved.checksums().to_vec();
+        let pad = MemberPad::from_bytes_with_state(pad_bytes(0, 4096), &used, &checksums).unwrap();
+        pad.verify().unwrap();
         let mut restored = Group::new(1, MemberPad::from_bytes(pad_bytes(1, 4096)));
-        restored
-            .add_member(
-                0,
-                MemberPad::from_bytes_with_state(pad_bytes(0, 4096), &used),
-            )
-            .unwrap();
+        restored.add_member(0, pad).unwrap();
         assert!(matches!(
             restored.decrypt(&m2),
             Err(Error::PadRangeAlreadyUsed { .. })
         ));
         assert_eq!(restored.decrypt(&m1).unwrap(), b"one");
+    }
+
+    #[test]
+    fn restore_rejects_mismatched_checksums() {
+        let pad = MemberPad::from_bytes(pad_bytes(0, 10_000));
+        let mut checksums = pad.checksums().to_vec();
+        assert_eq!(checksums.len(), 3);
+        checksums.pop();
+        assert!(matches!(
+            MemberPad::from_bytes_with_state(pad_bytes(0, 10_000), &[], &checksums),
+            Err(Error::PadCorrupted { offset: 0 })
+        ));
+    }
+
+    #[test]
+    fn checksums_follow_wiping() {
+        let mut groups = family(2, 10_000);
+        for _ in 0..50 {
+            let frame = send(&mut groups[0], b"keep checksums in sync");
+            groups[1].decrypt(&frame).unwrap();
+        }
+        groups[0].pad(0).unwrap().verify().unwrap();
+        groups[1].pad(0).unwrap().verify().unwrap();
+    }
+
+    #[test]
+    fn local_corruption_detected_before_use() {
+        let mut groups = family(2, 10_000);
+        let frame = send(&mut groups[0], b"hello");
+        // Damage the receiver's copy of member 0's pad
+        groups[1].pads.get_mut(&0).unwrap().bytes[3] ^= 0x40;
+
+        assert_eq!(
+            groups[1].decrypt(&frame).unwrap_err(),
+            Error::PadCorrupted { offset: 0 }
+        );
+        assert_eq!(groups[1].health(0), Some(MemberHealth::CorruptedLocally));
+        assert!(groups[1].pad(0).unwrap().used_ranges().is_empty());
+        // Other members are unaffected
+        assert_eq!(groups[1].health(1), Some(MemberHealth::Healthy));
+    }
+
+    #[test]
+    fn own_corruption_blocks_sending() {
+        let mut groups = family(2, 10_000);
+        groups[0].pads.get_mut(&0).unwrap().bytes[10] ^= 1;
+        assert_eq!(
+            groups[0].encrypt(MessageType::Text, b"hi").unwrap_err(),
+            Error::PadCorrupted { offset: 0 }
+        );
+        assert_eq!(groups[0].health(0), Some(MemberHealth::CorruptedLocally));
+        assert_eq!(groups[0].pad(0).unwrap().next_send_offset(), 0);
+    }
+
+    #[test]
+    fn repeated_auth_failures_make_member_suspect() {
+        let mut groups = family(2, 10_000);
+        let frame = send(&mut groups[0], b"genuine");
+        let mut forged = frame.clone();
+        forged.frame.ciphertext[0] ^= 1;
+
+        for n in 1..SUSPECT_THRESHOLD {
+            assert_eq!(
+                groups[1].decrypt(&forged).unwrap_err(),
+                Error::AuthenticationFailed
+            );
+            assert_eq!(groups[1].health(0), Some(MemberHealth::Healthy), "{n}");
+        }
+        groups[1].decrypt(&forged).unwrap_err();
+        assert_eq!(
+            groups[1].health(0),
+            Some(MemberHealth::Suspect {
+                consecutive_failures: SUSPECT_THRESHOLD
+            })
+        );
+
+        // An authenticated message clears the suspicion
+        assert_eq!(groups[1].decrypt(&frame).unwrap(), b"genuine");
+        assert_eq!(groups[1].health(0), Some(MemberHealth::Healthy));
+    }
+
+    #[test]
+    fn replays_do_not_count_as_failures() {
+        let mut groups = family(2, 10_000);
+        let frame = send(&mut groups[0], b"once");
+        groups[1].decrypt(&frame).unwrap();
+        for _ in 0..SUSPECT_THRESHOLD {
+            groups[1].decrypt(&frame).unwrap_err();
+        }
+        assert_eq!(groups[1].health(0), Some(MemberHealth::Healthy));
+    }
+
+    #[test]
+    fn integrity_check_and_repair() {
+        let mut groups = family(3, 10_000);
+        groups[0].pads.get_mut(&2).unwrap().bytes[9_000] ^= 0xFF;
+        assert_eq!(groups[0].check_integrity(), vec![2]);
+        assert_eq!(
+            groups[0].pad(2).unwrap().verify().unwrap_err(),
+            Error::PadCorrupted { offset: 8192 }
+        );
+        assert_eq!(groups[0].health(2), Some(MemberHealth::CorruptedLocally));
+        assert_eq!(groups[0].health(9), None);
+
+        // Member 2 exchanges a new pad in person
+        let new_pad = pad_bytes(42, 10_000);
+        groups[0]
+            .replace_pad(2, MemberPad::from_bytes(new_pad.clone()))
+            .unwrap();
+        groups[2]
+            .replace_pad(2, MemberPad::from_bytes(new_pad))
+            .unwrap();
+        assert_eq!(groups[0].health(2), Some(MemberHealth::Healthy));
+        let frame = send(&mut groups[2], b"fixed");
+        assert_eq!(groups[0].decrypt(&frame).unwrap(), b"fixed");
+
+        assert_eq!(
+            groups[0]
+                .replace_pad(9, MemberPad::from_bytes(vec![0; 10]))
+                .unwrap_err(),
+            Error::UnknownMember { member: 9 }
+        );
     }
 
     #[test]

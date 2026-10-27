@@ -194,6 +194,12 @@ pub enum Error {
         /// Start of the requested range.
         offset: usize,
     },
+
+    /// Local pad copy failed its integrity checksum.
+    PadCorrupted {
+        /// Start of the first damaged chunk.
+        offset: usize,
+    },
 }
 
 impl fmt::Display for Error {
@@ -303,6 +309,9 @@ impl fmt::Display for Error {
             }
             Error::PadRangeAlreadyUsed { offset } => {
                 write!(f, "pad range already used at offset {}", offset)
+            }
+            Error::PadCorrupted { offset } => {
+                write!(f, "pad corrupted at offset {}", offset)
             }
         }
     }

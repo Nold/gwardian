@@ -140,7 +140,7 @@ pub use pad_calculator::{
     calculate_pad_stats, calculate_pad_stats_with_qr_size, expected_frames, redundancy_blocks,
     PadCalculator, PadStats, METADATA_OVERHEAD, DEFAULT_QR_BLOCK_SIZE,
 };
-pub use group::{Group, GroupFrame, MemberId, MemberPad};
+pub use group::{Group, GroupFrame, MemberHealth, MemberId, MemberPad};
 pub use pad::{Pad, PadSize, Role};
 
 // Re-export authenticated message types - the primary API for encryption
