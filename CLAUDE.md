@@ -13,6 +13,7 @@ ash/
 ├── apps/
 │   └── ios/        # SwiftUI iOS app
 ├── core/           # Shared Rust core (cryptographic authority)
+├── transfer/       # Pad transfer for Standard/Enhanced levels (X-Wing KEM, kept out of core)
 ├── backend/        # Rust relay server
 ├── bindings/       # FFI bindings (Swift via UniFFI)
 ├── website/        # Static documentation website
