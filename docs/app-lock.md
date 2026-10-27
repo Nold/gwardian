@@ -46,8 +46,17 @@ The counter and the time of the last failure are kept in secure storage, outside
 
 Existing records written before the lock are plaintext in secure storage. Right after the code is set up, every record is read and written back encrypted. A plaintext record found later is still accepted and encrypted on its next read.
 
+### Forgotten code
+
+There is no recovery. The only way out is to delete and reinstall the app, which erases every pad and conversation (the fresh-install check also deletes the vault key and the attempt counter).
+
+### While locked
+
+The app shows only the lock screen; nothing read from the vault stays in memory. Conversations, pads and the screens built from them are rebuilt after unlocking.
+
 ## Limits
 
 - The delays and the erase option are enforced by the app. An attacker able to run code on the device or modify its storage can bypass them; that is the compromised-device case, out of scope in `threat-model.md`. Guessing the code offline still requires the device itself.
 - A 6-digit code has a million combinations: it stops relatives and colleagues, not an attacker with forensic tools and time.
+- Messages kept by "disappearing messages" persistence are stored by SwiftData under iOS data protection, not sealed with the vault key; while locked the app never displays them, and an erase deletes them.
 - Push notifications cannot decrypt anything while the app is locked; messages wait on the relay until the app is unlocked.
