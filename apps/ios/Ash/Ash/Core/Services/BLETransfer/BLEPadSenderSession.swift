@@ -173,7 +173,13 @@ extension BLEPadSenderSession: CBCentralManagerDelegate {
         advertisementData: [String: Any],
         rssi RSSI: NSNumber
     ) {
-        let name = advertisementData[CBAdvertisementDataLocalNameKey] as? String ?? peripheral.name
+        // iOS receivers put the code in the local name, Android ones in service data
+        let localName = advertisementData[CBAdvertisementDataLocalNameKey] as? String
+        let serviceData = advertisementData[CBAdvertisementDataServiceDataKey] as? [CBUUID: Data]
+        let dataCode = serviceData?[BLETransferUUIDs.service]
+            .flatMap { String(data: $0, encoding: .ascii) }
+            .map { BLESessionCode.prefix + $0 }
+        let name = [localName, dataCode, peripheral.name].first { BLESessionCode.isValid($0) } ?? nil
         let rssi = RSSI.intValue
         nonisolated(unsafe) let peripheral = peripheral
         MainActor.assumeIsolated {
