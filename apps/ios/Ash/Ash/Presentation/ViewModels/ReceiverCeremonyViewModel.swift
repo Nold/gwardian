@@ -157,7 +157,10 @@ final class ReceiverCeremonyViewModel {
         do {
             let payload = try decodeCeremonyPayload(payload: received.pad)
             dependencies.hapticService.success()
-            apply(metadata: payload.metadata, pad: payload.pad)
+            // No mnemonic step: the six words already ruled out anyone in the
+            // middle, and the sealed transfer rejects any altered byte
+            apply(metadata: payload.metadata, pad: payload.pad, showVerification: false)
+            Task { _ = await finalize() }
         } catch {
             Log.error(.ceremony, "Invalid Bluetooth payload: \(error)")
             phase = .failed(.padReconstructionFailed)
@@ -235,7 +238,7 @@ final class ReceiverCeremonyViewModel {
     }
 
     /// Take the settings chosen by the initiator, then show the words to compare.
-    private func apply(metadata ffiMetadata: CeremonyMetadata, pad: [UInt8]) {
+    private func apply(metadata ffiMetadata: CeremonyMetadata, pad: [UInt8], showVerification: Bool = true) {
         let flags = ffiMetadata.notificationFlags
         let metadata = CeremonyMetadataSwift(
             ttlSeconds: ffiMetadata.ttlSeconds,
@@ -260,6 +263,7 @@ final class ReceiverCeremonyViewModel {
         let paddingDesc = receivedMessagePaddingEnabled ? receivedMessagePaddingSize.displayName : "off"
         Log.info(.ceremony, "Decoded metadata: ttl=\(metadata.ttlSeconds)s, disappearing=\(metadata.disappearingMessagesSeconds)s, color=\(decodedColor.rawValue), padding=\(paddingDesc), persistence=\(receivedPersistenceConsent)")
 
+        guard showVerification else { return }
         // Generate mnemonic for verification
         let mnemonic = generateMnemonic(padBytes: pad)
         phase = .verifying(mnemonic: mnemonic)
@@ -270,10 +274,19 @@ final class ReceiverCeremonyViewModel {
     func confirmVerification() async -> Conversation? {
         dependencies.hapticService.success()
 
-        guard let padBytes = generatedPadBytes,
-              case .verifying = phase else {
+        guard case .verifying = phase else {
             Log.error(.ceremony, "Invalid state for verification confirmation")
             phase = .failed(.checksumMismatch)
+            return nil
+        }
+        return await finalize()
+    }
+
+    /// Create the conversation from the transferred pad and settings.
+    private func finalize() async -> Conversation? {
+        guard let padBytes = generatedPadBytes else {
+            Log.error(.ceremony, "No pad bytes to finalize")
+            phase = .failed(.padReconstructionFailed)
             return nil
         }
 

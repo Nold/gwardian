@@ -148,7 +148,10 @@ class ReceiverCeremonyViewModel @Inject constructor(
             }
             try {
                 val payload = decodeCeremonyPayload(received.pad.toUBytes())
-                applyReceived(payload.metadata, payload.pad)
+                // No mnemonic step: the six words already ruled out anyone in the
+                // middle, and the sealed transfer rejects any altered byte
+                applyReceived(payload.metadata, payload.pad, showVerification = false)
+                confirmVerification()
             } catch (e: Exception) {
                 Log.e(TAG, "Invalid Bluetooth payload: ${e.message}", e)
                 _uiState.update { it.copy(phase = CeremonyPhase.Failed(CeremonyError.PAD_RECONSTRUCTION_FAILED)) }
@@ -235,7 +238,7 @@ class ReceiverCeremonyViewModel @Inject constructor(
     }
 
     /** Take the settings chosen by the initiator, then show the words to compare. */
-    private fun applyReceived(metadata: CeremonyMetadata, padUBytes: List<UByte>) {
+    private fun applyReceived(metadata: CeremonyMetadata, padUBytes: List<UByte>, showVerification: Boolean = true) {
         Log.d(TAG, "Metadata: ttl=${metadata.ttlSeconds}, relayUrl=${metadata.relayUrl}")
 
         // Extract color from notification flags
@@ -250,7 +253,9 @@ class ReceiverCeremonyViewModel @Inject constructor(
         receivedMetadata = metadata
         receivedPad = padUBytes
 
-        _uiState.update { it.copy(phase = CeremonyPhase.Verifying(mnemonic = mnemonic)) }
+        if (showVerification) {
+            _uiState.update { it.copy(phase = CeremonyPhase.Verifying(mnemonic = mnemonic)) }
+        }
     }
 
     private fun logPadDebugInfo(padUBytes: List<UByte>) {

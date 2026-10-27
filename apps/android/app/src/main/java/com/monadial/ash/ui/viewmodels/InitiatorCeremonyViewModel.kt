@@ -336,7 +336,9 @@ class InitiatorCeremonyViewModel @Inject constructor(
         bleJob = viewModelScope.launch {
             session.state.first { it is BleTransferState.Completed }
             _bleSender.value = null
-            finishSending()
+            // No mnemonic step: the six words already ruled out anyone in the
+            // middle, and the sealed transfer rejects any altered byte
+            confirmVerification()
         }
         Log.d(TAG, "Sending pad over Bluetooth (${payload.size} bytes)")
         session.start()

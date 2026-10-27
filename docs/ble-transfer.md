@@ -60,7 +60,7 @@ In the conversation ceremony, the sealed bytes carry the conversation settings w
 [metadata_len: u16 BE][ceremony metadata (see ceremony.md)][pad]
 ```
 
-Both apps build it with `encode_ceremony_payload` and read it with `decode_ceremony_payload` from the Rust core. After the transfer, both phones show the usual mnemonic verification before the conversation is created.
+Both apps build it with `encode_ceremony_payload` and read it with `decode_ceremony_payload` from the Rust core. The conversation is created as soon as the transfer completes: unlike QR codes, there is no mnemonic verification step, because the six words already ruled out anyone in the middle and the sealed transfer rejects any altered byte.
 
 ## Screens
 
@@ -68,4 +68,4 @@ Both apps build it with `encode_ceremony_payload` and read it with `decode_cerem
 - The receiver shows its code (`GW-XXXX`) in large letters.
 - The sender lists nearby codes with their signal strength; the person taps the one shown on the other phone.
 - Both screens show the six words with **The Words Match** / **They Are Different**. A difference stops the transfer: someone may be in the middle.
-- A progress bar follows the transfer, then the mnemonic verification starts.
+- A progress bar follows the transfer, then the conversation is created.

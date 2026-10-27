@@ -396,10 +396,13 @@ final class InitiatorCeremonyViewModel {
     }
 
     /// The other phone received and authenticated the pad.
+    /// No mnemonic step: the six words already ruled out anyone in the
+    /// middle, and the sealed transfer rejects any altered byte.
     func bluetoothCompleted() {
         guard phase == .bluetoothTransfer else { return }
         bleSender = nil
-        Task { await proceedToVerification() }
+        dependencies.hapticService.success()
+        Task { _ = await finalize() }
     }
 
     /// The six words differed: the exchange may be intercepted.
@@ -600,10 +603,19 @@ final class InitiatorCeremonyViewModel {
     func confirmVerification() async -> Conversation? {
         dependencies.hapticService.success()
 
-        guard let padBytes = generatedPadBytes,
-              case .verifying = phase else {
+        guard case .verifying = phase else {
             Log.error(.ceremony, "Invalid state for verification confirmation")
             phase = .failed(.checksumMismatch)
+            return nil
+        }
+        return await finalize()
+    }
+
+    /// Create the conversation from the transferred pad and settings.
+    private func finalize() async -> Conversation? {
+        guard let padBytes = generatedPadBytes else {
+            Log.error(.ceremony, "No pad bytes to finalize")
+            phase = .failed(.padReconstructionFailed)
             return nil
         }
 
