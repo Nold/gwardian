@@ -47,6 +47,8 @@ final class BLEPadReceiverSession: NSObject {
             try perform(flow.confirmWords())
             if receivedPad == nil {
                 state = .transferring(progress: reassembler.progress())
+            } else {
+                stop()
             }
         } catch {
             fail(.protocolError("\(error)"))
@@ -104,10 +106,10 @@ final class BLEPadReceiverSession: NSObject {
             case .compareWords(let words):
                 state = .comparingWords(words)
             case .receivedPad(let pad, let level):
+                // Callers stop the session once any pending write response is sent
                 receivedPad = ReceivedPad(pad: pad, level: level)
                 state = .completed
                 Log.info(.ceremony, "BLE pad received")
-                stop()
             }
         }
     }
@@ -191,7 +193,9 @@ extension BLEPadReceiverSession: CBPeripheralManagerDelegate {
     ) {
         let identifier = central.identifier
         MainActor.assumeIsolated {
-            guard subscriber?.identifier == identifier, receivedPad == nil else { return }
+            // Once the sealed pad is here, the link is no longer needed to finish
+            let padPending = flow?.hasSealedPad ?? false
+            guard subscriber?.identifier == identifier, receivedPad == nil, !padPending else { return }
             fail(.disconnected)
         }
     }
@@ -219,7 +223,11 @@ extension BLEPadReceiverSession: CBPeripheralManagerDelegate {
                 for request in requests {
                     try receive([UInt8](request.value ?? Data()))
                 }
+                // Answer before stopping, so the sender learns the outcome of its last write
                 manager?.respond(to: first, withResult: .success)
+                if receivedPad != nil {
+                    stop()
+                }
             } catch {
                 manager?.respond(to: first, withResult: .unlikelyError)
                 fail(.protocolError("\(error)"))

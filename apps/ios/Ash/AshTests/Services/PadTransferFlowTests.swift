@@ -55,7 +55,9 @@ struct PadTransferFlowTests {
         // The sender confirms first: the receiver keeps the pad sealed until it confirms too
         let sealed = try sender.confirmWordsAndSeal(pad: pad, level: .enhanced)
         #expect(try receiver.handle(overBLE(sealed)).isEmpty)
+        #expect(receiver.hasSealedPad)
         #expect(try receiver.confirmWords() == [.receivedPad(pad: pad, level: .enhanced)])
+        #expect(!receiver.hasSealedPad)
     }
 
     @Test func receiverConfirmingFirst_opensWhenPadArrives() throws {

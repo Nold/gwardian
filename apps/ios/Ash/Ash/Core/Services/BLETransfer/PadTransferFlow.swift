@@ -97,6 +97,9 @@ final class PadReceiverFlow {
     private var wordsConfirmed = false
     private var pendingSealedPad: [UInt8]?
 
+    /// The sealed pad arrived and waits for this person to confirm the words.
+    var hasSealedPad: Bool { pendingSealedPad != nil }
+
     init() throws {
         transfer = try PadTransferReceiver(seed: SecureRandom.bytes(32))
         offer = transfer.offer()
