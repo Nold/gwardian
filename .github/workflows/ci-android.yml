@@ -80,6 +80,8 @@ jobs:
       - name: Build Android App (Debug)
         working-directory: apps/android
         run: |
+          # Without pipefail the step would take tee's exit status and never fail
+          set -o pipefail
           if ! ./gradlew assembleDebug --no-daemon 2>&1 | tee gradle-build.log; then
             # Surface the cause as an annotation, readable without the full log
             msg=$(grep -E "^e: |error:|What went wrong" -A4 gradle-build.log | head -40 \
@@ -95,6 +97,8 @@ jobs:
       - name: Run Unit Tests
         working-directory: apps/android
         run: |
+          # Without pipefail the step would take tee's exit status and never fail
+          set -o pipefail
           if ! ./gradlew testDebugUnitTest --no-daemon 2>&1 | tee gradle-test.log; then
             # Surface failing tests as an annotation, readable without the full log
             msg=$(grep -E " FAILED$|^e: |error:|What went wrong|Exception|expected:" -A2 gradle-test.log | head -60 \
