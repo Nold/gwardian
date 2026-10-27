@@ -1,0 +1,23 @@
+[package]
+name = "ash-transfer"
+version = "0.1.0"
+edition = "2021"
+description = "Pad transfer over remote or short-range channels for the Standard and Enhanced security levels"
+license = "MIT"
+repository = "https://github.com/Nold/gwardian"
+
+# Kept out of ash-core on purpose: the core stays OTP-only and dependency-free,
+# so the Maximum level never relies on computational cryptography.
+[dependencies]
+ash-core = { path = "../core" }
+libcrux-ml-kem = { version = "0.0.11", default-features = false, features = ["mlkem768"] }
+libcrux-sha3 = "0.0.11"
+x25519-dalek = "3"
+hkdf = "0.13"
+sha2 = "0.11"
+chacha20poly1305 = { version = "0.11", default-features = false, features = ["alloc"] }
+zeroize = "1"
+
+[dev-dependencies]
+hex = "0.4"
+serde_json = "1"
