@@ -155,6 +155,18 @@ namespace ash {
     /// Get metadata overhead constant (bytes added to pad for ceremony encoding).
     u32 get_metadata_overhead();
 
+    // === Bluetooth LE Pad Transfer (see docs/ble-transfer.md) ===
+
+    /// Split a transfer message into packets of at most max_packet bytes (>= 20)
+    [Throws=AshError]
+    sequence<sequence<u8>> split_into_ble_packets(sequence<u8> message, u8 message_id, u32 max_packet);
+    /// GATT service advertised by the device receiving a pad
+    string ble_service_uuid();
+    /// Characteristic the pad owner writes to
+    string ble_to_receiver_uuid();
+    /// Characteristic the receiver notifies on
+    string ble_to_sender_uuid();
+
     /// Get default QR block size.
     u32 get_default_block_size();
 };
@@ -598,4 +610,15 @@ interface PadTransferSender {
     /// Only after people confirmed the words match; Maximum is refused
     [Throws=AshError]
     sequence<u8> seal_pad(sequence<u8> pad, SecurityLevel level);
+};
+
+/// Rebuilds transfer messages from Bluetooth LE packets received in order.
+/// Any error drops the partial message; the transfer must start over.
+interface BlePacketReassembler {
+    constructor();
+    /// Returns the message once its last packet arrives
+    [Throws=AshError]
+    sequence<u8>? push(sequence<u8> packet);
+    boolean is_receiving();
+    f64 progress();
 };

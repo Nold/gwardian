@@ -173,6 +173,68 @@ impl PadTransferSender {
     }
 }
 
+/// Split a protocol message into packets of at most `max_packet` bytes for
+/// Bluetooth LE; see `docs/ble-transfer.md`.
+pub fn split_into_ble_packets(
+    message: Vec<u8>,
+    message_id: u8,
+    max_packet: u32,
+) -> Result<Vec<Vec<u8>>, AshError> {
+    Ok(ash_transfer::framing::packets(
+        &message,
+        message_id,
+        max_packet as usize,
+    )?)
+}
+
+pub fn ble_service_uuid() -> String {
+    ash_transfer::framing::BLE_SERVICE_UUID.to_string()
+}
+
+pub fn ble_to_receiver_uuid() -> String {
+    ash_transfer::framing::BLE_TO_RECEIVER_UUID.to_string()
+}
+
+pub fn ble_to_sender_uuid() -> String {
+    ash_transfer::framing::BLE_TO_SENDER_UUID.to_string()
+}
+
+/// Rebuilds protocol messages from Bluetooth LE packets received in order.
+pub struct BlePacketReassembler {
+    inner: Mutex<ash_transfer::framing::Reassembler>,
+}
+
+impl Default for BlePacketReassembler {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl BlePacketReassembler {
+    pub fn new() -> Self {
+        Self {
+            inner: Mutex::new(ash_transfer::framing::Reassembler::new()),
+        }
+    }
+
+    fn reassembler(&self) -> std::sync::MutexGuard<'_, ash_transfer::framing::Reassembler> {
+        self.inner.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
+    /// Feed one packet; returns the message once complete.
+    pub fn push(&self, packet: Vec<u8>) -> Result<Option<Vec<u8>>, AshError> {
+        Ok(self.reassembler().push(&packet)?)
+    }
+
+    pub fn is_receiving(&self) -> bool {
+        self.reassembler().is_receiving()
+    }
+
+    pub fn progress(&self) -> f64 {
+        self.reassembler().progress()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -238,6 +300,24 @@ mod tests {
             sender.seal_pad(vec![1; 32], SecurityLevel::Standard),
             Err(AshError::InvalidState)
         ));
+    }
+
+    #[test]
+    fn offer_travels_over_ble_packets() {
+        let receiver = PadTransferReceiver::new(vec![1; 32]).unwrap();
+        let packets = split_into_ble_packets(receiver.offer(), 0, 20).unwrap();
+        assert!(packets.len() > 60);
+        let reassembler = BlePacketReassembler::new();
+        let mut offer = None;
+        for packet in packets {
+            offer = reassembler.push(packet).unwrap();
+        }
+        assert_eq!(offer, Some(receiver.offer()));
+        assert!(matches!(
+            reassembler.push(vec![0x09]),
+            Err(AshError::MalformedMessage)
+        ));
+        assert_eq!(ble_service_uuid().len(), 36);
     }
 
     #[test]
