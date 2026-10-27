@@ -13,6 +13,8 @@
 use std::error::Error as StdError;
 use std::fmt;
 
+use crate::group::SecurityLevel;
+
 /// Result type alias for ash-core operations.
 pub type Result<T> = std::result::Result<T, Error>;
 
@@ -200,6 +202,17 @@ pub enum Error {
         /// Start of the first damaged chunk.
         offset: usize,
     },
+
+    /// Operation would lower a pad's or the group's security level without
+    /// explicit consent.
+    SecurityDowngrade {
+        /// Member whose pad is concerned.
+        member: u8,
+        /// Current level.
+        from: SecurityLevel,
+        /// Level the operation would lead to.
+        to: SecurityLevel,
+    },
 }
 
 impl fmt::Display for Error {
@@ -308,6 +321,13 @@ impl fmt::Display for Error {
             }
             Error::PadCorrupted { offset } => {
                 write!(f, "pad corrupted at offset {}", offset)
+            }
+            Error::SecurityDowngrade { member, from, to } => {
+                write!(
+                    f,
+                    "security downgrade for member {} from {:?} to {:?}",
+                    member, from, to
+                )
             }
         }
     }
