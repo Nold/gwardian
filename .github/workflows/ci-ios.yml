@@ -68,13 +68,20 @@ jobs:
       - name: Build iOS App (Debug)
         working-directory: apps/ios/Ash
         run: |
-          xcodebuild build \
+          set -o pipefail
+          if ! xcodebuild build \
             -project Ash.xcodeproj \
             -scheme Ash \
             -destination 'generic/platform=iOS Simulator' \
             -configuration Debug \
             -quiet \
-            CODE_SIGNING_ALLOWED=NO
+            CODE_SIGNING_ALLOWED=NO 2>&1 | tee build.log; then
+            # Surface compiler errors as an annotation, readable without the full log
+            msg=$(grep -E "error:" build.log | sort -u | head -40 \
+              | sed -e 's/%/%25/g' -e 's/\r/%0D/g' | sed ':a;N;$!ba;s/\n/%0A/g')
+            echo "::error title=iOS build failed::${msg}"
+            exit 1
+          fi
 
       - name: Run pad transfer and app lock tests
         working-directory: apps/ios/Ash
