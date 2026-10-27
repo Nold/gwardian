@@ -70,7 +70,7 @@ pub enum Role {
 /// Uses volatile writes to ensure the zeroing is not optimized away,
 /// followed by a compiler fence to prevent reordering.
 #[inline(never)]
-fn secure_zero(data: &mut [u8]) {
+pub(crate) fn secure_zero(data: &mut [u8]) {
     // Use volatile writes to prevent optimization
     for byte in data.iter_mut() {
         // SAFETY: We're writing to valid, aligned memory that we own

@@ -175,6 +175,25 @@ pub enum Error {
         /// Description of what's wrong.
         reason: String,
     },
+
+    // ==================== Group Errors ====================
+    /// Message names a sender that is not a member of the group.
+    UnknownMember {
+        /// Sender id from the frame.
+        member: u8,
+    },
+
+    /// A member with this id is already in the group.
+    DuplicateMember {
+        /// The duplicated member id.
+        member: u8,
+    },
+
+    /// Pad range was already consumed (replay or own message echoed back).
+    PadRangeAlreadyUsed {
+        /// Start of the requested range.
+        offset: usize,
+    },
 }
 
 impl fmt::Display for Error {
@@ -275,6 +294,15 @@ impl fmt::Display for Error {
             }
             Error::InvalidPadding { reason } => {
                 write!(f, "invalid padding: {}", reason)
+            }
+            Error::UnknownMember { member } => {
+                write!(f, "unknown group member: {}", member)
+            }
+            Error::DuplicateMember { member } => {
+                write!(f, "group member already exists: {}", member)
+            }
+            Error::PadRangeAlreadyUsed { offset } => {
+                write!(f, "pad range already used at offset {}", offset)
             }
         }
     }
