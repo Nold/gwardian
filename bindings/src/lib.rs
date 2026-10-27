@@ -74,6 +74,7 @@ impl From<ash_core::Error> for AshError {
             ash_core::Error::DuplicateMember { .. } => AshError::InvalidEntropySize,
             ash_core::Error::PadRangeAlreadyUsed { .. } => AshError::InsufficientPadBytes,
             ash_core::Error::PadCorrupted { .. } => AshError::CrcMismatch,
+            ash_core::Error::SecurityDowngrade { .. } => AshError::InvalidEntropySize,
         }
     }
 }

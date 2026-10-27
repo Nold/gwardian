@@ -138,7 +138,7 @@ pub use frame::{
 pub use raptor::{RaptorDecoder, RaptorEncoder};
 
 // Re-export pad calculator types for convenience
-pub use group::{Group, GroupFrame, MemberHealth, MemberId, MemberPad};
+pub use group::{Group, GroupFrame, MemberHealth, MemberId, MemberPad, SecurityLevel};
 pub use pad::{Pad, PadSize, Role};
 pub use pad_calculator::{
     calculate_pad_stats, calculate_pad_stats_with_qr_size, expected_frames, redundancy_blocks,

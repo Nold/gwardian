@@ -55,6 +55,22 @@
 //! The checksums are stored next to the pad itself, so they reveal nothing to
 //! anyone who could not already read the pad.
 //!
+//! # Security Levels
+//!
+//! Every pad records the [`SecurityLevel`] of the channel it was distributed
+//! over. Messages a member sends are as safe as that member's pad, and a
+//! group is as safe as its weakest pad ([`Group::security_level`]).
+//!
+//! The level must hold for every copy of a pad: if its owner hands it to one
+//! member by QR code and to another through the relay, the pad is
+//! `Standard` for everyone. Owners therefore distribute a pad over a single
+//! kind of channel, and generate a new pad rather than sending an existing
+//! one over a weaker channel.
+//!
+//! The level never drops silently: adding or replacing a pad with a weaker
+//! one is refused unless the caller asks for it explicitly with
+//! [`Group::add_member_allow_downgrade`] or [`Group::replace_pad_allow_downgrade`].
+//!
 //! # Limitations
 //!
 //! - Authenticity is per group, not per member: every member holds every pad,
@@ -65,17 +81,17 @@
 //! # Example
 //!
 //! ```
-//! use ash_core::group::{Group, GroupFrame, MemberPad};
+//! use ash_core::group::{Group, GroupFrame, MemberPad, SecurityLevel};
 //! use ash_core::MessageType;
 //!
 //! let pad_alice = vec![0x11u8; 4096]; // From OS entropy in practice
 //! let pad_bob = vec![0x22u8; 4096];
 //!
-//! let mut alice = Group::new(0, MemberPad::from_bytes(pad_alice.clone()));
-//! alice.add_member(1, MemberPad::from_bytes(pad_bob.clone())).unwrap();
+//! let mut alice = Group::new(0, MemberPad::from_bytes(pad_alice.clone(), SecurityLevel::Maximum));
+//! alice.add_member(1, MemberPad::from_bytes(pad_bob.clone(), SecurityLevel::Maximum)).unwrap();
 //!
-//! let mut bob = Group::new(1, MemberPad::from_bytes(pad_bob));
-//! bob.add_member(0, MemberPad::from_bytes(pad_alice)).unwrap();
+//! let mut bob = Group::new(1, MemberPad::from_bytes(pad_bob, SecurityLevel::Maximum));
+//! bob.add_member(0, MemberPad::from_bytes(pad_alice, SecurityLevel::Maximum)).unwrap();
 //!
 //! let wire = alice.encrypt(MessageType::Text, b"Hello").unwrap().encode();
 //! let frame = GroupFrame::decode(&wire).unwrap();
@@ -106,6 +122,40 @@ pub const CHECKSUM_CHUNK_SIZE: usize = 4096;
 /// as [`MemberHealth::Suspect`].
 pub const SUSPECT_THRESHOLD: u32 = 3;
 
+/// How a pad was distributed, which bounds the security of what it encrypts.
+///
+/// Ordered from weakest to strongest, so the minimum of several levels is the
+/// weakest one.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[repr(u8)]
+pub enum SecurityLevel {
+    /// Sent remotely through the relay, protected by computational
+    /// cryptography.
+    Standard = 1,
+    /// Exchanged in person over a short-range radio link, protected by
+    /// computational cryptography.
+    Enhanced = 2,
+    /// Exchanged in person by QR codes, with no computational assumption.
+    Maximum = 3,
+}
+
+impl SecurityLevel {
+    /// Encode as a byte, for persistence.
+    pub fn to_byte(self) -> u8 {
+        self as u8
+    }
+
+    /// Decode a byte produced by [`SecurityLevel::to_byte`].
+    pub fn from_byte(byte: u8) -> Option<Self> {
+        match byte {
+            1 => Some(Self::Standard),
+            2 => Some(Self::Enhanced),
+            3 => Some(Self::Maximum),
+            _ => None,
+        }
+    }
+}
+
 /// A member's sending pad, tracking which byte ranges have been consumed.
 ///
 /// The owner consumes it sequentially when sending. Holders of a copy
@@ -116,6 +166,8 @@ pub struct MemberPad {
     used: Vec<(usize, usize)>,
     /// CRC-32 of each `CHECKSUM_CHUNK_SIZE` chunk, consumed bytes zeroed.
     checksums: Vec<u32>,
+    /// Channel the pad was distributed over.
+    level: SecurityLevel,
 }
 
 impl Drop for MemberPad {
@@ -125,8 +177,8 @@ impl Drop for MemberPad {
 }
 
 impl MemberPad {
-    /// Create a fresh pad from raw bytes.
-    pub fn from_bytes(bytes: Vec<u8>) -> Self {
+    /// Create a fresh pad from raw bytes, distributed at `level`.
+    pub fn from_bytes(bytes: Vec<u8>, level: SecurityLevel) -> Self {
         let checksums = bytes
             .chunks(CHECKSUM_CHUNK_SIZE)
             .map(crc::compute)
@@ -135,10 +187,12 @@ impl MemberPad {
             bytes,
             used: Vec::new(),
             checksums,
+            level,
         }
     }
 
-    /// Restore a pad with the state returned by `used_ranges` and `checksums`.
+    /// Restore a pad with the state returned by `used_ranges`, `checksums`
+    /// and `level`.
     ///
     /// Consumed ranges are wiped, so `bytes` may be stored either before or
     /// after wiping. Integrity is checked lazily as bytes are used; call
@@ -151,6 +205,7 @@ impl MemberPad {
         bytes: Vec<u8>,
         used: &[(usize, usize)],
         checksums: &[u32],
+        level: SecurityLevel,
     ) -> Result<Self> {
         if checksums.len() != bytes.len().div_ceil(CHECKSUM_CHUNK_SIZE) {
             return Err(Error::PadCorrupted { offset: 0 });
@@ -159,6 +214,7 @@ impl MemberPad {
             bytes,
             used: Vec::new(),
             checksums: checksums.to_vec(),
+            level,
         };
         for &(start, end) in used {
             let end = end.min(pad.bytes.len());
@@ -173,6 +229,11 @@ impl MemberPad {
     /// Consumed `[start, end)` ranges, for persistence.
     pub fn used_ranges(&self) -> &[(usize, usize)] {
         &self.used
+    }
+
+    /// Channel the pad was distributed over.
+    pub fn level(&self) -> SecurityLevel {
+        self.level
     }
 
     /// Integrity checksums, for persistence alongside the pad.
@@ -372,8 +433,33 @@ impl Group {
         self.pads.get(&member)
     }
 
+    /// Security level of the group: the level of its weakest pad.
+    pub fn security_level(&self) -> SecurityLevel {
+        self.pads
+            .values()
+            .map(MemberPad::level)
+            .min()
+            .expect("own pad is always present")
+    }
+
     /// Add a member with the copy of their sending pad.
+    ///
+    /// # Errors
+    ///
+    /// - `DuplicateMember` if the id is taken.
+    /// - `SecurityDowngrade` if the pad would lower the group's level; use
+    ///   [`Group::add_member_allow_downgrade`] once the user has agreed.
     pub fn add_member(&mut self, member: MemberId, pad: MemberPad) -> Result<()> {
+        self.check_no_downgrade(member, pad.level(), self.security_level())?;
+        self.add_member_allow_downgrade(member, pad)
+    }
+
+    /// Add a member even if their pad lowers the group's security level.
+    ///
+    /// # Errors
+    ///
+    /// `DuplicateMember` if the id is taken.
+    pub fn add_member_allow_downgrade(&mut self, member: MemberId, pad: MemberPad) -> Result<()> {
         if self.pads.contains_key(&member) {
             return Err(Error::DuplicateMember { member });
         }
@@ -395,12 +481,30 @@ impl Group {
     }
 
     /// Install a freshly exchanged pad for a member, including this device,
-    /// and clear their health status.
+    /// and clear their health status. A stronger pad raises the level.
+    ///
+    /// # Errors
+    ///
+    /// - `UnknownMember` if the member is not in the group.
+    /// - `SecurityDowngrade` if the new pad is weaker than the one it
+    ///   replaces; use [`Group::replace_pad_allow_downgrade`] once the user
+    ///   has agreed.
+    pub fn replace_pad(&mut self, member: MemberId, pad: MemberPad) -> Result<()> {
+        let current = self
+            .pads
+            .get(&member)
+            .ok_or(Error::UnknownMember { member })?
+            .level();
+        self.check_no_downgrade(member, pad.level(), current)?;
+        self.replace_pad_allow_downgrade(member, pad)
+    }
+
+    /// Install a new pad for a member even if it is weaker than the old one.
     ///
     /// # Errors
     ///
     /// `UnknownMember` if the member is not in the group.
-    pub fn replace_pad(&mut self, member: MemberId, pad: MemberPad) -> Result<()> {
+    pub fn replace_pad_allow_downgrade(&mut self, member: MemberId, pad: MemberPad) -> Result<()> {
         let slot = self
             .pads
             .get_mut(&member)
@@ -516,6 +620,18 @@ impl Group {
         Ok(plaintext)
     }
 
+    fn check_no_downgrade(
+        &self,
+        member: MemberId,
+        to: SecurityLevel,
+        from: SecurityLevel,
+    ) -> Result<()> {
+        if to < from {
+            return Err(Error::SecurityDowngrade { member, from, to });
+        }
+        Ok(())
+    }
+
     fn own_pad(&self) -> &MemberPad {
         &self.pads[&self.me]
     }
@@ -535,10 +651,16 @@ mod tests {
     fn family(size: u8, len: usize) -> Vec<Group> {
         (0..size)
             .map(|me| {
-                let mut group = Group::new(me, MemberPad::from_bytes(pad_bytes(me, len)));
+                let mut group = Group::new(
+                    me,
+                    MemberPad::from_bytes(pad_bytes(me, len), SecurityLevel::Maximum),
+                );
                 for other in (0..size).filter(|&o| o != me) {
                     group
-                        .add_member(other, MemberPad::from_bytes(pad_bytes(other, len)))
+                        .add_member(
+                            other,
+                            MemberPad::from_bytes(pad_bytes(other, len), SecurityLevel::Maximum),
+                        )
                         .unwrap();
                 }
                 group
@@ -688,19 +810,31 @@ mod tests {
 
     #[test]
     fn membership_changes() {
-        let mut group = Group::new(0, MemberPad::from_bytes(pad_bytes(0, 128)));
+        let mut group = Group::new(
+            0,
+            MemberPad::from_bytes(pad_bytes(0, 128), SecurityLevel::Maximum),
+        );
         group
-            .add_member(1, MemberPad::from_bytes(pad_bytes(1, 128)))
+            .add_member(
+                1,
+                MemberPad::from_bytes(pad_bytes(1, 128), SecurityLevel::Maximum),
+            )
             .unwrap();
         assert_eq!(
             group
-                .add_member(1, MemberPad::from_bytes(pad_bytes(1, 128)))
+                .add_member(
+                    1,
+                    MemberPad::from_bytes(pad_bytes(1, 128), SecurityLevel::Maximum)
+                )
                 .unwrap_err(),
             Error::DuplicateMember { member: 1 }
         );
         assert_eq!(
             group
-                .add_member(0, MemberPad::from_bytes(pad_bytes(0, 128)))
+                .add_member(
+                    0,
+                    MemberPad::from_bytes(pad_bytes(0, 128), SecurityLevel::Maximum)
+                )
                 .unwrap_err(),
             Error::DuplicateMember { member: 0 }
         );
@@ -721,9 +855,18 @@ mod tests {
         let saved = groups[1].pad(0).unwrap();
         let used = saved.used_ranges().to_vec();
         let checksums = saved.checksums().to_vec();
-        let pad = MemberPad::from_bytes_with_state(pad_bytes(0, 4096), &used, &checksums).unwrap();
+        let pad = MemberPad::from_bytes_with_state(
+            pad_bytes(0, 4096),
+            &used,
+            &checksums,
+            SecurityLevel::Maximum,
+        )
+        .unwrap();
         pad.verify().unwrap();
-        let mut restored = Group::new(1, MemberPad::from_bytes(pad_bytes(1, 4096)));
+        let mut restored = Group::new(
+            1,
+            MemberPad::from_bytes(pad_bytes(1, 4096), SecurityLevel::Maximum),
+        );
         restored.add_member(0, pad).unwrap();
         assert!(matches!(
             restored.decrypt(&m2),
@@ -734,12 +877,17 @@ mod tests {
 
     #[test]
     fn restore_rejects_mismatched_checksums() {
-        let pad = MemberPad::from_bytes(pad_bytes(0, 10_000));
+        let pad = MemberPad::from_bytes(pad_bytes(0, 10_000), SecurityLevel::Maximum);
         let mut checksums = pad.checksums().to_vec();
         assert_eq!(checksums.len(), 3);
         checksums.pop();
         assert!(matches!(
-            MemberPad::from_bytes_with_state(pad_bytes(0, 10_000), &[], &checksums),
+            MemberPad::from_bytes_with_state(
+                pad_bytes(0, 10_000),
+                &[],
+                &checksums,
+                SecurityLevel::Maximum
+            ),
             Err(Error::PadCorrupted { offset: 0 })
         ));
     }
@@ -837,10 +985,13 @@ mod tests {
         // Member 2 exchanges a new pad in person
         let new_pad = pad_bytes(42, 10_000);
         groups[0]
-            .replace_pad(2, MemberPad::from_bytes(new_pad.clone()))
+            .replace_pad(
+                2,
+                MemberPad::from_bytes(new_pad.clone(), SecurityLevel::Maximum),
+            )
             .unwrap();
         groups[2]
-            .replace_pad(2, MemberPad::from_bytes(new_pad))
+            .replace_pad(2, MemberPad::from_bytes(new_pad, SecurityLevel::Maximum))
             .unwrap();
         assert_eq!(groups[0].health(2), Some(MemberHealth::Healthy));
         let frame = send(&mut groups[2], b"fixed");
@@ -848,15 +999,165 @@ mod tests {
 
         assert_eq!(
             groups[0]
-                .replace_pad(9, MemberPad::from_bytes(vec![0; 10]))
+                .replace_pad(
+                    9,
+                    MemberPad::from_bytes(vec![0; 10], SecurityLevel::Maximum)
+                )
                 .unwrap_err(),
             Error::UnknownMember { member: 9 }
         );
     }
 
     #[test]
+    fn security_level_ordering_and_bytes() {
+        use SecurityLevel::*;
+        assert!(Standard < Enhanced && Enhanced < Maximum);
+        for level in [Standard, Enhanced, Maximum] {
+            assert_eq!(SecurityLevel::from_byte(level.to_byte()), Some(level));
+        }
+        assert_eq!(SecurityLevel::from_byte(0), None);
+        assert_eq!(SecurityLevel::from_byte(4), None);
+    }
+
+    #[test]
+    fn group_level_is_weakest_pad() {
+        let mut group = Group::new(
+            0,
+            MemberPad::from_bytes(pad_bytes(0, 128), SecurityLevel::Maximum),
+        );
+        assert_eq!(group.security_level(), SecurityLevel::Maximum);
+
+        group
+            .add_member_allow_downgrade(
+                1,
+                MemberPad::from_bytes(pad_bytes(1, 128), SecurityLevel::Enhanced),
+            )
+            .unwrap();
+        group
+            .add_member_allow_downgrade(
+                2,
+                MemberPad::from_bytes(pad_bytes(2, 128), SecurityLevel::Standard),
+            )
+            .unwrap();
+        assert_eq!(group.security_level(), SecurityLevel::Standard);
+        assert_eq!(group.pad(1).unwrap().level(), SecurityLevel::Enhanced);
+
+        // Removing the weakest member raises the level again
+        group.remove_member(2);
+        assert_eq!(group.security_level(), SecurityLevel::Enhanced);
+    }
+
+    #[test]
+    fn adding_weaker_member_needs_consent() {
+        let mut group = Group::new(
+            0,
+            MemberPad::from_bytes(pad_bytes(0, 128), SecurityLevel::Maximum),
+        );
+        assert_eq!(
+            group
+                .add_member(
+                    1,
+                    MemberPad::from_bytes(pad_bytes(1, 128), SecurityLevel::Standard)
+                )
+                .unwrap_err(),
+            Error::SecurityDowngrade {
+                member: 1,
+                from: SecurityLevel::Maximum,
+                to: SecurityLevel::Standard,
+            }
+        );
+        assert_eq!(group.members().count(), 1);
+
+        // Same or stronger level is fine
+        group
+            .add_member(
+                1,
+                MemberPad::from_bytes(pad_bytes(1, 128), SecurityLevel::Maximum),
+            )
+            .unwrap();
+        group
+            .add_member_allow_downgrade(
+                2,
+                MemberPad::from_bytes(pad_bytes(2, 128), SecurityLevel::Enhanced),
+            )
+            .unwrap();
+        group
+            .add_member(
+                3,
+                MemberPad::from_bytes(pad_bytes(3, 128), SecurityLevel::Enhanced),
+            )
+            .unwrap();
+    }
+
+    #[test]
+    fn replacing_pad_upgrades_but_never_silently_downgrades() {
+        let mut group = Group::new(
+            0,
+            MemberPad::from_bytes(pad_bytes(0, 128), SecurityLevel::Standard),
+        );
+        group
+            .add_member(
+                1,
+                MemberPad::from_bytes(pad_bytes(1, 128), SecurityLevel::Standard),
+            )
+            .unwrap();
+
+        // Meeting in person: both pads upgraded to Maximum
+        group
+            .replace_pad(
+                0,
+                MemberPad::from_bytes(pad_bytes(10, 128), SecurityLevel::Maximum),
+            )
+            .unwrap();
+        assert_eq!(group.security_level(), SecurityLevel::Standard);
+        group
+            .replace_pad(
+                1,
+                MemberPad::from_bytes(pad_bytes(11, 128), SecurityLevel::Maximum),
+            )
+            .unwrap();
+        assert_eq!(group.security_level(), SecurityLevel::Maximum);
+
+        assert_eq!(
+            group
+                .replace_pad(
+                    1,
+                    MemberPad::from_bytes(pad_bytes(12, 128), SecurityLevel::Enhanced)
+                )
+                .unwrap_err(),
+            Error::SecurityDowngrade {
+                member: 1,
+                from: SecurityLevel::Maximum,
+                to: SecurityLevel::Enhanced,
+            }
+        );
+        assert_eq!(group.pad(1).unwrap().level(), SecurityLevel::Maximum);
+
+        group
+            .replace_pad_allow_downgrade(
+                1,
+                MemberPad::from_bytes(pad_bytes(12, 128), SecurityLevel::Enhanced),
+            )
+            .unwrap();
+        assert_eq!(group.security_level(), SecurityLevel::Enhanced);
+    }
+
+    #[test]
+    fn restore_keeps_level() {
+        let pad = MemberPad::from_bytes(pad_bytes(0, 128), SecurityLevel::Enhanced);
+        let restored = MemberPad::from_bytes_with_state(
+            pad_bytes(0, 128),
+            pad.used_ranges(),
+            pad.checksums(),
+            SecurityLevel::from_byte(pad.level().to_byte()).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(restored.level(), SecurityLevel::Enhanced);
+    }
+
+    #[test]
     fn used_ranges_merge() {
-        let mut pad = MemberPad::from_bytes(vec![1u8; 100]);
+        let mut pad = MemberPad::from_bytes(vec![1u8; 100], SecurityLevel::Maximum);
         pad.mark_used(50, 60);
         pad.mark_used(0, 10);
         pad.mark_used(10, 20);
