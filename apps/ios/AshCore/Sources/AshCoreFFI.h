@@ -251,6 +251,37 @@ typedef void (*UniffiForeignFutureCompleteVoid)(uint64_t, UniffiForeignFutureStr
     );
 
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_CLONE_BLEPACKETREASSEMBLER
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_CLONE_BLEPACKETREASSEMBLER
+void*_Nonnull uniffi_ash_bindings_fn_clone_blepacketreassembler(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_FREE_BLEPACKETREASSEMBLER
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_FREE_BLEPACKETREASSEMBLER
+void uniffi_ash_bindings_fn_free_blepacketreassembler(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_CONSTRUCTOR_BLEPACKETREASSEMBLER_NEW
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_CONSTRUCTOR_BLEPACKETREASSEMBLER_NEW
+void*_Nonnull uniffi_ash_bindings_fn_constructor_blepacketreassembler_new(RustCallStatus *_Nonnull out_status
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_METHOD_BLEPACKETREASSEMBLER_IS_RECEIVING
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_METHOD_BLEPACKETREASSEMBLER_IS_RECEIVING
+int8_t uniffi_ash_bindings_fn_method_blepacketreassembler_is_receiving(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_METHOD_BLEPACKETREASSEMBLER_PROGRESS
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_METHOD_BLEPACKETREASSEMBLER_PROGRESS
+double uniffi_ash_bindings_fn_method_blepacketreassembler_progress(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_METHOD_BLEPACKETREASSEMBLER_PUSH
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_METHOD_BLEPACKETREASSEMBLER_PUSH
+RustBuffer uniffi_ash_bindings_fn_method_blepacketreassembler_push(void*_Nonnull ptr, RustBuffer packet, RustCallStatus *_Nonnull out_status
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_CLONE_FOUNTAINFRAMEGENERATOR
 #define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_CLONE_FOUNTAINFRAMEGENERATOR
 void*_Nonnull uniffi_ash_bindings_fn_clone_fountainframegenerator(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
@@ -309,6 +340,11 @@ int8_t uniffi_ash_bindings_fn_method_fountainframereceiver_add_frame(void*_Nonnu
 #ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_METHOD_FOUNTAINFRAMERECEIVER_BLOCKS_RECEIVED
 #define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_METHOD_FOUNTAINFRAMERECEIVER_BLOCKS_RECEIVED
 uint32_t uniffi_ash_bindings_fn_method_fountainframereceiver_blocks_received(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_METHOD_FOUNTAINFRAMERECEIVER_DETECTED_METHOD
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_METHOD_FOUNTAINFRAMERECEIVER_DETECTED_METHOD
+RustBuffer uniffi_ash_bindings_fn_method_fountainframereceiver_detected_method(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_METHOD_FOUNTAINFRAMERECEIVER_GET_RESULT
@@ -426,14 +462,217 @@ void uniffi_ash_bindings_fn_method_pad_update_peer_consumption(void*_Nonnull ptr
 int8_t uniffi_ash_bindings_fn_method_pad_zero_bytes_at(void*_Nonnull ptr, uint64_t offset, uint64_t length, RustCallStatus *_Nonnull out_status
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_CLONE_PADGROUP
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_CLONE_PADGROUP
+void*_Nonnull uniffi_ash_bindings_fn_clone_padgroup(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_FREE_PADGROUP
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_FREE_PADGROUP
+void uniffi_ash_bindings_fn_free_padgroup(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_CONSTRUCTOR_PADGROUP_NEW
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_CONSTRUCTOR_PADGROUP_NEW
+void*_Nonnull uniffi_ash_bindings_fn_constructor_padgroup_new(uint8_t me, RustBuffer own_pad, RustBuffer level, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_CONSTRUCTOR_PADGROUP_RESTORE
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_CONSTRUCTOR_PADGROUP_RESTORE
+void*_Nonnull uniffi_ash_bindings_fn_constructor_padgroup_restore(uint8_t me, RustBuffer states, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_METHOD_PADGROUP_ADD_MEMBER
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_METHOD_PADGROUP_ADD_MEMBER
+void uniffi_ash_bindings_fn_method_padgroup_add_member(void*_Nonnull ptr, uint8_t member, RustBuffer pad_bytes, RustBuffer level, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_METHOD_PADGROUP_ADD_MEMBER_ALLOW_DOWNGRADE
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_METHOD_PADGROUP_ADD_MEMBER_ALLOW_DOWNGRADE
+void uniffi_ash_bindings_fn_method_padgroup_add_member_allow_downgrade(void*_Nonnull ptr, uint8_t member, RustBuffer pad_bytes, RustBuffer level, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_METHOD_PADGROUP_CAN_SEND
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_METHOD_PADGROUP_CAN_SEND
+int8_t uniffi_ash_bindings_fn_method_padgroup_can_send(void*_Nonnull ptr, uint32_t plaintext_length, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_METHOD_PADGROUP_CHECK_INTEGRITY
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_METHOD_PADGROUP_CHECK_INTEGRITY
+RustBuffer uniffi_ash_bindings_fn_method_padgroup_check_integrity(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_METHOD_PADGROUP_DECRYPT
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_METHOD_PADGROUP_DECRYPT
+RustBuffer uniffi_ash_bindings_fn_method_padgroup_decrypt(void*_Nonnull ptr, RustBuffer frame, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_METHOD_PADGROUP_ENCRYPT
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_METHOD_PADGROUP_ENCRYPT
+RustBuffer uniffi_ash_bindings_fn_method_padgroup_encrypt(void*_Nonnull ptr, uint8_t msg_type, RustBuffer plaintext, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_METHOD_PADGROUP_EXPORT_STATE
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_METHOD_PADGROUP_EXPORT_STATE
+RustBuffer uniffi_ash_bindings_fn_method_padgroup_export_state(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_METHOD_PADGROUP_HEALTH
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_METHOD_PADGROUP_HEALTH
+RustBuffer uniffi_ash_bindings_fn_method_padgroup_health(void*_Nonnull ptr, uint8_t member, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_METHOD_PADGROUP_ME
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_METHOD_PADGROUP_ME
+uint8_t uniffi_ash_bindings_fn_method_padgroup_me(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_METHOD_PADGROUP_MEMBER_LEVEL
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_METHOD_PADGROUP_MEMBER_LEVEL
+RustBuffer uniffi_ash_bindings_fn_method_padgroup_member_level(void*_Nonnull ptr, uint8_t member, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_METHOD_PADGROUP_MEMBERS
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_METHOD_PADGROUP_MEMBERS
+RustBuffer uniffi_ash_bindings_fn_method_padgroup_members(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_METHOD_PADGROUP_REMOVE_MEMBER
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_METHOD_PADGROUP_REMOVE_MEMBER
+int8_t uniffi_ash_bindings_fn_method_padgroup_remove_member(void*_Nonnull ptr, uint8_t member, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_METHOD_PADGROUP_REPLACE_PAD
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_METHOD_PADGROUP_REPLACE_PAD
+void uniffi_ash_bindings_fn_method_padgroup_replace_pad(void*_Nonnull ptr, uint8_t member, RustBuffer pad_bytes, RustBuffer level, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_METHOD_PADGROUP_REPLACE_PAD_ALLOW_DOWNGRADE
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_METHOD_PADGROUP_REPLACE_PAD_ALLOW_DOWNGRADE
+void uniffi_ash_bindings_fn_method_padgroup_replace_pad_allow_downgrade(void*_Nonnull ptr, uint8_t member, RustBuffer pad_bytes, RustBuffer level, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_METHOD_PADGROUP_SECURITY_LEVEL
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_METHOD_PADGROUP_SECURITY_LEVEL
+RustBuffer uniffi_ash_bindings_fn_method_padgroup_security_level(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_CLONE_PADTRANSFERRECEIVER
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_CLONE_PADTRANSFERRECEIVER
+void*_Nonnull uniffi_ash_bindings_fn_clone_padtransferreceiver(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_FREE_PADTRANSFERRECEIVER
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_FREE_PADTRANSFERRECEIVER
+void uniffi_ash_bindings_fn_free_padtransferreceiver(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_CONSTRUCTOR_PADTRANSFERRECEIVER_NEW
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_CONSTRUCTOR_PADTRANSFERRECEIVER_NEW
+void*_Nonnull uniffi_ash_bindings_fn_constructor_padtransferreceiver_new(RustBuffer seed, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_METHOD_PADTRANSFERRECEIVER_OFFER
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_METHOD_PADTRANSFERRECEIVER_OFFER
+RustBuffer uniffi_ash_bindings_fn_method_padtransferreceiver_offer(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_METHOD_PADTRANSFERRECEIVER_ON_RESPONSE
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_METHOD_PADTRANSFERRECEIVER_ON_RESPONSE
+RustBuffer uniffi_ash_bindings_fn_method_padtransferreceiver_on_response(void*_Nonnull ptr, RustBuffer response, RustBuffer nonce, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_METHOD_PADTRANSFERRECEIVER_ON_REVEAL
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_METHOD_PADTRANSFERRECEIVER_ON_REVEAL
+RustBuffer uniffi_ash_bindings_fn_method_padtransferreceiver_on_reveal(void*_Nonnull ptr, RustBuffer reveal, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_METHOD_PADTRANSFERRECEIVER_OPEN_PAD
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_METHOD_PADTRANSFERRECEIVER_OPEN_PAD
+RustBuffer uniffi_ash_bindings_fn_method_padtransferreceiver_open_pad(void*_Nonnull ptr, RustBuffer sealed, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_CLONE_PADTRANSFERSENDER
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_CLONE_PADTRANSFERSENDER
+void*_Nonnull uniffi_ash_bindings_fn_clone_padtransfersender(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_FREE_PADTRANSFERSENDER
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_FREE_PADTRANSFERSENDER
+void uniffi_ash_bindings_fn_free_padtransfersender(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_CONSTRUCTOR_PADTRANSFERSENDER_NEW
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_CONSTRUCTOR_PADTRANSFERSENDER_NEW
+void*_Nonnull uniffi_ash_bindings_fn_constructor_padtransfersender_new(RustBuffer offer, RustBuffer encapsulation_seed, RustBuffer nonce, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_METHOD_PADTRANSFERSENDER_ON_NONCE
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_METHOD_PADTRANSFERSENDER_ON_NONCE
+RustBuffer uniffi_ash_bindings_fn_method_padtransfersender_on_nonce(void*_Nonnull ptr, RustBuffer nonce, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_METHOD_PADTRANSFERSENDER_RESPONSE
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_METHOD_PADTRANSFERSENDER_RESPONSE
+RustBuffer uniffi_ash_bindings_fn_method_padtransfersender_response(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_METHOD_PADTRANSFERSENDER_SEAL_PAD
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_METHOD_PADTRANSFERSENDER_SEAL_PAD
+RustBuffer uniffi_ash_bindings_fn_method_padtransfersender_seal_pad(void*_Nonnull ptr, RustBuffer pad, RustBuffer level, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_FUNC_BLE_SERVICE_UUID
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_FUNC_BLE_SERVICE_UUID
+RustBuffer uniffi_ash_bindings_fn_func_ble_service_uuid(RustCallStatus *_Nonnull out_status
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_FUNC_BLE_TO_RECEIVER_UUID
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_FUNC_BLE_TO_RECEIVER_UUID
+RustBuffer uniffi_ash_bindings_fn_func_ble_to_receiver_uuid(RustCallStatus *_Nonnull out_status
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_FUNC_BLE_TO_SENDER_UUID
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_FUNC_BLE_TO_SENDER_UUID
+RustBuffer uniffi_ash_bindings_fn_func_ble_to_sender_uuid(RustCallStatus *_Nonnull out_status
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_FUNC_CALCULATE_EXPECTED_FRAMES
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_FUNC_CALCULATE_EXPECTED_FRAMES
+uint32_t uniffi_ash_bindings_fn_func_calculate_expected_frames(uint64_t pad_bytes, uint32_t block_size, RustBuffer method, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_FUNC_CALCULATE_FRAMES_TO_GENERATE
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_FUNC_CALCULATE_FRAMES_TO_GENERATE
+uint32_t uniffi_ash_bindings_fn_func_calculate_frames_to_generate(uint64_t pad_bytes, uint32_t block_size, RustBuffer method, RustCallStatus *_Nonnull out_status
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_FUNC_CALCULATE_PAD_CONSUMPTION
 #define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_FUNC_CALCULATE_PAD_CONSUMPTION
 uint32_t uniffi_ash_bindings_fn_func_calculate_pad_consumption(uint32_t plaintext_length, RustCallStatus *_Nonnull out_status
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_FUNC_CALCULATE_REDUNDANCY_BLOCKS
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_FUNC_CALCULATE_REDUNDANCY_BLOCKS
+uint32_t uniffi_ash_bindings_fn_func_calculate_redundancy_blocks(uint32_t source_blocks, RustBuffer method, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_FUNC_CALCULATE_SOURCE_BLOCKS
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_FUNC_CALCULATE_SOURCE_BLOCKS
+uint32_t uniffi_ash_bindings_fn_func_calculate_source_blocks(uint64_t pad_bytes, uint32_t block_size, RustCallStatus *_Nonnull out_status
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_FUNC_CREATE_FOUNTAIN_GENERATOR
 #define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_FUNC_CREATE_FOUNTAIN_GENERATOR
-void*_Nonnull uniffi_ash_bindings_fn_func_create_fountain_generator(RustBuffer metadata, RustBuffer pad_bytes, uint32_t block_size, RustBuffer passphrase, RustCallStatus *_Nonnull out_status
+void*_Nonnull uniffi_ash_bindings_fn_func_create_fountain_generator(RustBuffer metadata, RustBuffer pad_bytes, uint32_t block_size, RustBuffer passphrase, RustBuffer method, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_FUNC_DECODE_CEREMONY_PAYLOAD
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_FUNC_DECODE_CEREMONY_PAYLOAD
+RustBuffer uniffi_ash_bindings_fn_func_decode_ceremony_payload(RustBuffer payload, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_FUNC_DECRYPT
@@ -466,6 +705,11 @@ RustBuffer uniffi_ash_bindings_fn_func_derive_burn_token(RustBuffer pad_bytes, R
 RustBuffer uniffi_ash_bindings_fn_func_derive_conversation_id(RustBuffer pad_bytes, RustCallStatus *_Nonnull out_status
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_FUNC_ENCODE_CEREMONY_PAYLOAD
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_FUNC_ENCODE_CEREMONY_PAYLOAD
+RustBuffer uniffi_ash_bindings_fn_func_encode_ceremony_payload(RustBuffer metadata, RustBuffer pad_bytes, RustCallStatus *_Nonnull out_status
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_FUNC_ENCRYPT
 #define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_FUNC_ENCRYPT
 RustBuffer uniffi_ash_bindings_fn_func_encrypt(RustBuffer key, RustBuffer plaintext, RustCallStatus *_Nonnull out_status
@@ -492,9 +736,21 @@ uint32_t uniffi_ash_bindings_fn_func_get_auth_overhead(RustCallStatus *_Nonnull 
     
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_FUNC_GET_DEFAULT_BLOCK_SIZE
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_FUNC_GET_DEFAULT_BLOCK_SIZE
+uint32_t uniffi_ash_bindings_fn_func_get_default_block_size(RustCallStatus *_Nonnull out_status
+    
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_FUNC_GET_MAX_PASSPHRASE_LENGTH
 #define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_FUNC_GET_MAX_PASSPHRASE_LENGTH
 uint32_t uniffi_ash_bindings_fn_func_get_max_passphrase_length(RustCallStatus *_Nonnull out_status
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_FUNC_GET_METADATA_OVERHEAD
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_FUNC_GET_METADATA_OVERHEAD
+uint32_t uniffi_ash_bindings_fn_func_get_metadata_overhead(RustCallStatus *_Nonnull out_status
     
 );
 #endif
@@ -512,6 +768,11 @@ uint64_t uniffi_ash_bindings_fn_func_get_pad_size_bytes(RustBuffer size, RustCal
 #ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_FUNC_SECURE_ZERO_BYTES
 #define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_FUNC_SECURE_ZERO_BYTES
 void uniffi_ash_bindings_fn_func_secure_zero_bytes(RustBuffer data, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_FUNC_SPLIT_INTO_BLE_PACKETS
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_FUNC_SPLIT_INTO_BLE_PACKETS
+RustBuffer uniffi_ash_bindings_fn_func_split_into_ble_packets(RustBuffer message, uint8_t message_id, uint32_t max_packet, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_FUNC_VALIDATE_PASSPHRASE
@@ -799,15 +1060,63 @@ void ffi_ash_bindings_rust_future_free_void(uint64_t handle
 void ffi_ash_bindings_rust_future_complete_void(uint64_t handle, RustCallStatus *_Nonnull out_status
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_FUNC_BLE_SERVICE_UUID
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_FUNC_BLE_SERVICE_UUID
+uint16_t uniffi_ash_bindings_checksum_func_ble_service_uuid(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_FUNC_BLE_TO_RECEIVER_UUID
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_FUNC_BLE_TO_RECEIVER_UUID
+uint16_t uniffi_ash_bindings_checksum_func_ble_to_receiver_uuid(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_FUNC_BLE_TO_SENDER_UUID
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_FUNC_BLE_TO_SENDER_UUID
+uint16_t uniffi_ash_bindings_checksum_func_ble_to_sender_uuid(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_FUNC_CALCULATE_EXPECTED_FRAMES
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_FUNC_CALCULATE_EXPECTED_FRAMES
+uint16_t uniffi_ash_bindings_checksum_func_calculate_expected_frames(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_FUNC_CALCULATE_FRAMES_TO_GENERATE
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_FUNC_CALCULATE_FRAMES_TO_GENERATE
+uint16_t uniffi_ash_bindings_checksum_func_calculate_frames_to_generate(void
+    
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_FUNC_CALCULATE_PAD_CONSUMPTION
 #define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_FUNC_CALCULATE_PAD_CONSUMPTION
 uint16_t uniffi_ash_bindings_checksum_func_calculate_pad_consumption(void
     
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_FUNC_CALCULATE_REDUNDANCY_BLOCKS
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_FUNC_CALCULATE_REDUNDANCY_BLOCKS
+uint16_t uniffi_ash_bindings_checksum_func_calculate_redundancy_blocks(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_FUNC_CALCULATE_SOURCE_BLOCKS
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_FUNC_CALCULATE_SOURCE_BLOCKS
+uint16_t uniffi_ash_bindings_checksum_func_calculate_source_blocks(void
+    
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_FUNC_CREATE_FOUNTAIN_GENERATOR
 #define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_FUNC_CREATE_FOUNTAIN_GENERATOR
 uint16_t uniffi_ash_bindings_checksum_func_create_fountain_generator(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_FUNC_DECODE_CEREMONY_PAYLOAD
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_FUNC_DECODE_CEREMONY_PAYLOAD
+uint16_t uniffi_ash_bindings_checksum_func_decode_ceremony_payload(void
     
 );
 #endif
@@ -847,6 +1156,12 @@ uint16_t uniffi_ash_bindings_checksum_func_derive_conversation_id(void
     
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_FUNC_ENCODE_CEREMONY_PAYLOAD
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_FUNC_ENCODE_CEREMONY_PAYLOAD
+uint16_t uniffi_ash_bindings_checksum_func_encode_ceremony_payload(void
+    
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_FUNC_ENCRYPT
 #define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_FUNC_ENCRYPT
 uint16_t uniffi_ash_bindings_checksum_func_encrypt(void
@@ -877,9 +1192,21 @@ uint16_t uniffi_ash_bindings_checksum_func_get_auth_overhead(void
     
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_FUNC_GET_DEFAULT_BLOCK_SIZE
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_FUNC_GET_DEFAULT_BLOCK_SIZE
+uint16_t uniffi_ash_bindings_checksum_func_get_default_block_size(void
+    
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_FUNC_GET_MAX_PASSPHRASE_LENGTH
 #define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_FUNC_GET_MAX_PASSPHRASE_LENGTH
 uint16_t uniffi_ash_bindings_checksum_func_get_max_passphrase_length(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_FUNC_GET_METADATA_OVERHEAD
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_FUNC_GET_METADATA_OVERHEAD
+uint16_t uniffi_ash_bindings_checksum_func_get_metadata_overhead(void
     
 );
 #endif
@@ -901,9 +1228,33 @@ uint16_t uniffi_ash_bindings_checksum_func_secure_zero_bytes(void
     
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_FUNC_SPLIT_INTO_BLE_PACKETS
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_FUNC_SPLIT_INTO_BLE_PACKETS
+uint16_t uniffi_ash_bindings_checksum_func_split_into_ble_packets(void
+    
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_FUNC_VALIDATE_PASSPHRASE
 #define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_FUNC_VALIDATE_PASSPHRASE
 uint16_t uniffi_ash_bindings_checksum_func_validate_passphrase(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_METHOD_BLEPACKETREASSEMBLER_IS_RECEIVING
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_METHOD_BLEPACKETREASSEMBLER_IS_RECEIVING
+uint16_t uniffi_ash_bindings_checksum_method_blepacketreassembler_is_receiving(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_METHOD_BLEPACKETREASSEMBLER_PROGRESS
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_METHOD_BLEPACKETREASSEMBLER_PROGRESS
+uint16_t uniffi_ash_bindings_checksum_method_blepacketreassembler_progress(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_METHOD_BLEPACKETREASSEMBLER_PUSH
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_METHOD_BLEPACKETREASSEMBLER_PUSH
+uint16_t uniffi_ash_bindings_checksum_method_blepacketreassembler_push(void
     
 );
 #endif
@@ -946,6 +1297,12 @@ uint16_t uniffi_ash_bindings_checksum_method_fountainframereceiver_add_frame(voi
 #ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_METHOD_FOUNTAINFRAMERECEIVER_BLOCKS_RECEIVED
 #define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_METHOD_FOUNTAINFRAMERECEIVER_BLOCKS_RECEIVED
 uint16_t uniffi_ash_bindings_checksum_method_fountainframereceiver_blocks_received(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_METHOD_FOUNTAINFRAMERECEIVER_DETECTED_METHOD
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_METHOD_FOUNTAINFRAMERECEIVER_DETECTED_METHOD
+uint16_t uniffi_ash_bindings_checksum_method_fountainframereceiver_detected_method(void
     
 );
 #endif
@@ -1057,6 +1414,144 @@ uint16_t uniffi_ash_bindings_checksum_method_pad_zero_bytes_at(void
     
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_METHOD_PADGROUP_ADD_MEMBER
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_METHOD_PADGROUP_ADD_MEMBER
+uint16_t uniffi_ash_bindings_checksum_method_padgroup_add_member(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_METHOD_PADGROUP_ADD_MEMBER_ALLOW_DOWNGRADE
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_METHOD_PADGROUP_ADD_MEMBER_ALLOW_DOWNGRADE
+uint16_t uniffi_ash_bindings_checksum_method_padgroup_add_member_allow_downgrade(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_METHOD_PADGROUP_CAN_SEND
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_METHOD_PADGROUP_CAN_SEND
+uint16_t uniffi_ash_bindings_checksum_method_padgroup_can_send(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_METHOD_PADGROUP_CHECK_INTEGRITY
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_METHOD_PADGROUP_CHECK_INTEGRITY
+uint16_t uniffi_ash_bindings_checksum_method_padgroup_check_integrity(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_METHOD_PADGROUP_DECRYPT
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_METHOD_PADGROUP_DECRYPT
+uint16_t uniffi_ash_bindings_checksum_method_padgroup_decrypt(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_METHOD_PADGROUP_ENCRYPT
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_METHOD_PADGROUP_ENCRYPT
+uint16_t uniffi_ash_bindings_checksum_method_padgroup_encrypt(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_METHOD_PADGROUP_EXPORT_STATE
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_METHOD_PADGROUP_EXPORT_STATE
+uint16_t uniffi_ash_bindings_checksum_method_padgroup_export_state(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_METHOD_PADGROUP_HEALTH
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_METHOD_PADGROUP_HEALTH
+uint16_t uniffi_ash_bindings_checksum_method_padgroup_health(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_METHOD_PADGROUP_ME
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_METHOD_PADGROUP_ME
+uint16_t uniffi_ash_bindings_checksum_method_padgroup_me(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_METHOD_PADGROUP_MEMBER_LEVEL
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_METHOD_PADGROUP_MEMBER_LEVEL
+uint16_t uniffi_ash_bindings_checksum_method_padgroup_member_level(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_METHOD_PADGROUP_MEMBERS
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_METHOD_PADGROUP_MEMBERS
+uint16_t uniffi_ash_bindings_checksum_method_padgroup_members(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_METHOD_PADGROUP_REMOVE_MEMBER
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_METHOD_PADGROUP_REMOVE_MEMBER
+uint16_t uniffi_ash_bindings_checksum_method_padgroup_remove_member(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_METHOD_PADGROUP_REPLACE_PAD
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_METHOD_PADGROUP_REPLACE_PAD
+uint16_t uniffi_ash_bindings_checksum_method_padgroup_replace_pad(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_METHOD_PADGROUP_REPLACE_PAD_ALLOW_DOWNGRADE
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_METHOD_PADGROUP_REPLACE_PAD_ALLOW_DOWNGRADE
+uint16_t uniffi_ash_bindings_checksum_method_padgroup_replace_pad_allow_downgrade(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_METHOD_PADGROUP_SECURITY_LEVEL
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_METHOD_PADGROUP_SECURITY_LEVEL
+uint16_t uniffi_ash_bindings_checksum_method_padgroup_security_level(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_METHOD_PADTRANSFERRECEIVER_OFFER
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_METHOD_PADTRANSFERRECEIVER_OFFER
+uint16_t uniffi_ash_bindings_checksum_method_padtransferreceiver_offer(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_METHOD_PADTRANSFERRECEIVER_ON_RESPONSE
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_METHOD_PADTRANSFERRECEIVER_ON_RESPONSE
+uint16_t uniffi_ash_bindings_checksum_method_padtransferreceiver_on_response(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_METHOD_PADTRANSFERRECEIVER_ON_REVEAL
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_METHOD_PADTRANSFERRECEIVER_ON_REVEAL
+uint16_t uniffi_ash_bindings_checksum_method_padtransferreceiver_on_reveal(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_METHOD_PADTRANSFERRECEIVER_OPEN_PAD
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_METHOD_PADTRANSFERRECEIVER_OPEN_PAD
+uint16_t uniffi_ash_bindings_checksum_method_padtransferreceiver_open_pad(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_METHOD_PADTRANSFERSENDER_ON_NONCE
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_METHOD_PADTRANSFERSENDER_ON_NONCE
+uint16_t uniffi_ash_bindings_checksum_method_padtransfersender_on_nonce(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_METHOD_PADTRANSFERSENDER_RESPONSE
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_METHOD_PADTRANSFERSENDER_RESPONSE
+uint16_t uniffi_ash_bindings_checksum_method_padtransfersender_response(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_METHOD_PADTRANSFERSENDER_SEAL_PAD
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_METHOD_PADTRANSFERSENDER_SEAL_PAD
+uint16_t uniffi_ash_bindings_checksum_method_padtransfersender_seal_pad(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_CONSTRUCTOR_BLEPACKETREASSEMBLER_NEW
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_CONSTRUCTOR_BLEPACKETREASSEMBLER_NEW
+uint16_t uniffi_ash_bindings_checksum_constructor_blepacketreassembler_new(void
+    
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_CONSTRUCTOR_FOUNTAINFRAMERECEIVER_NEW
 #define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_CONSTRUCTOR_FOUNTAINFRAMERECEIVER_NEW
 uint16_t uniffi_ash_bindings_checksum_constructor_fountainframereceiver_new(void
@@ -1078,6 +1573,30 @@ uint16_t uniffi_ash_bindings_checksum_constructor_pad_from_bytes_with_state(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_CONSTRUCTOR_PAD_FROM_ENTROPY
 #define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_CONSTRUCTOR_PAD_FROM_ENTROPY
 uint16_t uniffi_ash_bindings_checksum_constructor_pad_from_entropy(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_CONSTRUCTOR_PADGROUP_NEW
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_CONSTRUCTOR_PADGROUP_NEW
+uint16_t uniffi_ash_bindings_checksum_constructor_padgroup_new(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_CONSTRUCTOR_PADGROUP_RESTORE
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_CONSTRUCTOR_PADGROUP_RESTORE
+uint16_t uniffi_ash_bindings_checksum_constructor_padgroup_restore(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_CONSTRUCTOR_PADTRANSFERRECEIVER_NEW
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_CONSTRUCTOR_PADTRANSFERRECEIVER_NEW
+uint16_t uniffi_ash_bindings_checksum_constructor_padtransferreceiver_new(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_CONSTRUCTOR_PADTRANSFERSENDER_NEW
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_CONSTRUCTOR_PADTRANSFERSENDER_NEW
+uint16_t uniffi_ash_bindings_checksum_constructor_padtransfersender_new(void
     
 );
 #endif

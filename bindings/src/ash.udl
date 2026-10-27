@@ -327,13 +327,13 @@ dictionary DecryptedMessage {
     sequence<u8> tag;
 };
 
-/// Result of fountain ceremony decoding
 /// Pad and ceremony metadata received over Bluetooth or the relay
 dictionary CeremonyPayload {
     CeremonyMetadata metadata;
     sequence<u8> pad;
 };
 
+/// Result of fountain ceremony decoding
 dictionary FountainCeremonyResult {
     /// Ceremony metadata (settings)
     CeremonyMetadata metadata;

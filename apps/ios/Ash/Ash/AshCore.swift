@@ -2555,6 +2555,75 @@ public nonisolated func FfiConverterTypeCeremonyMetadata_lower(_ value: Ceremony
 
 
 /**
+ * Pad and ceremony metadata received over Bluetooth or the relay
+ */
+public struct CeremonyPayload {
+    public let metadata: CeremonyMetadata
+    public let pad: [UInt8]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(metadata: CeremonyMetadata, pad: [UInt8]) {
+        self.metadata = metadata
+        self.pad = pad
+    }
+}
+
+
+
+extension CeremonyPayload: Equatable, Hashable {
+    public static func ==(lhs: CeremonyPayload, rhs: CeremonyPayload) -> Bool {
+        if lhs.metadata != rhs.metadata {
+            return false
+        }
+        if lhs.pad != rhs.pad {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(metadata)
+        hasher.combine(pad)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCeremonyPayload: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CeremonyPayload {
+        return
+            try CeremonyPayload(
+                metadata: FfiConverterTypeCeremonyMetadata.read(from: &buf), 
+                pad: FfiConverterSequenceUInt8.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: CeremonyPayload, into buf: inout [UInt8]) {
+        FfiConverterTypeCeremonyMetadata.write(value.metadata, into: &buf)
+        FfiConverterSequenceUInt8.write(value.pad, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public nonisolated func FfiConverterTypeCeremonyPayload_lift(_ buf: RustBuffer) throws -> CeremonyPayload {
+    return try FfiConverterTypeCeremonyPayload.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public nonisolated func FfiConverterTypeCeremonyPayload_lower(_ value: CeremonyPayload) -> RustBuffer {
+    return FfiConverterTypeCeremonyPayload.lower(value)
+}
+
+
+/**
  * Result of authenticated decryption
  */
 public struct DecryptedMessage {
@@ -4267,6 +4336,16 @@ public nonisolated func createFountainGenerator(metadata: CeremonyMetadata, padB
 })
 }
 /**
+ * Split a payload made by `encode_ceremony_payload`.
+ */
+public nonisolated func decodeCeremonyPayload(payload: [UInt8])throws  -> CeremonyPayload {
+    return try  FfiConverterTypeCeremonyPayload.lift(try rustCallWithError(FfiConverterTypeAshError.lift) {
+    uniffi_ash_bindings_fn_func_decode_ceremony_payload(
+        FfiConverterSequenceUInt8.lower(payload),$0
+    )
+})
+}
+/**
  * Decrypt ciphertext using OTP (XOR with key)
  * WARNING: No authentication - use decrypt_authenticated for new code
  */
@@ -4339,6 +4418,18 @@ public nonisolated func deriveBurnToken(padBytes: [UInt8])throws  -> String {
 public nonisolated func deriveConversationId(padBytes: [UInt8])throws  -> String {
     return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeAshError.lift) {
     uniffi_ash_bindings_fn_func_derive_conversation_id(
+        FfiConverterSequenceUInt8.lower(padBytes),$0
+    )
+})
+}
+/**
+ * Pad and ceremony metadata in one payload, for channels other than
+ * QR codes (Bluetooth, relay).
+ */
+public nonisolated func encodeCeremonyPayload(metadata: CeremonyMetadata, padBytes: [UInt8]) -> [UInt8] {
+    return try!  FfiConverterSequenceUInt8.lift(try! rustCall() {
+    uniffi_ash_bindings_fn_func_encode_ceremony_payload(
+        FfiConverterTypeCeremonyMetadata.lower(metadata),
         FfiConverterSequenceUInt8.lower(padBytes),$0
     )
 })
@@ -4535,6 +4626,9 @@ nonisolated(unsafe) private var initializationResult: InitializationResult = {
     if (uniffi_ash_bindings_checksum_func_create_fountain_generator() != 65342) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_ash_bindings_checksum_func_decode_ceremony_payload() != 16593) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_ash_bindings_checksum_func_decrypt() != 24750) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -4551,6 +4645,9 @@ nonisolated(unsafe) private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_ash_bindings_checksum_func_derive_conversation_id() != 20229) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ash_bindings_checksum_func_encode_ceremony_payload() != 25007) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_ash_bindings_checksum_func_encrypt() != 28557) {

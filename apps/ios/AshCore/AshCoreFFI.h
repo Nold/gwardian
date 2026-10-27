@@ -670,6 +670,11 @@ uint32_t uniffi_ash_bindings_fn_func_calculate_source_blocks(uint64_t pad_bytes,
 void*_Nonnull uniffi_ash_bindings_fn_func_create_fountain_generator(RustBuffer metadata, RustBuffer pad_bytes, uint32_t block_size, RustBuffer passphrase, RustBuffer method, RustCallStatus *_Nonnull out_status
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_FUNC_DECODE_CEREMONY_PAYLOAD
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_FUNC_DECODE_CEREMONY_PAYLOAD
+RustBuffer uniffi_ash_bindings_fn_func_decode_ceremony_payload(RustBuffer payload, RustCallStatus *_Nonnull out_status
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_FUNC_DECRYPT
 #define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_FUNC_DECRYPT
 RustBuffer uniffi_ash_bindings_fn_func_decrypt(RustBuffer key, RustBuffer ciphertext, RustCallStatus *_Nonnull out_status
@@ -698,6 +703,11 @@ RustBuffer uniffi_ash_bindings_fn_func_derive_burn_token(RustBuffer pad_bytes, R
 #ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_FUNC_DERIVE_CONVERSATION_ID
 #define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_FUNC_DERIVE_CONVERSATION_ID
 RustBuffer uniffi_ash_bindings_fn_func_derive_conversation_id(RustBuffer pad_bytes, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_FUNC_ENCODE_CEREMONY_PAYLOAD
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_FUNC_ENCODE_CEREMONY_PAYLOAD
+RustBuffer uniffi_ash_bindings_fn_func_encode_ceremony_payload(RustBuffer metadata, RustBuffer pad_bytes, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_FUNC_ENCRYPT
@@ -1104,6 +1114,12 @@ uint16_t uniffi_ash_bindings_checksum_func_create_fountain_generator(void
     
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_FUNC_DECODE_CEREMONY_PAYLOAD
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_FUNC_DECODE_CEREMONY_PAYLOAD
+uint16_t uniffi_ash_bindings_checksum_func_decode_ceremony_payload(void
+    
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_FUNC_DECRYPT
 #define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_FUNC_DECRYPT
 uint16_t uniffi_ash_bindings_checksum_func_decrypt(void
@@ -1137,6 +1153,12 @@ uint16_t uniffi_ash_bindings_checksum_func_derive_burn_token(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_FUNC_DERIVE_CONVERSATION_ID
 #define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_FUNC_DERIVE_CONVERSATION_ID
 uint16_t uniffi_ash_bindings_checksum_func_derive_conversation_id(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_FUNC_ENCODE_CEREMONY_PAYLOAD
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_FUNC_ENCODE_CEREMONY_PAYLOAD
+uint16_t uniffi_ash_bindings_checksum_func_encode_ceremony_payload(void
     
 );
 #endif
