@@ -506,7 +506,9 @@ mod tests {
     #[test]
     fn membership_changes() {
         let mut group = Group::new(0, MemberPad::from_bytes(pad_bytes(0, 128)));
-        group.add_member(1, MemberPad::from_bytes(pad_bytes(1, 128))).unwrap();
+        group
+            .add_member(1, MemberPad::from_bytes(pad_bytes(1, 128)))
+            .unwrap();
         assert_eq!(
             group
                 .add_member(1, MemberPad::from_bytes(pad_bytes(1, 128)))
@@ -535,7 +537,10 @@ mod tests {
         let used = groups[1].pad(0).unwrap().used_ranges().to_vec();
         let mut restored = Group::new(1, MemberPad::from_bytes(pad_bytes(1, 4096)));
         restored
-            .add_member(0, MemberPad::from_bytes_with_state(pad_bytes(0, 4096), &used))
+            .add_member(
+                0,
+                MemberPad::from_bytes_with_state(pad_bytes(0, 4096), &used),
+            )
             .unwrap();
         assert!(matches!(
             restored.decrypt(&m2),

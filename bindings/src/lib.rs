@@ -63,6 +63,10 @@ impl From<ash_core::Error> for AshError {
             ash_core::Error::InvalidMessageType { .. } => AshError::InvalidMetadataUrl,
             ash_core::Error::FrameLengthMismatch { .. } => AshError::LengthMismatch,
             ash_core::Error::InvalidPadding { .. } => AshError::InvalidPadding,
+            // Group API is not exposed over FFI yet; dedicated variants will come with it
+            ash_core::Error::UnknownMember { .. } => AshError::AuthenticationFailed,
+            ash_core::Error::DuplicateMember { .. } => AshError::InvalidEntropySize,
+            ash_core::Error::PadRangeAlreadyUsed { .. } => AshError::InsufficientPadBytes,
         }
     }
 }
