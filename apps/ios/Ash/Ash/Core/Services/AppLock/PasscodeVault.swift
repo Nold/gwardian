@@ -31,7 +31,7 @@ final class PasscodeVault: @unchecked Sendable {
     private let store: VaultKeyStore
     private let attempts: LockAttemptStore
     private let now: @Sendable () -> Date
-    private let lock = NSLock()
+    private let mutex = NSLock()
     private var key: SymmetricKey?
 
     init(
@@ -192,8 +192,8 @@ final class PasscodeVault: @unchecked Sendable {
     }
 
     private func withLock<T>(_ body: () throws -> T) rethrows -> T {
-        lock.lock()
-        defer { lock.unlock() }
+        mutex.lock()
+        defer { mutex.unlock() }
         return try body()
     }
 }
