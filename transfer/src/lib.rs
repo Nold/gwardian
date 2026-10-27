@@ -8,6 +8,8 @@
 //!   key stays safe if either is broken.
 //! - [`session`]: the transfer protocol, with six words people compare to
 //!   detect an attacker in the middle, and ChaCha20-Poly1305 for the pad.
+//! - [`framing`]: splitting protocol messages into packets small enough for
+//!   Bluetooth LE.
 //!
 //! A pad moved this way is only as strong as this cryptography, which is why
 //! it is recorded as `Standard` or `Enhanced`, never `Maximum`. This crate is
@@ -20,6 +22,7 @@
 //! callers provide random bytes from a secure source.
 
 pub mod error;
+pub mod framing;
 pub mod session;
 pub mod xwing;
 

@@ -545,6 +545,166 @@ fileprivate struct FfiConverterString: FfiConverter {
 
 
 /**
+ * Rebuilds transfer messages from Bluetooth LE packets received in order.
+ * Any error drops the partial message; the transfer must start over.
+ */
+public protocol BlePacketReassemblerProtocol : AnyObject {
+    
+    func isReceiving()  -> Bool
+    
+    func progress()  -> Double
+    
+    /**
+     * Returns the message once its last packet arrives
+     */
+    func push(packet: [UInt8]) throws  -> [UInt8]?
+    
+}
+
+/**
+ * Rebuilds transfer messages from Bluetooth LE packets received in order.
+ * Any error drops the partial message; the transfer must start over.
+ */
+open class BlePacketReassembler:
+    BlePacketReassemblerProtocol {
+    fileprivate let pointer: UnsafeMutableRawPointer!
+
+    /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoPointer {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+    required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
+        self.pointer = pointer
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noPointer: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noPointer: NoPointer) {
+        self.pointer = nil
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiClonePointer() -> UnsafeMutableRawPointer {
+        return try! rustCall { uniffi_ash_bindings_fn_clone_blepacketreassembler(self.pointer, $0) }
+    }
+public convenience init() {
+    let pointer =
+        try! rustCall() {
+    uniffi_ash_bindings_fn_constructor_blepacketreassembler_new($0
+    )
+}
+    self.init(unsafeFromRawPointer: pointer)
+}
+
+    deinit {
+        guard let pointer = pointer else {
+            return
+        }
+
+        try! rustCall { uniffi_ash_bindings_fn_free_blepacketreassembler(pointer, $0) }
+    }
+
+    
+
+    
+open func isReceiving() -> Bool {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+    uniffi_ash_bindings_fn_method_blepacketreassembler_is_receiving(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+open func progress() -> Double {
+    return try!  FfiConverterDouble.lift(try! rustCall() {
+    uniffi_ash_bindings_fn_method_blepacketreassembler_progress(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+    /**
+     * Returns the message once its last packet arrives
+     */
+open func push(packet: [UInt8])throws  -> [UInt8]? {
+    return try  FfiConverterOptionSequenceUInt8.lift(try rustCallWithError(FfiConverterTypeAshError.lift) {
+    uniffi_ash_bindings_fn_method_blepacketreassembler_push(self.uniffiClonePointer(),
+        FfiConverterSequenceUInt8.lower(packet),$0
+    )
+})
+}
+    
+
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeBlePacketReassembler: FfiConverter {
+
+    typealias FfiType = UnsafeMutableRawPointer
+    typealias SwiftType = BlePacketReassembler
+
+    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> BlePacketReassembler {
+        return BlePacketReassembler(unsafeFromRawPointer: pointer)
+    }
+
+    public static func lower(_ value: BlePacketReassembler) -> UnsafeMutableRawPointer {
+        return value.uniffiClonePointer()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BlePacketReassembler {
+        let v: UInt64 = try readInt(&buf)
+        // The Rust code won't compile if a pointer won't fit in a UInt64.
+        // We have to go via `UInt` because that's the thing that's the size of a pointer.
+        let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
+        if (ptr == nil) {
+            throw UniffiInternalError.unexpectedNullPointer
+        }
+        return try lift(ptr!)
+    }
+
+    public static func write(_ value: BlePacketReassembler, into buf: inout [UInt8]) {
+        // This fiddling is because `Int` is the thing that's the same size as a pointer.
+        // The Rust code won't compile if a pointer won't fit in a `UInt64`.
+        writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
+    }
+}
+
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public nonisolated func FfiConverterTypeBlePacketReassembler_lift(_ pointer: UnsafeMutableRawPointer) throws -> BlePacketReassembler {
+    return try FfiConverterTypeBlePacketReassembler.lift(pointer)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public nonisolated func FfiConverterTypeBlePacketReassembler_lower(_ value: BlePacketReassembler) -> UnsafeMutableRawPointer {
+    return FfiConverterTypeBlePacketReassembler.lower(value)
+}
+
+
+
+
+/**
  * Fountain frame generator for QR display.
  *
  * Generates unlimited encoded blocks from ceremony data. The display
@@ -3830,6 +3990,30 @@ fileprivate struct FfiConverterOptionTypeTransferMethod: FfiConverterRustBuffer 
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionSequenceUInt8: FfiConverterRustBuffer {
+    typealias SwiftType = [UInt8]?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterSequenceUInt8.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterSequenceUInt8.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceUInt8: FfiConverterRustBuffer {
     typealias SwiftType = [UInt8]
 
@@ -3950,6 +4134,58 @@ fileprivate struct FfiConverterSequenceTypeUsedRange: FfiConverterRustBuffer {
         }
         return seq
     }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceSequenceUInt8: FfiConverterRustBuffer {
+    typealias SwiftType = [[UInt8]]
+
+    public static func write(_ value: [[UInt8]], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterSequenceUInt8.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [[UInt8]] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [[UInt8]]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterSequenceUInt8.read(from: &buf))
+        }
+        return seq
+    }
+}
+/**
+ * GATT service advertised by the device receiving a pad
+ */
+public nonisolated func bleServiceUuid() -> String {
+    return try!  FfiConverterString.lift(try! rustCall() {
+    uniffi_ash_bindings_fn_func_ble_service_uuid($0
+    )
+})
+}
+/**
+ * Characteristic the pad owner writes to
+ */
+public nonisolated func bleToReceiverUuid() -> String {
+    return try!  FfiConverterString.lift(try! rustCall() {
+    uniffi_ash_bindings_fn_func_ble_to_receiver_uuid($0
+    )
+})
+}
+/**
+ * Characteristic the receiver notifies on
+ */
+public nonisolated func bleToSenderUuid() -> String {
+    return try!  FfiConverterString.lift(try! rustCall() {
+    uniffi_ash_bindings_fn_func_ble_to_sender_uuid($0
+    )
+})
 }
 /**
  * Calculate expected frames needed for successful transfer.
@@ -4234,6 +4470,18 @@ public nonisolated func secureZeroBytes(data: [UInt8]) {try! rustCall() {
 }
 }
 /**
+ * Split a transfer message into packets of at most max_packet bytes (>= 20)
+ */
+public nonisolated func splitIntoBlePackets(message: [UInt8], messageId: UInt8, maxPacket: UInt32)throws  -> [[UInt8]] {
+    return try  FfiConverterSequenceSequenceUInt8.lift(try rustCallWithError(FfiConverterTypeAshError.lift) {
+    uniffi_ash_bindings_fn_func_split_into_ble_packets(
+        FfiConverterSequenceUInt8.lower(message),
+        FfiConverterUInt8.lower(messageId),
+        FfiConverterUInt32.lower(maxPacket),$0
+    )
+})
+}
+/**
  * Validate passphrase meets requirements (4-64 printable ASCII chars)
  */
 public nonisolated func validatePassphrase(passphrase: String) -> Bool {
@@ -4259,6 +4507,15 @@ nonisolated(unsafe) private var initializationResult: InitializationResult = {
     let scaffolding_contract_version = ffi_ash_bindings_uniffi_contract_version()
     if bindings_contract_version != scaffolding_contract_version {
         return InitializationResult.contractVersionMismatch
+    }
+    if (uniffi_ash_bindings_checksum_func_ble_service_uuid() != 18645) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ash_bindings_checksum_func_ble_to_receiver_uuid() != 19946) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ash_bindings_checksum_func_ble_to_sender_uuid() != 4810) {
+        return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_ash_bindings_checksum_func_calculate_expected_frames() != 48929) {
         return InitializationResult.apiChecksumMismatch
@@ -4329,7 +4586,19 @@ nonisolated(unsafe) private var initializationResult: InitializationResult = {
     if (uniffi_ash_bindings_checksum_func_secure_zero_bytes() != 4018) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_ash_bindings_checksum_func_split_into_ble_packets() != 27168) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_ash_bindings_checksum_func_validate_passphrase() != 11471) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ash_bindings_checksum_method_blepacketreassembler_is_receiving() != 54794) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ash_bindings_checksum_method_blepacketreassembler_progress() != 34154) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ash_bindings_checksum_method_blepacketreassembler_push() != 5786) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_ash_bindings_checksum_method_fountainframegenerator_block_size() != 4068) {
@@ -4474,6 +4743,9 @@ nonisolated(unsafe) private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_ash_bindings_checksum_method_padtransfersender_seal_pad() != 39490) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ash_bindings_checksum_constructor_blepacketreassembler_new() != 25701) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_ash_bindings_checksum_constructor_fountainframereceiver_new() != 53774) {

@@ -251,6 +251,37 @@ typedef void (*UniffiForeignFutureCompleteVoid)(uint64_t, UniffiForeignFutureStr
     );
 
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_CLONE_BLEPACKETREASSEMBLER
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_CLONE_BLEPACKETREASSEMBLER
+void*_Nonnull uniffi_ash_bindings_fn_clone_blepacketreassembler(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_FREE_BLEPACKETREASSEMBLER
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_FREE_BLEPACKETREASSEMBLER
+void uniffi_ash_bindings_fn_free_blepacketreassembler(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_CONSTRUCTOR_BLEPACKETREASSEMBLER_NEW
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_CONSTRUCTOR_BLEPACKETREASSEMBLER_NEW
+void*_Nonnull uniffi_ash_bindings_fn_constructor_blepacketreassembler_new(RustCallStatus *_Nonnull out_status
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_METHOD_BLEPACKETREASSEMBLER_IS_RECEIVING
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_METHOD_BLEPACKETREASSEMBLER_IS_RECEIVING
+int8_t uniffi_ash_bindings_fn_method_blepacketreassembler_is_receiving(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_METHOD_BLEPACKETREASSEMBLER_PROGRESS
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_METHOD_BLEPACKETREASSEMBLER_PROGRESS
+double uniffi_ash_bindings_fn_method_blepacketreassembler_progress(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_METHOD_BLEPACKETREASSEMBLER_PUSH
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_METHOD_BLEPACKETREASSEMBLER_PUSH
+RustBuffer uniffi_ash_bindings_fn_method_blepacketreassembler_push(void*_Nonnull ptr, RustBuffer packet, RustCallStatus *_Nonnull out_status
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_CLONE_FOUNTAINFRAMEGENERATOR
 #define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_CLONE_FOUNTAINFRAMEGENERATOR
 void*_Nonnull uniffi_ash_bindings_fn_clone_fountainframegenerator(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
@@ -591,6 +622,24 @@ RustBuffer uniffi_ash_bindings_fn_method_padtransfersender_response(void*_Nonnul
 RustBuffer uniffi_ash_bindings_fn_method_padtransfersender_seal_pad(void*_Nonnull ptr, RustBuffer pad, RustBuffer level, RustCallStatus *_Nonnull out_status
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_FUNC_BLE_SERVICE_UUID
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_FUNC_BLE_SERVICE_UUID
+RustBuffer uniffi_ash_bindings_fn_func_ble_service_uuid(RustCallStatus *_Nonnull out_status
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_FUNC_BLE_TO_RECEIVER_UUID
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_FUNC_BLE_TO_RECEIVER_UUID
+RustBuffer uniffi_ash_bindings_fn_func_ble_to_receiver_uuid(RustCallStatus *_Nonnull out_status
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_FUNC_BLE_TO_SENDER_UUID
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_FUNC_BLE_TO_SENDER_UUID
+RustBuffer uniffi_ash_bindings_fn_func_ble_to_sender_uuid(RustCallStatus *_Nonnull out_status
+    
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_FUNC_CALCULATE_EXPECTED_FRAMES
 #define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_FUNC_CALCULATE_EXPECTED_FRAMES
 uint32_t uniffi_ash_bindings_fn_func_calculate_expected_frames(uint64_t pad_bytes, uint32_t block_size, RustBuffer method, RustCallStatus *_Nonnull out_status
@@ -709,6 +758,11 @@ uint64_t uniffi_ash_bindings_fn_func_get_pad_size_bytes(RustBuffer size, RustCal
 #ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_FUNC_SECURE_ZERO_BYTES
 #define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_FUNC_SECURE_ZERO_BYTES
 void uniffi_ash_bindings_fn_func_secure_zero_bytes(RustBuffer data, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_FUNC_SPLIT_INTO_BLE_PACKETS
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_FUNC_SPLIT_INTO_BLE_PACKETS
+RustBuffer uniffi_ash_bindings_fn_func_split_into_ble_packets(RustBuffer message, uint8_t message_id, uint32_t max_packet, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_FUNC_VALIDATE_PASSPHRASE
@@ -996,6 +1050,24 @@ void ffi_ash_bindings_rust_future_free_void(uint64_t handle
 void ffi_ash_bindings_rust_future_complete_void(uint64_t handle, RustCallStatus *_Nonnull out_status
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_FUNC_BLE_SERVICE_UUID
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_FUNC_BLE_SERVICE_UUID
+uint16_t uniffi_ash_bindings_checksum_func_ble_service_uuid(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_FUNC_BLE_TO_RECEIVER_UUID
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_FUNC_BLE_TO_RECEIVER_UUID
+uint16_t uniffi_ash_bindings_checksum_func_ble_to_receiver_uuid(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_FUNC_BLE_TO_SENDER_UUID
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_FUNC_BLE_TO_SENDER_UUID
+uint16_t uniffi_ash_bindings_checksum_func_ble_to_sender_uuid(void
+    
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_FUNC_CALCULATE_EXPECTED_FRAMES
 #define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_FUNC_CALCULATE_EXPECTED_FRAMES
 uint16_t uniffi_ash_bindings_checksum_func_calculate_expected_frames(void
@@ -1134,9 +1206,33 @@ uint16_t uniffi_ash_bindings_checksum_func_secure_zero_bytes(void
     
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_FUNC_SPLIT_INTO_BLE_PACKETS
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_FUNC_SPLIT_INTO_BLE_PACKETS
+uint16_t uniffi_ash_bindings_checksum_func_split_into_ble_packets(void
+    
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_FUNC_VALIDATE_PASSPHRASE
 #define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_FUNC_VALIDATE_PASSPHRASE
 uint16_t uniffi_ash_bindings_checksum_func_validate_passphrase(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_METHOD_BLEPACKETREASSEMBLER_IS_RECEIVING
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_METHOD_BLEPACKETREASSEMBLER_IS_RECEIVING
+uint16_t uniffi_ash_bindings_checksum_method_blepacketreassembler_is_receiving(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_METHOD_BLEPACKETREASSEMBLER_PROGRESS
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_METHOD_BLEPACKETREASSEMBLER_PROGRESS
+uint16_t uniffi_ash_bindings_checksum_method_blepacketreassembler_progress(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_METHOD_BLEPACKETREASSEMBLER_PUSH
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_METHOD_BLEPACKETREASSEMBLER_PUSH
+uint16_t uniffi_ash_bindings_checksum_method_blepacketreassembler_push(void
     
 );
 #endif
@@ -1425,6 +1521,12 @@ uint16_t uniffi_ash_bindings_checksum_method_padtransfersender_response(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_METHOD_PADTRANSFERSENDER_SEAL_PAD
 #define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_METHOD_PADTRANSFERSENDER_SEAL_PAD
 uint16_t uniffi_ash_bindings_checksum_method_padtransfersender_seal_pad(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_CONSTRUCTOR_BLEPACKETREASSEMBLER_NEW
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_CONSTRUCTOR_BLEPACKETREASSEMBLER_NEW
+uint16_t uniffi_ash_bindings_checksum_constructor_blepacketreassembler_new(void
     
 );
 #endif

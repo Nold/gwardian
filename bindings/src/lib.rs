@@ -13,7 +13,10 @@ mod group;
 mod transfer;
 
 pub use group::{GroupMessage, MemberHealth, MemberPadState, PadGroup, SecurityLevel, UsedRange};
-pub use transfer::{PadTransferReceiver, PadTransferSender, ReceivedPad, SenderReveal};
+pub use transfer::{
+    ble_service_uuid, ble_to_receiver_uuid, ble_to_sender_uuid, split_into_ble_packets,
+    BlePacketReassembler, PadTransferReceiver, PadTransferSender, ReceivedPad, SenderReveal,
+};
 
 // Re-export for UniFFI
 uniffi::include_scaffolding!("ash");
