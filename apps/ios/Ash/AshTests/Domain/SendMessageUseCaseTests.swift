@@ -12,6 +12,9 @@
 //  Previously, Responder was incorrectly using next_send_offset BEFORE consume,
 //  which returned total_size (e.g., 32768 for a 32KB pad), causing out-of-bounds errors.
 //
+//  Every message consumes AUTH_OVERHEAD (64) bytes of auth key followed by
+//  plaintext-length bytes of encryption key, so message_size = 64 + plaintext length.
+//
 
 import Testing
 import Foundation
@@ -76,8 +79,8 @@ struct SendMessageUseCaseTests {
         // Initiator's first message should have sequence = 0
         #expect(result.sequence == 0, "Initiator first message sequence should be 0")
 
-        // Verify key was from bytes [0, 1, 2]
-        #expect(cryptoService.lastEncryptKey == [0, 1, 2])
+        // Verify encryption key was from bytes [64, 65, 66] (after the 64-byte auth key)
+        #expect(cryptoService.lastEncryptKey == [64, 65, 66])
     }
 
     @Test func initiator_secondMessage_sequenceIncrements() async throws {
@@ -94,18 +97,18 @@ struct SendMessageUseCaseTests {
             cryptoService: cryptoService
         )
 
-        // First message: 3 bytes
+        // First message: 64 + 3 bytes
         var conversation = createConversation(role: .initiator)
         let result1 = try await useCase.execute(content: .text("Hi!"), in: conversation)
         #expect(result1.sequence == 0)
 
-        // Second message: 5 bytes (simulate state update)
+        // Second message: 64 + 5 bytes (simulate state update)
         conversation = result1.updatedConversation
         let result2 = try await useCase.execute(content: .text("Hello"), in: conversation)
-        #expect(result2.sequence == 3, "Second message should start at offset 3")
+        #expect(result2.sequence == 67, "Second message should start at offset 67")
 
-        // Verify key was from bytes [3, 4, 5, 6, 7]
-        #expect(cryptoService.lastEncryptKey == [3, 4, 5, 6, 7])
+        // Verify encryption key was from bytes [131, 132, 133, 134, 135] (67 + 64 auth)
+        #expect(cryptoService.lastEncryptKey == [131, 132, 133, 134, 135])
     }
 
     @Test func initiator_multipleMessages_sequenceTracksCorrectly() async throws {
@@ -129,14 +132,14 @@ struct SendMessageUseCaseTests {
         #expect(result1.sequence == 0)
         conversation = result1.updatedConversation
 
-        // Second message: "Hey" (3 bytes) - sequence 3
+        // Second message: "Hey" (64 + 3 bytes) - sequence 67
         let result2 = try await useCase.execute(content: .text("Hey"), in: conversation)
-        #expect(result2.sequence == 3)
+        #expect(result2.sequence == 67)
         conversation = result2.updatedConversation
 
-        // Third message: "Test" (4 bytes) - sequence 6
+        // Third message: "Test" (64 + 4 bytes) - sequence 134
         let result3 = try await useCase.execute(content: .text("Test"), in: conversation)
-        #expect(result3.sequence == 6)
+        #expect(result3.sequence == 134)
     }
 
     // MARK: - Responder Sequence Tests (The bug fix)
@@ -164,11 +167,11 @@ struct SendMessageUseCaseTests {
             in: conversation
         )
 
-        // BUG FIX: Responder's first message should have sequence = 32768 - 3 = 32765
+        // BUG FIX: Responder's first message should have sequence = 32768 - (64 + 3) = 32701
         // NOT 32768 (which would be out of bounds!)
-        #expect(result.sequence == 32765, "Responder first message sequence should be 32765, not 32768")
+        #expect(result.sequence == 32701, "Responder first message sequence should be 32701, not 32768")
 
-        // Verify key was from bytes [32765, 32766, 32767] (last 3 bytes)
+        // Verify encryption key was from bytes [32765, 32766, 32767] (last 3 bytes)
         #expect(cryptoService.lastEncryptKey == [253, 254, 255])  // 32765 % 256, 32766 % 256, 32767 % 256
     }
 
@@ -218,20 +221,20 @@ struct SendMessageUseCaseTests {
             cryptoService: cryptoService
         )
 
-        // First message: 3 bytes
+        // First message: 64 + 3 bytes
         var conversation = createConversation(role: .responder)
         let result1 = try await useCase.execute(content: .text("Hi!"), in: conversation)
-        #expect(result1.sequence == 32765)  // 32768 - 0 - 3
+        #expect(result1.sequence == 32701)  // 32768 - 0 - 67
 
-        // Second message: 5 bytes
+        // Second message: 64 + 5 bytes
         conversation = result1.updatedConversation
         let result2 = try await useCase.execute(content: .text("Hello"), in: conversation)
-        #expect(result2.sequence == 32760)  // 32768 - 3 - 5 = 32760
+        #expect(result2.sequence == 32632)  // 32768 - 67 - 69 = 32632
 
-        // Third message: 4 bytes
+        // Third message: 64 + 4 bytes
         conversation = result2.updatedConversation
         let result3 = try await useCase.execute(content: .text("Test"), in: conversation)
-        #expect(result3.sequence == 32756)  // 32768 - 8 - 4 = 32756
+        #expect(result3.sequence == 32564)  // 32768 - 136 - 68 = 32564
     }
 
     // MARK: - Cross-party Communication Tests
@@ -269,29 +272,29 @@ struct SendMessageUseCaseTests {
         var aliceConversation = createConversation(role: .initiator, totalBytes: padSize)
         var bobConversation = createConversation(role: .responder, totalBytes: padSize)
 
-        // Alice sends (3 bytes) - should use sequence 0
+        // Alice sends (64 + 3 bytes) - should use sequence 0
         let aliceResult1 = try await aliceUseCase.execute(content: .text("Hi!"), in: aliceConversation)
         aliceConversation = aliceResult1.updatedConversation
 
-        // Bob sends (3 bytes) - should use sequence 997 (1000 - 0 - 3)
+        // Bob sends (64 + 3 bytes) - should use sequence 933 (1000 - 0 - 67)
         let bobResult1 = try await bobUseCase.execute(content: .text("Hi!"), in: bobConversation)
         bobConversation = bobResult1.updatedConversation
 
-        // Alice sends again (5 bytes) - should use sequence 3
+        // Alice sends again (64 + 5 bytes) - should use sequence 67
         let aliceResult2 = try await aliceUseCase.execute(content: .text("Hello"), in: aliceConversation)
 
-        // Bob sends again (5 bytes) - should use sequence 992 (1000 - 3 - 5)
+        // Bob sends again (64 + 5 bytes) - should use sequence 864 (1000 - 67 - 69)
         let bobResult2 = try await bobUseCase.execute(content: .text("Hello"), in: bobConversation)
 
         // Verify sequences
         #expect(aliceResult1.sequence == 0)
-        #expect(aliceResult2.sequence == 3)
-        #expect(bobResult1.sequence == 997)  // 1000 - 0 - 3
-        #expect(bobResult2.sequence == 992)  // 1000 - 3 - 5
+        #expect(aliceResult2.sequence == 67)
+        #expect(bobResult1.sequence == 933)  // 1000 - 0 - 67
+        #expect(bobResult2.sequence == 864)  // 1000 - 67 - 69
 
-        // Verify no overlap: Alice uses [0-7], Bob uses [992-999]
-        let aliceRanges = [(0, 2), (3, 7)]  // First msg [0-2], second [3-7]
-        let bobRanges = [(997, 999), (992, 996)]  // First msg [997-999], second [992-996]
+        // Verify no overlap: Alice uses [0-135], Bob uses [864-999]
+        let aliceRanges = [(0, 66), (67, 135)]  // First msg [0-66], second [67-135]
+        let bobRanges = [(933, 999), (864, 932)]  // First msg [933-999], second [864-932]
 
         for aliceRange in aliceRanges {
             for bobRange in bobRanges {
@@ -322,17 +325,18 @@ struct SendMessageUseCaseTests {
 
         let conversation = createConversation(role: .responder, totalBytes: padSize)
 
-        // Bob sends "Hi!" (3 bytes)
+        // Bob sends "Hi!" (64 + 3 bytes)
         let result = try await useCase.execute(content: .text("Hi!"), in: conversation)
         let sequence = result.sequence
 
-        // Sequence should be 97 (100 - 0 - 3)
-        #expect(sequence == 97)
+        // Sequence should be 33 (100 - 0 - 67)
+        #expect(sequence == 33)
 
-        // Alice would decrypt by reading bytes at offset 97
+        // Alice would read the 64-byte auth key at offset 33 and the
+        // encryption key right after it, at offset 97
         // Let's verify the key bytes are correct
         let decryptionKey = try await padManager.getBytesForDecryption(
-            offset: sequence,
+            offset: sequence + UInt64(AUTH_OVERHEAD),
             length: 3,
             for: "test-conversation"
         )
@@ -366,8 +370,8 @@ struct SendMessageUseCaseTests {
         // Single byte message
         let result = try await useCase.execute(content: .text("X"), in: conversation)
 
-        // Sequence should be 99 (100 - 0 - 1)
-        #expect(result.sequence == 99)
+        // Sequence should be 35 (100 - 0 - 65)
+        #expect(result.sequence == 35)
         #expect(cryptoService.lastEncryptKey == [99])
     }
 
@@ -392,8 +396,8 @@ struct SendMessageUseCaseTests {
         let longText = String(repeating: "X", count: 100)
         let result = try await useCase.execute(content: .text(longText), in: conversation)
 
-        // Sequence should be 900 (1000 - 0 - 100)
-        #expect(result.sequence == 900)
+        // Sequence should be 836 (1000 - 0 - 164)
+        #expect(result.sequence == 836)
     }
 
     @Test func responder_afterPeerConsumption() async throws {
@@ -425,9 +429,9 @@ struct SendMessageUseCaseTests {
         // Send 3-byte message
         let result = try await useCase.execute(content: .text("Hi!"), in: conversation)
 
-        // Sequence should be 997 (1000 - 0 - 3)
+        // Sequence should be 933 (1000 - 0 - 67)
         // The peer consumption affects remaining bytes but not our sequence calculation
-        #expect(result.sequence == 997)
+        #expect(result.sequence == 933)
     }
 
     // MARK: - Regression Test: The Original Bug
@@ -435,7 +439,7 @@ struct SendMessageUseCaseTests {
     @Test func responder_sequenceNotEqualToPadSize_regression() async throws {
         // This is the exact regression test for the bug:
         // Before fix: Responder's first message had sequence = 32768 (pad size)
-        // After fix: Responder's first message has sequence = 32765 (pad size - msg length)
+        // After fix: Responder's first message has sequence = 32701 (pad size - (64 + msg length))
 
         let padManager = MockPadManager()
         let conversationRepo = MockConversationRepository()
@@ -457,11 +461,11 @@ struct SendMessageUseCaseTests {
         // Send 3-byte message (like "Hi!")
         let result = try await useCase.execute(content: .text("abc"), in: conversation)
 
-        // THE FIX: sequence should be 32765, NOT 32768
+        // THE FIX: sequence should be 32701, NOT 32768
         #expect(result.sequence != padSize,
                "REGRESSION: Sequence should NOT equal pad size! Got \(result.sequence)")
-        #expect(result.sequence == padSize - 3,
-               "Sequence should be padSize - messageLength = \(padSize - 3), got \(result.sequence)")
+        #expect(result.sequence == padSize - 67,
+               "Sequence should be padSize - (64 + messageLength) = \(padSize - 67), got \(result.sequence)")
 
         // Verify it's a valid offset: sequence + length <= padSize
         let messageLength: UInt64 = 3

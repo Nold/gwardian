@@ -146,8 +146,8 @@ struct ConversationTests {
     @Test func canSendMessage_exactlyFits_returnsTrue() {
         let conversation = createConversation(sendOffset: 30000, peerConsumed: 30000, totalBytes: 65536)
 
-        // 30000 + 5536 + 30000 = 65536 (exactly fits)
-        #expect(conversation.canSendMessage(ofLength: 5536) == true)
+        // 30000 + (64 auth overhead + 5472) + 30000 = 65536 (exactly fits)
+        #expect(conversation.canSendMessage(ofLength: 5472) == true)
     }
 
     @Test func canSendMessage_dynamicAllocation_allowsMoreThanHalf() {
