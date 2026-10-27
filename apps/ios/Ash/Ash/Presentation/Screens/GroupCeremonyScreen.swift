@@ -339,10 +339,8 @@ private struct GroupScanCardView: View {
 
             Spacer()
 
-            if viewModel.me != nil || viewModel.knownCount > 0 {
-                Button("Back") { viewModel.stopScanning() }
-                    .padding(.bottom, Spacing.lg)
-            }
+            Button("Back") { viewModel.stopScanning() }
+                .padding(.bottom, Spacing.lg)
         }
     }
 
@@ -381,7 +379,21 @@ private struct GroupTurnView: View {
                 .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 12))
 
                 VStack(spacing: Spacing.sm) {
-                    if let place = viewModel.nextPlaceToScan {
+                    if viewModel.isReadyToFinish {
+                        Button {
+                            viewModel.finish()
+                        } label: {
+                            Text("Create the Group")
+                                .font(.headline)
+                                .foregroundStyle(.white)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, Spacing.md)
+                                .background(accentColor, in: Capsule())
+                        }
+                        Text("Once every phone has all the cards.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    } else if let place = viewModel.nextPlaceToScan {
                         Button {
                             viewModel.startScanning()
                         } label: {

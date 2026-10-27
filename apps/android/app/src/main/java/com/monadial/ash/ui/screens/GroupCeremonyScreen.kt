@@ -43,7 +43,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -81,12 +80,10 @@ import com.monadial.ash.ui.viewmodels.GroupStep
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun GroupCeremonyScreen(
-    role: GroupRole,
     onComplete: () -> Unit,
     onCancel: () -> Unit,
     viewModel: GroupCeremonyViewModel = hiltViewModel()
 ) {
-    LaunchedEffect(role) { viewModel.begin(role) }
     val state by viewModel.uiState.collectAsState()
     val accent = Color(state.color.toColorLong())
 
@@ -373,9 +370,7 @@ private fun ScanCardContent(state: GroupCeremonyUiState, viewModel: GroupCeremon
             }
         }
         Spacer(Modifier.weight(1f))
-        if (state.me != null || state.knownCount > 0) {
-            TextButton(onClick = viewModel::stopScanning) { Text("Back") }
-        }
+        TextButton(onClick = viewModel::stopScanning) { Text("Back") }
     }
 }
 
@@ -421,9 +416,14 @@ private fun TurnContent(state: GroupCeremonyUiState, accent: Color, viewModel: G
             }
         }
 
-        state.nextPlaceToScan?.let { place ->
-            Button(onClick = viewModel::startScanning, modifier = Modifier.fillMaxWidth()) {
-                Text("Scan Member ${place + 1}'s Card")
+        if (state.isReadyToFinish) {
+            Button(onClick = viewModel::finish, modifier = Modifier.fillMaxWidth()) { Text("Create the Group") }
+            Hint("Once every phone has all the cards.")
+        } else {
+            state.nextPlaceToScan?.let { place ->
+                Button(onClick = viewModel::startScanning, modifier = Modifier.fillMaxWidth()) {
+                    Text("Scan Member ${place + 1}'s Card")
+                }
             }
         }
         if (state.canTakeTurn) {

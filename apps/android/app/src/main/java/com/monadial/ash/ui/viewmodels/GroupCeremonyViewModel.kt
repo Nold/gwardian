@@ -2,6 +2,7 @@ package com.monadial.ash.ui.viewmodels
 
 import android.graphics.Bitmap
 import android.util.Log
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.monadial.ash.data.repositories.GroupRepository
@@ -103,6 +104,9 @@ data class GroupCeremonyUiState(
     val nextPlaceToScan: Int?
         get() = if (totalMembers == 0) 0 else (0 until totalMembers).firstOrNull { it != me && scanned.none { s -> s.index == it } }
 
+    /** Every card is known: the group can be created */
+    val isReadyToFinish: Boolean get() = me != null && totalMembers > 0 && knownCount == totalMembers
+
     /** A joiner takes the next place once it scanned every earlier card */
     val canTakeTurn: Boolean
         get() = role == GroupRole.JOINER && me == null && totalMembers > 0 && scanned.size < totalMembers &&
@@ -117,6 +121,7 @@ data class GroupCeremonyUiState(
  */
 @HiltViewModel
 class GroupCeremonyViewModel @Inject constructor(
+    savedStateHandle: SavedStateHandle,
     private val cryptoService: CryptoService,
     private val qrCodeService: QRCodeService,
     private val relayService: RelayService,
@@ -134,7 +139,16 @@ class GroupCeremonyViewModel @Inject constructor(
         val maxMembers: Int = getMaxGroupMembers().toInt()
     }
 
-    private val _uiState = MutableStateFlow(GroupCeremonyUiState())
+    // Role from the navigation argument, so the first frame is already right
+    private val _uiState = MutableStateFlow(
+        GroupRole.entries.firstOrNull { it.name == savedStateHandle.get<String>("role") }.let { role ->
+            val actual = role ?: GroupRole.CREATOR
+            GroupCeremonyUiState(
+                role = actual,
+                passphraseWords = if (actual == GroupRole.CREATOR) drawWords() else emptyList()
+            )
+        }
+    )
     val uiState: StateFlow<GroupCeremonyUiState> = _uiState.asStateFlow()
 
     private val collectedEntropy = mutableListOf<Byte>()
@@ -154,13 +168,6 @@ class GroupCeremonyViewModel @Inject constructor(
     }
 
     // MARK: - Setup
-
-    fun begin(role: GroupRole) {
-        if (_uiState.value.role == role && _uiState.value.passphraseWords.isNotEmpty()) return
-        _uiState.update {
-            it.copy(role = role, passphraseWords = if (role == GroupRole.CREATOR) drawWords() else emptyList())
-        }
-    }
 
     private fun drawWords(): List<String> = runCatching { cryptoService.generateQrPassphrase() }.getOrDefault(emptyList())
 
@@ -184,7 +191,8 @@ class GroupCeremonyViewModel @Inject constructor(
         if (name.isEmpty() || name.toByteArray(Charsets.UTF_8).size > MAX_NAME_BYTES) return false
         return when (state.role) {
             GroupRole.CREATOR ->
-                state.memberCount in 2..maxMembers && (!state.usesPassphrase || state.passphraseWords.isNotEmpty())
+                state.memberCount in 2..maxMembers && (!state.usesPassphrase || state.passphraseWords.isNotEmpty()) &&
+                    state.relayUrl.isNotBlank()
             GroupRole.JOINER -> {
                 val words = state.typedPassphrase.trim()
                 words.isEmpty() || cryptoService.validatePassphrase(words)
@@ -250,25 +258,26 @@ class GroupCeremonyViewModel @Inject constructor(
                 require(size > 0 && metadata != null) { "missing creator settings" }
                 groupMetadata = metadata
 
-                val pad = withContext(Dispatchers.Default) { generatePadBytes(entropy, size) }
-                ownPad = pad
-                val card = encodeMemberCard(
-                    GroupMemberCard(
-                        member = me.toUByte(),
-                        members = state.totalMembers.toUByte(),
-                        name = state.trimmedName,
-                        pad = pad.map { it.toUByte() }
+                val (pad, newGenerator) = withContext(Dispatchers.Default) {
+                    val pad = generatePadBytes(entropy, size)
+                    val card = encodeMemberCard(
+                        GroupMemberCard(
+                            member = me.toUByte(),
+                            members = state.totalMembers.toUByte(),
+                            name = state.trimmedName,
+                            pad = pad.map { it.toUByte() }
+                        )
                     )
-                )
-                generator?.close()
-                generator = withContext(Dispatchers.Default) {
-                    cryptoService.createFountainGenerator(
+                    pad to cryptoService.createFountainGenerator(
                         metadata,
                         card.map { it.toByte() }.toByteArray(),
                         FOUNTAIN_BLOCK_SIZE,
                         passphrase(state)
                     )
                 }
+                ownPad = pad
+                generator?.close()
+                generator = newGenerator
                 Log.d(TAG, "Group card ready: place $me, pad ${pad.size} bytes")
                 startShowing()
             } catch (e: Exception) {
@@ -304,8 +313,13 @@ class GroupCeremonyViewModel @Inject constructor(
         displayJob = viewModelScope.launch {
             var index = 0u
             while (isActive) {
-                val bitmap = withContext(Dispatchers.Default) {
-                    qrCodeService.generate(cryptoService.generateFrameBytes(generator, index), QR_CODE_SIZE)
+                // The generator is closed on cancel: stop instead of crashing
+                val bitmap = try {
+                    withContext(Dispatchers.Default) {
+                        qrCodeService.generate(cryptoService.generateFrameBytes(generator, index), QR_CODE_SIZE)
+                    }
+                } catch (e: IllegalStateException) {
+                    break
                 }
                 _uiState.update { it.copy(currentQRBitmap = bitmap) }
                 index++
@@ -357,7 +371,10 @@ class GroupCeremonyViewModel @Inject constructor(
     fun stopScanning() {
         receiver?.close()
         receiver = null
-        _uiState.update { it.copy(step = GroupStep.Waiting) }
+        // Before the first card, back to setup, for instance to type the words
+        _uiState.update {
+            it.copy(step = if (it.me == null && it.scanned.isEmpty()) GroupStep.Setup else GroupStep.Waiting)
+        }
     }
 
     fun processScannedFrame(base64String: String) {
@@ -445,17 +462,24 @@ class GroupCeremonyViewModel @Inject constructor(
 
     // MARK: - Turns
 
-    /** Form the group once every card is known, otherwise wait for the next turn. */
+    /**
+     * After a card is shown or scanned, wait for the next turn. The group is
+     * formed on request once every card is known, so this phone can still
+     * show its card again to a phone that missed it.
+     */
     private fun advance() {
         val state = _uiState.value
-        if (state.me != null && state.knownCount == state.totalMembers) {
-            formGroup()
-        } else if (state.me == null && state.totalMembers > 0 && state.scanned.size >= state.totalMembers) {
+        if (state.me == null && state.totalMembers > 0 && state.scanned.size >= state.totalMembers) {
             // Every place is taken by another phone
             _uiState.update { it.copy(step = GroupStep.Failed(CardProblem.PLACE_TAKEN.message)) }
         } else {
             _uiState.update { it.copy(step = GroupStep.Waiting) }
         }
+    }
+
+    fun finish() {
+        val state = _uiState.value
+        if (state.isReadyToFinish && state.step == GroupStep.Waiting) formGroup()
     }
 
     private fun formGroup() {
@@ -468,18 +492,22 @@ class GroupCeremonyViewModel @Inject constructor(
             return
         }
         _uiState.update { it.copy(step = GroupStep.Generating) }
+        val cardList = cards.values.toList()
 
         viewModelScope.launch {
             try {
-                val (group, members, tokens) = withContext(Dispatchers.Default) {
-                    val padGroup = PadGroup(me.toUByte(), pad.map { it.toUByte() }, SecurityLevel.MAXIMUM)
-                    for (card in cards.values) {
-                        padGroup.addMember(card.member, card.pad, SecurityLevel.MAXIMUM)
+                // The pads never leave the background thread; only their
+                // serialized state is returned
+                val (states, members, tokens) = withContext(Dispatchers.Default) {
+                    PadGroup(me.toUByte(), pad.map { it.toUByte() }, SecurityLevel.MAXIMUM).use { padGroup ->
+                        for (card in cardList) {
+                            padGroup.addMember(card.member, card.pad, SecurityLevel.MAXIMUM)
+                        }
+                        val tokens = padGroup.takeRelayTokens()
+                        val members = (cardList.map { GroupMember(it.member.toInt(), it.name) } +
+                            GroupMember(me, state.trimmedName)).sortedBy { it.index }
+                        Triple(padGroup.exportState(), members, tokens)
                     }
-                    val tokens = padGroup.takeRelayTokens()
-                    val members = (cards.values.map { GroupMember(it.member.toInt(), it.name) } +
-                        GroupMember(me, state.trimmedName)).sortedBy { it.index }
-                    Triple(padGroup, members, tokens)
                 }
 
                 val conversation = GroupConversation(
@@ -498,16 +526,17 @@ class GroupCeremonyViewModel @Inject constructor(
                     isFamilyConversation = passphrase(state) == null
                 )
 
-                groupRepository.savePads(conversation.id, group.exportState())
-                group.close()
+                withContext(Dispatchers.Default) { groupRepository.savePads(conversation.id, states) }
                 groupRepository.save(conversation)
-                // Not fatal: the group is registered again on first use
-                register(conversation)
 
+                generator?.close()
+                generator = null
                 ownPad = null
                 cards.clear()
                 Log.d(TAG, "Group formed: ${members.size} members, place $me")
                 _uiState.update { it.copy(step = GroupStep.Completed(conversation)) }
+                // Not fatal: the group is registered again on first use
+                register(conversation)
             } catch (e: Exception) {
                 Log.e(TAG, "Group formation failed: ${e.message}", e)
                 _uiState.update {

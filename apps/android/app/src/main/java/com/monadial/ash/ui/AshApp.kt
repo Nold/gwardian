@@ -132,12 +132,9 @@ private fun UnlockedApp() {
         composable(
             route = Screen.GroupCeremony.route,
             arguments = listOf(navArgument("role") { type = NavType.StringType })
-        ) { backStackEntry ->
-            val role = runCatching {
-                GroupRole.valueOf(backStackEntry.arguments?.getString("role") ?: "")
-            }.getOrDefault(GroupRole.CREATOR)
+        ) {
+            // The view model reads the role from the navigation argument
             GroupCeremonyScreen(
-                role = role,
                 onComplete = { navController.popBackStack() },
                 onCancel = { navController.popBackStack() }
             )

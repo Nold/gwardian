@@ -15,7 +15,9 @@ pad and holds a copy of every other member's pad.
    scans it.
 4. Then, one at a time, the next member taps **It's my turn**. Their phone
    shows its card and every other phone scans it, including the creator's.
-5. When a phone holds every card, the group is formed on that phone.
+5. When a phone holds every card, its owner taps **Create the Group**, once
+   every phone has all the cards. Until then, any phone can show its card
+   again for a phone that missed it.
 
 Nobody types a number: a joiner takes its place from the number of cards it
 already scanned. The creator is member 0, the first joiner to show is
@@ -53,7 +55,7 @@ finds every place taken. The ceremony stops; it must start again, one turn
 at a time.
 
 A phone that missed a card asks its owner to show it again: every phone
-that has shown its card can show it again between turns.
+that has shown its card can show it again until its group is created.
 
 ## Relay tokens
 

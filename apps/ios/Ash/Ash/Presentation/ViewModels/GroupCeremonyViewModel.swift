@@ -127,6 +127,7 @@ final class GroupCeremonyViewModel {
         switch role {
         case .creator:
             return (2...Self.maxMembers).contains(memberCount) && (!usesPassphrase || !passphraseWords.isEmpty)
+                && !selectedRelayURL.trimmingCharacters(in: .whitespaces).isEmpty
         case .joiner:
             let words = typedPassphrase.trimmingCharacters(in: .whitespaces)
             return words.isEmpty || validatePassphrase(passphrase: words)
@@ -138,6 +139,9 @@ final class GroupCeremonyViewModel {
         guard totalMembers > 0 else { return 0 }
         return (0..<UInt8(totalMembers)).first { $0 != me && cards[$0] == nil }
     }
+
+    /// Every card is known: the group can be created
+    var isReadyToFinish: Bool { me != nil && totalMembers > 0 && knownCount == totalMembers }
 
     /// A joiner takes the next place once it scanned every earlier card
     var canTakeTurn: Bool {
@@ -316,10 +320,11 @@ final class GroupCeremonyViewModel {
         step = .scanning
     }
 
-    /// Back to the turn choice without a card, for instance to take a turn.
+    /// Back to the turn choice without a card, for instance to take a turn;
+    /// back to setup before the first card, for instance to type the words.
     func stopScanning() {
         receiver = nil
-        step = .waiting
+        step = (me == nil && cards.isEmpty) ? .setup : .waiting
     }
 
     func processScannedFrame(_ data: Data) {
@@ -391,17 +396,21 @@ final class GroupCeremonyViewModel {
 
     // MARK: - Turns
 
-    /// After a card is shown or scanned: form the group once every card is
-    /// known, otherwise wait for the next turn.
+    /// After a card is shown or scanned, wait for the next turn. The group is
+    /// formed on request once every card is known, so this phone can still
+    /// show its card again to a phone that missed it.
     private func advance() {
-        if me != nil && knownCount == totalMembers {
-            Task { await formGroup() }
-        } else if me == nil && totalMembers > 0 && cards.count >= totalMembers {
+        if me == nil && totalMembers > 0 && cards.count >= totalMembers {
             // Every place is taken by another phone
             step = .failed(GroupCeremonyError.placeTaken.message)
         } else {
             step = .waiting
         }
+    }
+
+    func finish() {
+        guard isReadyToFinish, step == .waiting else { return }
+        Task { await formGroup() }
     }
 
     private func formGroup() async {
