@@ -29,7 +29,7 @@ async fn build_test_server() -> TestServer {
 
 /// Create authorization header value
 fn auth_header(token: &str) -> String {
-    format!("Bearer {}", token)
+    format!("Bearer {token}")
 }
 
 /// Helper struct to hold ceremony result for both parties
@@ -371,8 +371,7 @@ async fn test_e2e_bidirectional_message_exchange() {
     let frame1 =
         MessageFrame::encrypt(MessageType::Text, msg1, &enc1, &AuthKey::from_slice(&auth1))
             .unwrap();
-    let wire1 =
-        base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &frame1.encode());
+    let wire1 = base64::Engine::encode(&base64::engine::general_purpose::STANDARD, frame1.encode());
 
     server
         .post("/v1/messages")
@@ -395,8 +394,7 @@ async fn test_e2e_bidirectional_message_exchange() {
     let frame2 =
         MessageFrame::encrypt(MessageType::Text, msg2, &enc2, &AuthKey::from_slice(&auth2))
             .unwrap();
-    let wire2 =
-        base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &frame2.encode());
+    let wire2 = base64::Engine::encode(&base64::engine::general_purpose::STANDARD, frame2.encode());
 
     server
         .post("/v1/messages")
@@ -419,8 +417,7 @@ async fn test_e2e_bidirectional_message_exchange() {
     let frame3 =
         MessageFrame::encrypt(MessageType::Text, msg3, &enc3, &AuthKey::from_slice(&auth3))
             .unwrap();
-    let wire3 =
-        base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &frame3.encode());
+    let wire3 = base64::Engine::encode(&base64::engine::general_purpose::STANDARD, frame3.encode());
 
     server
         .post("/v1/messages")
@@ -568,7 +565,7 @@ async fn test_e2e_burn_with_derived_tokens() {
     )
     .unwrap();
     let ciphertext =
-        base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &frame.encode());
+        base64::Engine::encode(&base64::engine::general_purpose::STANDARD, frame.encode());
 
     server
         .post("/v1/messages")
@@ -699,7 +696,7 @@ async fn test_e2e_pad_consumption_tracking() {
 
     // Send multiple messages and track consumption
     for i in 0..5 {
-        let msg = format!("Message number {}", i);
+        let msg = format!("Message number {i}");
         let msg_bytes = msg.as_bytes();
 
         let auth_bytes = initiator
@@ -719,7 +716,7 @@ async fn test_e2e_pad_consumption_tracking() {
         )
         .unwrap();
         let ciphertext =
-            base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &frame.encode());
+            base64::Engine::encode(&base64::engine::general_purpose::STANDARD, frame.encode());
 
         server
             .post("/v1/messages")
