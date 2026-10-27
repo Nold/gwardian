@@ -38,6 +38,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import uniffi.ash.CeremonyMetadata
 import uniffi.ash.FountainFrameGenerator
+import uniffi.ash.TransferMethod
 
 /**
  * ViewModel for the initiator (sender) ceremony flow.
@@ -264,6 +265,7 @@ class InitiatorCeremonyViewModel @Inject constructor(
                 ttlSeconds = state.serverRetention.seconds.toULong(),
                 disappearingMessagesSeconds = (state.disappearingMessages.seconds ?: 0).toUInt(),
                 notificationFlags = buildNotificationFlags(state.selectedColor),
+                transferMethod = TransferMethod.RAPTOR,
                 relayUrl = state.relayUrl
             )
 

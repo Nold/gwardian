@@ -10,6 +10,7 @@ import uniffi.ash.FountainFrameReceiver
 import uniffi.ash.Pad
 import uniffi.ash.PadSize
 import uniffi.ash.Role
+import uniffi.ash.TransferMethod
 import uniffi.ash.createFountainGenerator
 import uniffi.ash.decrypt
 import uniffi.ash.deriveAllTokens
@@ -44,11 +45,13 @@ class AshCoreService @Inject constructor() {
         blockSize: UInt = 1000u,
         passphrase: String? = null
     ): FountainFrameGenerator {
+        // The core always encrypts frames; no passphrase means an empty one
         return createFountainGenerator(
             metadata = metadata,
             padBytes = padBytes.map { it.toUByte() },
             blockSize = blockSize,
-            passphrase = passphrase
+            passphrase = passphrase.orEmpty(),
+            method = TransferMethod.RAPTOR
         )
     }
 
@@ -59,7 +62,7 @@ class AshCoreService @Inject constructor() {
      * @return FountainFrameReceiver for collecting and decoding scanned frames
      */
     fun createFountainReceiver(passphrase: String? = null): FountainFrameReceiver {
-        return FountainFrameReceiver(passphrase)
+        return FountainFrameReceiver(passphrase.orEmpty())
     }
 
     // === Mnemonic Operations ===
