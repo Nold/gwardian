@@ -66,6 +66,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.monadial.ash.domain.entities.DeliveryStatus
 import com.monadial.ash.domain.entities.Message
 import com.monadial.ash.domain.entities.MessageDirection
+import com.monadial.ash.ui.components.keyboard.ThirdPartyKeyboardWarning
 import com.monadial.ash.ui.viewmodels.MessagingViewModel
 
 @Suppress("UnusedParameter")
@@ -216,6 +217,9 @@ fun MessagingScreen(
                     )
                 }
             }
+
+            // A downloaded keyboard could read the message as it is typed
+            ThirdPartyKeyboardWarning()
 
             // Input area
             MessageInput(

@@ -8,6 +8,9 @@ import com.monadial.ash.core.services.LocationService
 import com.monadial.ash.core.services.RelayService
 import com.monadial.ash.core.services.SSEService
 import com.monadial.ash.core.services.SettingsService
+import com.monadial.ash.core.services.applock.KeystoreVaultKeyStore
+import com.monadial.ash.core.services.applock.PasscodeVault
+import com.monadial.ash.core.services.applock.PrefsLockAttemptStore
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -55,8 +58,18 @@ object AppModule {
 
     @Provides
     @Singleton
-    fun provideConversationStorageService(@ApplicationContext context: Context): ConversationStorageService =
-        ConversationStorageService(context)
+    fun providePasscodeVault(@ApplicationContext context: Context): PasscodeVault =
+        PasscodeVault(KeystoreVaultKeyStore(context), PrefsLockAttemptStore(context))
+
+    @Provides
+    @Singleton
+    fun provideConversationStorageService(
+        @ApplicationContext context: Context,
+        vault: PasscodeVault
+    ): ConversationStorageService = ConversationStorageService(context, vault).also { storage ->
+        // Too many wrong codes: the vault key is gone, delete what it sealed
+        vault.onErase = { storage.wipeAll() }
+    }
 
     @Provides
     @Singleton

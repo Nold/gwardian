@@ -2,139 +2,87 @@
 //  LockScreen.swift
 //  Ash
 //
-//  Biometric lock screen
+//  App code lock screen, with the optional biometric shortcut
 //
 
 import SwiftUI
 
 struct LockScreen: View {
     @Bindable var viewModel: AppLockViewModel
-    @State private var showContent = false
+    @State private var code = ""
     @State private var hasAttemptedAutoAuth = false
 
     var body: some View {
         ZStack {
-            // Background
             Color(uiColor: .systemBackground)
                 .ignoresSafeArea()
 
-            VStack(spacing: 0) {
-                Spacer()
+            VStack(spacing: Spacing.lg) {
+                Spacer(minLength: Spacing.md)
 
-                // App logo
-                AppLogo(size: .large, showTitle: true)
-                    .opacity(showContent ? 1 : 0)
-                    .scaleEffect(showContent ? 1 : 0.9)
+                AppLogo(size: .medium, showTitle: false)
 
-                Spacer()
-                    .frame(height: Spacing.xxl)
-
-                // Lock status
-                VStack(spacing: Spacing.lg) {
-                    // Status text
-                    Text("App Locked")
-                        .font(.title3.weight(.semibold))
-                        .foregroundStyle(.secondary)
-
-                    // Biometric unlock button
-                    unlockButton
-                        .padding(.horizontal, Spacing.lg)
-
-                    // Error message
-                    if let error = viewModel.authenticationError {
-                        errorMessage(error)
-                            .transition(.opacity.combined(with: .scale(scale: 0.95)))
-                    }
+                // Re-evaluated every second so the delay counts down
+                TimelineView(.periodic(from: .now, by: 1)) { context in
+                    let waiting = remaining(at: context.date)
+                    PasscodeEntryView(
+                        title: "Enter your code",
+                        subtitle: subtitle(waiting: waiting),
+                        code: $code,
+                        message: viewModel.errorMessage,
+                        isDisabled: waiting != nil || viewModel.isAuthenticating,
+                        shakeTrigger: viewModel.wrongCodeCount,
+                        biometricIcon: viewModel.isBiometricUnlockEnabled ? viewModel.biometricType.iconName : nil,
+                        onBiometric: { Task { await viewModel.unlockWithBiometrics() } },
+                        onComplete: submit
+                    )
                 }
-                .opacity(showContent ? 1 : 0)
-                .offset(y: showContent ? 0 : 16)
 
-                Spacer()
+                Spacer(minLength: Spacing.md)
             }
-            .padding(.horizontal, Spacing.md)
         }
-        .animation(.easeInOut(duration: 0.2), value: viewModel.authenticationError)
         .onAppear {
-            withAnimation(.easeOut(duration: 0.4)) {
-                showContent = true
-            }
-
-            // Auto-authenticate on first appear only if biometrics available
-            if !hasAttemptedAutoAuth && viewModel.canUseBiometrics {
+            code = ""
+            // Offer biometrics once when the lock screen first shows
+            if !hasAttemptedAutoAuth && viewModel.isBiometricUnlockEnabled {
                 hasAttemptedAutoAuth = true
                 Task {
-                    try? await Task.sleep(for: .milliseconds(500))
-                    await viewModel.unlock()
+                    try? await Task.sleep(for: .milliseconds(400))
+                    await viewModel.unlockWithBiometrics()
                 }
             }
         }
     }
 
-    private var unlockButton: some View {
-        Button {
-            Task {
-                await viewModel.unlock()
-            }
-        } label: {
-            HStack(spacing: Spacing.md) {
-                // Biometric icon
-                ZStack {
-                    Circle()
-                        .fill(Color.ashSecure.opacity(0.12))
-                        .frame(width: 56, height: 56)
-
-                    Image(systemName: viewModel.biometricType.iconName)
-                        .font(.system(size: 26, weight: .medium))
-                        .foregroundStyle(Color.ashSecure)
-                        .symbolEffect(.pulse, isActive: viewModel.isAuthenticating)
-                }
-
-                // Label
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(viewModel.isAuthenticating ? "Authenticating..." : "Unlock with \(viewModel.biometricType.displayName)")
-                        .font(.headline)
-                        .foregroundStyle(Color.primary)
-
-                    Text("Tap to authenticate")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
-
-                Spacer()
-
-                // Chevron
-                Image(systemName: "chevron.right")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.tertiary)
-            }
-            .padding(Spacing.md)
-            .background(Color(uiColor: .secondarySystemGroupedBackground))
-            .clipShape(RoundedRectangle(cornerRadius: CornerRadius.lg, style: .continuous))
+    private func submit(_ entered: String) {
+        let unlocked = viewModel.unlock(code: entered)
+        if !unlocked {
+            code = ""
         }
-        .buttonStyle(.plain)
-        .disabled(viewModel.isAuthenticating)
     }
 
-    private func errorMessage(_ error: String) -> some View {
-        HStack(spacing: Spacing.sm) {
-            Image(systemName: "exclamationmark.triangle.fill")
-                .font(.subheadline)
-                .foregroundStyle(Color.ashDanger)
-
-            Text(error)
-                .font(.subheadline)
-                .foregroundStyle(Color.ashDanger)
-                .multilineTextAlignment(.leading)
-
-            Spacer()
-        }
-        .padding(Spacing.md)
-        .background(Color.ashDanger.opacity(0.1))
-        .clipShape(RoundedRectangle(cornerRadius: CornerRadius.md, style: .continuous))
-        .padding(.horizontal, Spacing.lg)
+    private func remaining(at date: Date) -> TimeInterval? {
+        guard let until = viewModel.retryUntil, until > date else { return nil }
+        return until.timeIntervalSince(date)
     }
-}
 
-#Preview {
-    LockScreen(viewModel: AppLockViewModel())
+    private func subtitle(waiting: TimeInterval?) -> String? {
+        if let waiting {
+            return "Too many wrong codes. Try again in \(Self.format(waiting))."
+        }
+        if let left = viewModel.attemptsBeforeErase, left <= 3 {
+            return left == 1
+                ? "1 attempt left before everything is erased"
+                : "\(left) attempts left before everything is erased"
+        }
+        return nil
+    }
+
+    private static func format(_ interval: TimeInterval) -> String {
+        let seconds = Int(interval.rounded(.up))
+        if seconds < 60 { return "\(seconds) s" }
+        let minutes = seconds / 60
+        let rest = seconds % 60
+        return rest == 0 ? "\(minutes) min" : "\(minutes) min \(rest) s"
+    }
 }

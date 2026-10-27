@@ -18,6 +18,9 @@ struct SettingsScreen: View {
     @State private var isShowingBurnAllConfirmation = false
     @State private var isShowingEmergencyBurn = false
     @State private var biometricEnabled = false
+    @State private var isShowingBiometricWarning = false
+    @State private var isShowingEraseWarning = false
+    @State private var isShowingChangeCode = false
     @State private var defaultRelayURL = ""
     @State private var isTestingConnection = false
     @State private var connectionTestResult: ConnectionTestResult?
@@ -68,7 +71,7 @@ struct SettingsScreen: View {
                 Text("This will permanently destroy all conversations and encryption pads. This cannot be undone.")
             }
             .onAppear {
-                biometricEnabled = lockViewModel.isBiometricLockEnabled
+                biometricEnabled = lockViewModel.isBiometricUnlockEnabled
                 defaultRelayURL = dependencies.settingsService.relayServerURL
             }
             .sheet(isPresented: $isShowingEmergencyBurn) {
@@ -98,60 +101,106 @@ struct SettingsScreen: View {
                 .padding(.horizontal, Spacing.xs)
 
             VStack(spacing: 1) {
+                Button {
+                    isShowingChangeCode = true
+                } label: {
+                    SettingsNavigationRow(
+                        icon: "lock.fill",
+                        iconColor: Color.ashSecure,
+                        title: "Change App Code",
+                        subtitle: "The 6-digit code that opens the app",
+                        isFirst: true,
+                        isLast: false
+                    )
+                }
+                .buttonStyle(.plain)
+
+                Divider()
+                    .padding(.leading, 56)
+
                 if lockViewModel.canUseBiometrics {
-                    // Biometric toggle
                     SettingsToggleRow(
                         icon: lockViewModel.biometricType.iconName,
                         iconColor: Color.ashAccent,
                         title: lockViewModel.biometricType.displayName,
-                        subtitle: "Unlock with biometric authentication",
-                        isOn: $biometricEnabled,
-                        isFirst: true,
-                        isLast: !lockViewModel.isBiometricLockEnabled
+                        subtitle: "Shortcut instead of the app code",
+                        isOn: Binding(
+                            get: { biometricEnabled },
+                            set: { newValue in
+                                if newValue {
+                                    isShowingBiometricWarning = true
+                                } else {
+                                    biometricEnabled = false
+                                    Task { await lockViewModel.setBiometricUnlock(false) }
+                                }
+                            }
+                        ),
+                        isFirst: false,
+                        isLast: false
                     )
-                    .onChange(of: biometricEnabled) { _, newValue in
-                        Task {
+
+                    Divider()
+                        .padding(.leading, 56)
+                }
+
+                SettingsToggleRow(
+                    icon: "rectangle.portrait.and.arrow.right",
+                    iconColor: .secondary,
+                    title: "Lock on Background",
+                    subtitle: "Ask for the code when the app returns",
+                    isOn: Binding(
+                        get: { lockViewModel.lockOnBackground },
+                        set: { lockViewModel.lockOnBackground = $0 }
+                    ),
+                    isFirst: false,
+                    isLast: false
+                )
+
+                Divider()
+                    .padding(.leading, 56)
+
+                SettingsToggleRow(
+                    icon: "trash.fill",
+                    iconColor: Color.ashDanger,
+                    title: "Erase After \(LockPolicy.eraseThreshold) Wrong Codes",
+                    subtitle: "Destroy all conversations and pads",
+                    isOn: Binding(
+                        get: { lockViewModel.eraseAfterFailures },
+                        set: { newValue in
                             if newValue {
-                                let success = await lockViewModel.enableBiometricLock()
-                                if !success { biometricEnabled = false }
+                                isShowingEraseWarning = true
                             } else {
-                                lockViewModel.disableBiometricLock()
+                                lockViewModel.setEraseAfterFailures(false)
                             }
                         }
-                    }
-
-                    if lockViewModel.isBiometricLockEnabled {
-                        Divider()
-                            .padding(.leading, 56)
-
-                        // Lock on background toggle
-                        SettingsToggleRow(
-                            icon: "rectangle.portrait.and.arrow.right",
-                            iconColor: .secondary,
-                            title: "Lock on Background",
-                            subtitle: "Require authentication when app returns",
-                            isOn: Binding(
-                                get: { lockViewModel.lockOnBackground },
-                                set: { lockViewModel.lockOnBackground = $0 }
-                            ),
-                            isFirst: false,
-                            isLast: true
-                        )
-                    }
-                } else {
-                    // Biometrics not available
-                    SettingsInfoRow(
-                        icon: "exclamationmark.triangle.fill",
-                        iconColor: .orange,
-                        title: "Biometrics Unavailable",
-                        subtitle: "Set up Face ID or Touch ID in Settings",
-                        isFirst: true,
-                        isLast: true
-                    )
-                }
+                    ),
+                    isFirst: false,
+                    isLast: true
+                )
             }
             .background(Color(uiColor: .secondarySystemGroupedBackground))
             .clipShape(RoundedRectangle(cornerRadius: CornerRadius.md, style: .continuous))
+        }
+        .sheet(isPresented: $isShowingChangeCode) {
+            ChangePasscodeScreen(viewModel: lockViewModel)
+        }
+        .alert("Unlock with \(lockViewModel.biometricType.displayName)?", isPresented: $isShowingBiometricWarning) {
+            Button("Cancel", role: .cancel) {}
+            Button("Enable") {
+                Task {
+                    biometricEnabled = await lockViewModel.setBiometricUnlock(true)
+                }
+            }
+        } message: {
+            Text("Anyone whose face or fingerprint is registered on this phone will be able to open the app. If a face or fingerprint is added later, the app code will be required again.")
+        }
+        .alert("Erase After \(LockPolicy.eraseThreshold) Wrong Codes?", isPresented: $isShowingEraseWarning) {
+            Button("Cancel", role: .cancel) {}
+            Button("Enable", role: .destructive) {
+                lockViewModel.setEraseAfterFailures(true)
+            }
+        } message: {
+            Text("After \(LockPolicy.eraseThreshold) wrong codes in a row, all conversations and pads are destroyed and cannot be recovered. Someone could trigger this on purpose by entering wrong codes.")
         }
     }
 
@@ -879,5 +928,5 @@ private struct PrivacySection: View {
 }
 
 #Preview {
-    SettingsScreen(lockViewModel: AppLockViewModel(), onBurnAll: {}, onRelaySettingsChanged: {})
+    SettingsScreen(lockViewModel: AppLockViewModel(vault: PasscodeVault()), onBurnAll: {}, onRelaySettingsChanged: {})
 }

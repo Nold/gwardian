@@ -22,6 +22,7 @@ struct AshApp: App {
 
     init() {
         // Create SwiftData model container for persistent messages
+        let deps: Dependencies
         let schema = Schema([PersistedMessage.self])
         let modelConfiguration = ModelConfiguration(
             schema: schema,
@@ -33,7 +34,7 @@ struct AshApp: App {
             let container = try ModelContainer(for: schema, configurations: [modelConfiguration])
             self.modelContainer = container
             // Create Dependencies with model container for persistent repository
-            self._dependencies = StateObject(wrappedValue: Dependencies(modelContainer: container))
+            deps = Dependencies(modelContainer: container)
             Log.info(.app, "SwiftData ModelContainer created successfully")
         } catch {
             // If SwiftData fails, continue without persistence
@@ -43,15 +44,31 @@ struct AshApp: App {
             // swiftlint:disable:next force_try
             let container = try! ModelContainer(for: schema, configurations: [fallbackConfig])
             self.modelContainer = container
-            self._dependencies = StateObject(wrappedValue: Dependencies())
+            deps = Dependencies()
         }
+
+        self._dependencies = StateObject(wrappedValue: deps)
+        let vaultedKeychain = deps.vaultedKeychain
+        self._lockViewModel = State(initialValue: AppLockViewModel(
+            vault: deps.vault,
+            settingsService: deps.settingsService,
+            onConfigured: {
+                // Seal pads and conversations stored before the app lock existed
+                do {
+                    let sealed = try vaultedKeychain.sealLegacyRecords()
+                    Log.info(.security, "Sealed \(sealed) existing records")
+                } catch {
+                    Log.error(.security, "Failed to seal existing records: \(error)")
+                }
+            }
+        ))
     }
 
     /// Root view model
     @State private var appViewModel: AppViewModel?
 
-    /// App lock view model for biometric authentication
-    @State private var lockViewModel = AppLockViewModel()
+    /// App code lock; pads and conversations stay sealed until it is unlocked
+    @State private var lockViewModel: AppLockViewModel
 
     /// Track scene phase for background/foreground detection
     @Environment(\.scenePhase) private var scenePhase
@@ -75,14 +92,8 @@ struct AshApp: App {
                                     hasCompletedOnboarding = true
                                 }
                             }
-                        } else if let viewModel = appViewModel {
-                            RootView(viewModel: viewModel, lockViewModel: lockViewModel)
-                                .withDependencies(dependencies)
                         } else {
-                            LoadingScreen()
-                                .task {
-                                    appViewModel = AppViewModel(dependencies: dependencies)
-                                }
+                            lockedContent
                         }
                     } else {
                         // Loading state while checking onboarding status
@@ -94,14 +105,12 @@ struct AshApp: App {
                 }
                 .tint(Color.ashSecure)
                 .preferredColorScheme(nil) // Support both light and dark
-
-                // Lock screen overlay (only show after onboarding)
-                if hasCompletedOnboarding == true && lockViewModel.isLocked {
-                    LockScreen(viewModel: lockViewModel)
-                        .transition(.opacity)
-                }
             }
-            .animation(.easeInOut(duration: 0.2), value: lockViewModel.isLocked)
+            .animation(.easeInOut(duration: 0.2), value: lockViewModel.phase)
+            .onChange(of: lockViewModel.isLocked) { _, locked in
+                // Drop everything read from the vault while locked
+                if locked { appViewModel = nil }
+            }
             .onChange(of: scenePhase) { oldPhase, newPhase in
                 switch newPhase {
                 case .background:
@@ -124,6 +133,31 @@ struct AshApp: App {
             }
             .task {
                 await setupPushNotifications()
+            }
+        }
+    }
+
+    // MARK: - Lock
+
+    /// The app code gates everything after onboarding
+    @ViewBuilder
+    private var lockedContent: some View {
+        switch lockViewModel.phase {
+        case .setup:
+            PasscodeSetupScreen(viewModel: lockViewModel)
+                .transition(.opacity)
+        case .locked:
+            LockScreen(viewModel: lockViewModel)
+                .transition(.opacity)
+        case .unlocked:
+            if let viewModel = appViewModel {
+                RootView(viewModel: viewModel, lockViewModel: lockViewModel)
+                    .withDependencies(dependencies)
+            } else {
+                LoadingScreen()
+                    .task {
+                        appViewModel = AppViewModel(dependencies: dependencies)
+                    }
             }
         }
     }

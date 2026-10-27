@@ -4,52 +4,52 @@ import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.monadial.ash.core.services.BiometricService
-import com.monadial.ash.core.services.SettingsService
+import com.monadial.ash.core.services.applock.AppLockManager
+import com.monadial.ash.core.services.applock.AppLockState
+import com.monadial.ash.core.services.applock.BiometricAuthenticator
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
+/** App code screens and settings; the state lives in [AppLockManager]. */
 @HiltViewModel
 class LockViewModel @Inject constructor(
-    private val biometricService: BiometricService,
-    private val settingsService: SettingsService
+    private val manager: AppLockManager,
+    private val biometricService: BiometricService
 ) : ViewModel() {
-    private val _isUnlocked = MutableStateFlow(false)
-    val isUnlocked: StateFlow<Boolean> = _isUnlocked.asStateFlow()
+    val state: StateFlow<AppLockState> = manager.state
 
-    private val _isBiometricAvailable = MutableStateFlow(false)
-    val isBiometricAvailable: StateFlow<Boolean> = _isBiometricAvailable.asStateFlow()
+    val canUseBiometrics: Boolean get() = biometricService.isStrongBiometricAvailable
 
-    init {
+    fun configure(code: String) {
+        viewModelScope.launch { manager.configure(code) }
+    }
+
+    fun unlock(code: String): Boolean = manager.unlock(code)
+
+    fun unlockWithBiometrics(activity: FragmentActivity) {
         viewModelScope.launch {
-            _isBiometricAvailable.value = biometricService.isAvailable &&
-                settingsService.isBiometricEnabled.value
-
-            // If biometric is not enabled, auto-unlock
-            if (!settingsService.isBiometricEnabled.value) {
-                _isUnlocked.value = true
-            }
+            manager.unlockWithBiometrics(authenticator(activity, "Unlock with your fingerprint or face"))
         }
     }
 
-    fun authenticate(activity: FragmentActivity) {
+    /** Enabling shows the prompt once, so it is known to work. */
+    fun setBiometricUnlock(activity: FragmentActivity, enabled: Boolean) {
         viewModelScope.launch {
-            val success =
-                biometricService.authenticate(
-                    activity = activity,
-                    title = "Unlock ASH",
-                    subtitle = "Verify your identity to access secure messages"
-                )
-            if (success) {
-                _isUnlocked.value = true
-            }
+            manager.setBiometricUnlock(enabled, authenticator(activity, "Confirm to allow biometric unlock"))
         }
     }
 
-    fun skipAuth() {
-        _isUnlocked.value = true
+    fun setEraseAfterFailures(enabled: Boolean) = manager.setEraseAfterFailures(enabled)
+
+    fun changeCode(current: String, new: String): Boolean = manager.changeCode(current, new)
+
+    fun clearError() = manager.clearError()
+
+    fun refresh() = manager.refresh()
+
+    private fun authenticator(activity: FragmentActivity, subtitle: String): BiometricAuthenticator = { cipher ->
+        biometricService.authenticate(activity, "Gwardian", subtitle, cipher)
     }
 }

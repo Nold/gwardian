@@ -69,7 +69,7 @@ final class ReceiverCeremonyViewModel {
 
     /// Whether Face ID/biometric lock is enabled in settings
     var isFaceIDEnabled: Bool {
-        dependencies.settingsService.isBiometricLockEnabled
+        dependencies.vault.isConfigured
     }
 
     /// Whether persistence requires Face ID but it's not enabled
