@@ -95,7 +95,7 @@ final class PasscodeVault: @unchecked Sendable {
         guard LockPolicy.isValidCode(new) else { throw PasscodeVaultError.invalidCode }
         try unlock(code: current)
         let data = try withLock { () throws -> Data in
-            guard let key else { throw PasscodeVaultError.locked }
+            guard let key = self.key else { throw PasscodeVaultError.locked }
             return Self.data(key)
         }
         try store.storeCodeCopy(data, code: new)
@@ -118,7 +118,7 @@ final class PasscodeVault: @unchecked Sendable {
     func setBiometricUnlock(enabled: Bool) throws {
         if enabled {
             let data = try withLock { () throws -> Data in
-                guard let key else { throw PasscodeVaultError.locked }
+                guard let key = self.key else { throw PasscodeVaultError.locked }
                 return Self.data(key)
             }
             try store.storeBiometricCopy(data)
@@ -161,7 +161,7 @@ final class PasscodeVault: @unchecked Sendable {
 
     func seal(_ plaintext: Data) throws -> Data {
         let key = try withLock { () throws -> SymmetricKey in
-            guard let key else { throw PasscodeVaultError.locked }
+            guard let key = self.key else { throw PasscodeVaultError.locked }
             return key
         }
         return Self.marker + (try ChaChaPoly.seal(plaintext, using: key).combined)
@@ -170,7 +170,7 @@ final class PasscodeVault: @unchecked Sendable {
     func open(_ sealed: Data) throws -> Data {
         guard Self.isSealed(sealed) else { throw PasscodeVaultError.corruptedRecord }
         let key = try withLock { () throws -> SymmetricKey in
-            guard let key else { throw PasscodeVaultError.locked }
+            guard let key = self.key else { throw PasscodeVaultError.locked }
             return key
         }
         do {
