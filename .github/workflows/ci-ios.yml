@@ -76,6 +76,37 @@ jobs:
             -quiet \
             CODE_SIGNING_ALLOWED=NO
 
+      - name: Run pad transfer tests
+        working-directory: apps/ios/Ash
+        run: |
+          # Newest iPhone simulator Xcode offers for this scheme: older runtimes
+          # are installed too, but the app needs iOS 26.1 or later
+          DEVICE_ID=$(xcodebuild -showdestinations -project Ash.xcodeproj -scheme Ash 2>/dev/null | python3 -c '
+          import re, sys
+          best = None
+          for line in sys.stdin:
+              m = re.search(r"platform:iOS Simulator.*?id:([0-9A-F-]+).*?OS:([0-9.]+).*?name:iPhone", line)
+              if m:
+                  version = tuple(int(x) for x in m.group(2).split("."))
+                  if best is None or version > best[0]:
+                      best = (version, m.group(1))
+          print(best[1] if best else "")')
+          if [ -z "$DEVICE_ID" ]; then
+            echo "::error title=No iPhone simulator::xcodebuild -showdestinations listed no iPhone simulator"
+            exit 1
+          fi
+          if ! xcodebuild test \
+            -project Ash.xcodeproj \
+            -scheme Ash \
+            -destination "id=$DEVICE_ID" \
+            -only-testing:AshTests/PadTransferFlowTests \
+            CODE_SIGNING_ALLOWED=NO 2>&1 | tee test.log | grep -E "error:|failed|passed|Test (Suite|Case)" ; then
+            msg=$(grep -E "error:|failed|xcodebuild: error" test.log | head -30 \
+              | sed -e 's/%/%25/g' -e 's/\r/%0D/g' | sed ':a;N;$!ba;s/\n/%0A/g')
+            echo "::error title=iOS tests failed::${msg}"
+            exit 1
+          fi
+
   swiftlint:
     name: SwiftLint
     runs-on: macos-26

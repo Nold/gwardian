@@ -13,8 +13,10 @@ iOS (CoreBluetooth) and Android (platform BLE APIs) must follow this document ex
 
 ## Discovery
 
-- The receiver advertises the service UUID below and the local name `GW-XXXX`, where `XXXX` is a fresh 4-character code (Crockford base32, from secure randomness) shown on its screen.
-- The sender scans for the service UUID and lists the codes found; the person picks the code shown on the receiver's screen.
+- The receiver shows a fresh code `GW-XXXX` on its screen, where `XXXX` is 4 characters of Crockford base32 from secure randomness, and advertises the service UUID below together with the code:
+  - **iOS receiver**: local name `GW-XXXX` (iOS peripherals cannot advertise service data).
+  - **Android receiver**: service data for the service UUID, in the scan response, holding the 4 code characters in ASCII (Android apps cannot set their own local name without renaming the phone).
+- The sender scans for the service UUID, reads the code from either the local name or the service data, and lists the codes found; the person picks the code shown on the receiver's screen.
 - The code only avoids connecting to the wrong phone nearby. It is not a secret: security comes from the six words.
 - Both apps stay in the foreground during a transfer (iOS drops the local name from background advertising).
 

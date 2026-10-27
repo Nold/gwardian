@@ -440,6 +440,7 @@
 				INFOPLIST_FILE = Ash/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "ASH Protocol";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.social-networking";
+				INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription = "Bluetooth is used to hand over an encryption pad to someone next to you.";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Camera is used to scan QR codes during the secure key exchange ceremony.";
 				INFOPLIST_KEY_NSFaceIDUsageDescription = "Face ID is used to protect your secure conversations from unauthorized access.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Location is used to share your current position in a one-shot encrypted message.";
@@ -477,6 +478,7 @@
 				INFOPLIST_FILE = Ash/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "ASH Protocol";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.social-networking";
+				INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription = "Bluetooth is used to hand over an encryption pad to someone next to you.";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Camera is used to scan QR codes during the secure key exchange ceremony.";
 				INFOPLIST_KEY_NSFaceIDUsageDescription = "Face ID is used to protect your secure conversations from unauthorized access.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Location is used to share your current position in a one-shot encrypted message.";
