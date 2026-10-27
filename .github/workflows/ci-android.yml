@@ -77,7 +77,14 @@ jobs:
 
       - name: Build Android App (Debug)
         working-directory: apps/android
-        run: ./gradlew assembleDebug --no-daemon
+        run: |
+          if ! ./gradlew assembleDebug --no-daemon 2>&1 | tee gradle-build.log; then
+            # Surface the cause as an annotation, readable without the full log
+            msg=$(grep -E "^e: |error:|What went wrong" -A4 gradle-build.log | head -40 \
+              | sed -e 's/%/%25/g' -e 's/\r/%0D/g' | sed ':a;N;$!ba;s/\n/%0A/g')
+            echo "::error title=Gradle assembleDebug failed::${msg}"
+            exit 1
+          fi
 
       - name: Run Unit Tests
         working-directory: apps/android
