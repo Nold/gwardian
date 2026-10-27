@@ -428,6 +428,30 @@ Exact paths and schemas may vary, but semantics must match.
 - Must handle reconnection gracefully
 - Client should reconnect on connection loss
 
+### 8) Pad transfer mailbox (Standard security level)
+
+**Goal:** Relay the `ash-transfer` protocol between two devices that share no secret yet, so a pad can be handed over remotely. The relay never sees the pad: it is encrypted end to end (X-Wing + ChaCha20-Poly1305), and the six words people compare expose an attacker in the middle, the relay included.
+
+- Open: `POST /v1/transfers` (no auth)
+  - Success: `201 Created` with `{"transfer_id": "...", "receiver_token": "...", "sender_token": "...", "expires_in_secs": 600}`
+  - The receiver keeps `receiver_token` and passes `transfer_id` and `sender_token` to the pad owner out of band
+  - `503 SERVER_AT_CAPACITY` when the session limit is reached
+- Send: `POST /v1/transfers/:id/messages`
+  - Headers: `Authorization: Bearer <receiver_token | sender_token>`
+  - Body: one protocol message, `application/octet-stream`, up to 2 MiB
+  - Success: `202 Accepted`; the message is queued for the other role
+  - Errors: `400 INVALID_INPUT` (empty), `401 UNAUTHORIZED`, `404 TRANSFER_NOT_FOUND`, `413 PAYLOAD_TOO_LARGE`, `429 QUEUE_FULL`, `503 SERVER_AT_CAPACITY` (global byte budget)
+- Receive: `GET /v1/transfers/:id/messages`
+  - Success: `200 OK` with the oldest waiting message (`application/octet-stream`), removed on delivery; `204 No Content` when none
+- Close: `DELETE /v1/transfers/:id` with either token → `204 No Content`
+
+**Invariants:**
+- Sessions expire 10 minutes after creation and are never persisted
+- Only SHA-256 hashes of the tokens are stored
+- Messages are opaque and delivered at most once, in order, per direction
+- At most 4 messages wait per direction; at most 256 MiB queued across all sessions
+- Endpoints other than transfers keep the 16 KiB request body limit
+
 ---
 
 ## HTTP Status Codes
@@ -484,6 +508,7 @@ Recommended v1 limits:
 - Max queued blobs per conversation: **<= 50**
 - Max active conversations per IP per minute: rate limit
 - Max register calls per conversation per TTL: rate limit
+- Pad transfers: **<= 2 MiB** per message, **4** queued per direction, **10 min** session lifetime, **10,000** sessions, **256 MiB** queued in total
 
 The backend must respond with clear errors on limit violations.
 

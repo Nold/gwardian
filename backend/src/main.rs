@@ -34,6 +34,10 @@ async fn main() {
 
     let apns = apns::create_client(&config);
     let state = AppState::new(store, apns.clone());
+    state
+        .transfers
+        .clone()
+        .start_cleanup_task(std::time::Duration::from_secs(60));
 
     // Start background workers
     let expiry_worker = Arc::new(expiry::ExpiryWorker::new(state.clone(), apns));
