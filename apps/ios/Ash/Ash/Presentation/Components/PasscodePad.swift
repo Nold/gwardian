@@ -146,7 +146,7 @@ struct PasscodePad: View {
 private struct ShakeEffect: GeometryEffect {
     var animatableData: CGFloat
 
-    func effectValue(size: CGSize) -> ProjectionTransform {
+    nonisolated func effectValue(size: CGSize) -> ProjectionTransform {
         ProjectionTransform(CGAffineTransform(translationX: 10 * sin(animatableData * .pi * 4), y: 0))
     }
 }
