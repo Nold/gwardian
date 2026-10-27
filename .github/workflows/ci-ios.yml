@@ -92,9 +92,33 @@ jobs:
                   version = tuple(int(x) for x in m.group(2).split("."))
                   if best is None or version > best[0]:
                       best = (version, m.group(1))
-          print(best[1] if best else "")')
+          print(best[1] if best else "")' || true)
           if [ -z "$DEVICE_ID" ]; then
-            echo "::error title=No iPhone simulator::xcodebuild -showdestinations listed no iPhone simulator"
+            # Some runner images list no simulator there: use, or create, an
+            # iPhone on the newest installed iOS runtime
+            DEVICE_ID=$(xcrun simctl list -j devices available runtimes devicetypes | python3 -c '
+          import json, re, subprocess, sys
+          data = json.load(sys.stdin)
+          def version(identifier):
+              m = re.search(r"iOS-(\d+)-(\d+)", identifier)
+              return (int(m.group(1)), int(m.group(2))) if m else None
+          runtimes = [r for r in data["runtimes"] if r.get("isAvailable") and version(r["identifier"])]
+          if not runtimes:
+              sys.exit("no iOS simulator runtime installed")
+          newest = max(runtimes, key=lambda r: version(r["identifier"]))
+          for device in data["devices"].get(newest["identifier"], []):
+              if device.get("isAvailable") and device["name"].startswith("iPhone"):
+                  print(device["udid"]); sys.exit()
+          phones = [t for t in data["devicetypes"] if t["name"].startswith("iPhone")]
+          if not phones:
+              sys.exit("no iPhone device type")
+          print(subprocess.check_output(["xcrun", "simctl", "create", "CI iPhone",
+                                         phones[-1]["identifier"], newest["identifier"]], text=True).strip())' || true)
+          fi
+          if [ -z "$DEVICE_ID" ]; then
+            msg=$( { xcodebuild -showdestinations -project Ash.xcodeproj -scheme Ash 2>&1; xcrun simctl list runtimes 2>&1; } \
+              | tail -30 | sed -e 's/%/%25/g' -e 's/\r/%0D/g' | sed ':a;N;$!ba;s/\n/%0A/g')
+            echo "::error title=No iPhone simulator::${msg}"
             exit 1
           fi
           if ! xcodebuild test \
