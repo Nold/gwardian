@@ -7,6 +7,7 @@ on:
       - 'apps/ios/**'
       - 'bindings/**'
       - 'core/**'
+      - 'transfer/**'
       - '.github/workflows/ci-ios.yml'
   pull_request:
     branches: [main]
@@ -14,6 +15,7 @@ on:
       - 'apps/ios/**'
       - 'bindings/**'
       - 'core/**'
+      - 'transfer/**'
       - '.github/workflows/ci-ios.yml'
 
 jobs:

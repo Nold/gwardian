@@ -19,6 +19,7 @@ bindgen = ["uniffi/cli"]
 
 [dependencies]
 ash-core = { path = "../core" }
+ash-transfer = { path = "../transfer" }
 uniffi = { version = "0.28" }
 thiserror = "1.0"
 

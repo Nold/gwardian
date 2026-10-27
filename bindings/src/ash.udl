@@ -227,6 +227,30 @@ enum AshError {
     "AuthenticationFailed",
     /// Invalid message padding
     "InvalidPadding",
+    /// Group message from an unknown member
+    "UnknownMember",
+    /// Group member id already taken
+    "DuplicateMember",
+    /// Pad bytes already consumed (replay or own message echoed back)
+    "PadRangeAlreadyUsed",
+    /// Local pad copy failed its integrity check
+    "PadCorrupted",
+    /// Operation would lower the security level without consent
+    "SecurityDowngrade",
+    /// Unknown message type byte
+    "InvalidMessageType",
+    /// Peer's transfer public key is invalid
+    "InvalidPublicKey",
+    /// Transfer tampered with (commitment did not match)
+    "CommitmentMismatch",
+    /// Sealed pad failed authentication
+    "DecryptionFailed",
+    /// Security level not allowed for this channel
+    "LevelNotAllowed",
+    /// Transfer message has the wrong type, version or length
+    "MalformedMessage",
+    /// Transfer step called out of order
+    "InvalidState",
 };
 
 /// Ceremony metadata transferred via QR frame 0
@@ -437,4 +461,141 @@ interface FountainFrameReceiver {
     /// Get the decoded ceremony result.
     /// Returns null if decoding is not complete.
     FountainCeremonyResult? get_result();
+};
+
+// === Group Messaging ===
+
+/// How a pad was distributed, weakest to strongest.
+enum SecurityLevel {
+    /// Sent remotely through the relay (computational cryptography)
+    "Standard",
+    /// Exchanged in person over short-range radio (computational cryptography)
+    "Enhanced",
+    /// Exchanged in person by QR code (no computational assumption)
+    "Maximum",
+};
+
+/// Integrity status of a member's pad as seen from this device.
+[Enum]
+interface MemberHealth {
+    Healthy();
+    /// This device's copy of the member's pad is damaged
+    CorruptedLocally();
+    /// Repeated authentication failures: damaged sender copy or forgery
+    Suspect(u32 consecutive_failures);
+};
+
+/// Consumed [start, end) range of a pad.
+dictionary UsedRange {
+    u64 start;
+    u64 end;
+};
+
+/// State needed to restore one member's pad from secure storage.
+dictionary MemberPadState {
+    u8 member;
+    sequence<u8> pad;
+    sequence<UsedRange> used;
+    sequence<u32> checksums;
+    SecurityLevel level;
+};
+
+/// A verified, decrypted group message.
+dictionary GroupMessage {
+    u8 sender;
+    u8 msg_type;
+    sequence<u8> plaintext;
+    /// Level of the sender's pad, which bounds this message's security
+    SecurityLevel level;
+};
+
+/// A member's view of a group: own sending pad plus copies of the others'.
+interface PadGroup {
+    constructor(u8 me, sequence<u8> own_pad, SecurityLevel level);
+
+    /// Rebuild from export_state(); must include this device's own pad
+    [Throws=AshError, Name=restore]
+    constructor(u8 me, sequence<MemberPadState> states);
+
+    u8 me();
+    sequence<u8> members();
+    /// Level of the weakest pad in the group
+    SecurityLevel security_level();
+    SecurityLevel? member_level(u8 member);
+
+    /// Fails with SecurityDowngrade if the pad would lower the group level
+    [Throws=AshError]
+    void add_member(u8 member, sequence<u8> pad_bytes, SecurityLevel level);
+    /// Only after the user explicitly accepted a lower level
+    [Throws=AshError]
+    void add_member_allow_downgrade(u8 member, sequence<u8> pad_bytes, SecurityLevel level);
+    /// Fails with SecurityDowngrade if the new pad is weaker than the old one
+    [Throws=AshError]
+    void replace_pad(u8 member, sequence<u8> pad_bytes, SecurityLevel level);
+    /// Only after the user explicitly accepted a lower level
+    [Throws=AshError]
+    void replace_pad_allow_downgrade(u8 member, sequence<u8> pad_bytes, SecurityLevel level);
+    boolean remove_member(u8 member);
+
+    MemberHealth? health(u8 member);
+    /// Check every pad; returns members whose pad is damaged
+    sequence<u8> check_integrity();
+
+    boolean can_send(u32 plaintext_length);
+    /// Encrypt with this device's pad; returns the encoded group frame
+    [Throws=AshError]
+    sequence<u8> encrypt(u8 msg_type, sequence<u8> plaintext);
+    [Throws=AshError]
+    GroupMessage decrypt(sequence<u8> frame);
+
+    /// Persist after every send and receive
+    sequence<MemberPadState> export_state();
+};
+
+// === Pad Transfer (Standard and Enhanced levels) ===
+
+/// Pad received at the end of a transfer.
+dictionary ReceivedPad {
+    sequence<u8> pad;
+    SecurityLevel level;
+};
+
+/// Sender's reply to the receiver's nonce, with the words to compare.
+dictionary SenderReveal {
+    sequence<u8> reveal;
+    sequence<string> words;
+};
+
+/// Device receiving a copy of someone's pad. Steps must run in order; any
+/// failure ends the transfer.
+interface PadTransferReceiver {
+    /// seed: 32 bytes from a secure random source
+    [Throws=AshError]
+    constructor(sequence<u8> seed);
+    /// First message, to send to the pad owner
+    sequence<u8> offer();
+    /// nonce: 32 fresh random bytes; returns the message to send
+    [Throws=AshError]
+    sequence<u8> on_response(sequence<u8> response, sequence<u8> nonce);
+    /// Returns the six words people must compare
+    [Throws=AshError]
+    sequence<string> on_reveal(sequence<u8> reveal);
+    /// Only after people confirmed the words match
+    [Throws=AshError]
+    ReceivedPad open_pad(sequence<u8> sealed);
+};
+
+/// Pad owner handing over a copy. Steps must run in order; any failure ends
+/// the transfer.
+interface PadTransferSender {
+    /// encapsulation_seed: 64 random bytes; nonce: 32 random bytes
+    [Throws=AshError]
+    constructor(sequence<u8> offer, sequence<u8> encapsulation_seed, sequence<u8> nonce);
+    /// Response to send to the receiver
+    sequence<u8> response();
+    [Throws=AshError]
+    SenderReveal on_nonce(sequence<u8> nonce);
+    /// Only after people confirmed the words match; Maximum is refused
+    [Throws=AshError]
+    sequence<u8> seal_pad(sequence<u8> pad, SecurityLevel level);
 };

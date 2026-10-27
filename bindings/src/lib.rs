@@ -9,6 +9,12 @@
 
 use std::sync::Mutex;
 
+mod group;
+mod transfer;
+
+pub use group::{GroupMessage, MemberHealth, MemberPadState, PadGroup, SecurityLevel, UsedRange};
+pub use transfer::{PadTransferReceiver, PadTransferSender, ReceivedPad, SenderReveal};
+
 // Re-export for UniFFI
 uniffi::include_scaffolding!("ash");
 
@@ -43,6 +49,30 @@ pub enum AshError {
     AuthenticationFailed,
     #[error("Invalid padding")]
     InvalidPadding,
+    #[error("Unknown group member")]
+    UnknownMember,
+    #[error("Group member already exists")]
+    DuplicateMember,
+    #[error("Pad range already used")]
+    PadRangeAlreadyUsed,
+    #[error("Pad corrupted")]
+    PadCorrupted,
+    #[error("Security level would drop")]
+    SecurityDowngrade,
+    #[error("Invalid message type")]
+    InvalidMessageType,
+    #[error("Invalid public key")]
+    InvalidPublicKey,
+    #[error("Commitment mismatch")]
+    CommitmentMismatch,
+    #[error("Decryption failed")]
+    DecryptionFailed,
+    #[error("Security level not allowed for this channel")]
+    LevelNotAllowed,
+    #[error("Malformed message")]
+    MalformedMessage,
+    #[error("Operation called out of order")]
+    InvalidState,
 }
 
 impl From<ash_core::Error> for AshError {
@@ -69,12 +99,24 @@ impl From<ash_core::Error> for AshError {
             ash_core::Error::InvalidMessageType { .. } => AshError::InvalidMetadataUrl,
             ash_core::Error::FrameLengthMismatch { .. } => AshError::LengthMismatch,
             ash_core::Error::InvalidPadding { .. } => AshError::InvalidPadding,
-            // Group API is not exposed over FFI yet; dedicated variants will come with it
-            ash_core::Error::UnknownMember { .. } => AshError::AuthenticationFailed,
-            ash_core::Error::DuplicateMember { .. } => AshError::InvalidEntropySize,
-            ash_core::Error::PadRangeAlreadyUsed { .. } => AshError::InsufficientPadBytes,
-            ash_core::Error::PadCorrupted { .. } => AshError::CrcMismatch,
-            ash_core::Error::SecurityDowngrade { .. } => AshError::InvalidEntropySize,
+            // Group errors
+            ash_core::Error::UnknownMember { .. } => AshError::UnknownMember,
+            ash_core::Error::DuplicateMember { .. } => AshError::DuplicateMember,
+            ash_core::Error::PadRangeAlreadyUsed { .. } => AshError::PadRangeAlreadyUsed,
+            ash_core::Error::PadCorrupted { .. } => AshError::PadCorrupted,
+            ash_core::Error::SecurityDowngrade { .. } => AshError::SecurityDowngrade,
+        }
+    }
+}
+
+impl From<ash_transfer::Error> for AshError {
+    fn from(e: ash_transfer::Error) -> Self {
+        match e {
+            ash_transfer::Error::Malformed { .. } => AshError::MalformedMessage,
+            ash_transfer::Error::InvalidPublicKey => AshError::InvalidPublicKey,
+            ash_transfer::Error::CommitmentMismatch => AshError::CommitmentMismatch,
+            ash_transfer::Error::DecryptionFailed => AshError::DecryptionFailed,
+            ash_transfer::Error::LevelNotAllowed => AshError::LevelNotAllowed,
         }
     }
 }

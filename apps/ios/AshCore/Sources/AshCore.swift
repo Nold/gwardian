@@ -1422,6 +1422,711 @@ public nonisolated func FfiConverterTypePad_lower(_ value: Pad) -> UnsafeMutable
 }
 
 
+
+
+/**
+ * A member's view of a group: own sending pad plus copies of the others'.
+ */
+public protocol PadGroupProtocol : AnyObject {
+    
+    /**
+     * Fails with SecurityDowngrade if the pad would lower the group level
+     */
+    func addMember(member: UInt8, padBytes: [UInt8], level: SecurityLevel) throws 
+    
+    /**
+     * Only after the user explicitly accepted a lower level
+     */
+    func addMemberAllowDowngrade(member: UInt8, padBytes: [UInt8], level: SecurityLevel) throws 
+    
+    func canSend(plaintextLength: UInt32)  -> Bool
+    
+    /**
+     * Check every pad; returns members whose pad is damaged
+     */
+    func checkIntegrity()  -> [UInt8]
+    
+    func decrypt(frame: [UInt8]) throws  -> GroupMessage
+    
+    /**
+     * Encrypt with this device's pad; returns the encoded group frame
+     */
+    func encrypt(msgType: UInt8, plaintext: [UInt8]) throws  -> [UInt8]
+    
+    /**
+     * Persist after every send and receive
+     */
+    func exportState()  -> [MemberPadState]
+    
+    func health(member: UInt8)  -> MemberHealth?
+    
+    func me()  -> UInt8
+    
+    func memberLevel(member: UInt8)  -> SecurityLevel?
+    
+    func members()  -> [UInt8]
+    
+    func removeMember(member: UInt8)  -> Bool
+    
+    /**
+     * Fails with SecurityDowngrade if the new pad is weaker than the old one
+     */
+    func replacePad(member: UInt8, padBytes: [UInt8], level: SecurityLevel) throws 
+    
+    /**
+     * Only after the user explicitly accepted a lower level
+     */
+    func replacePadAllowDowngrade(member: UInt8, padBytes: [UInt8], level: SecurityLevel) throws 
+    
+    /**
+     * Level of the weakest pad in the group
+     */
+    func securityLevel()  -> SecurityLevel
+    
+}
+
+/**
+ * A member's view of a group: own sending pad plus copies of the others'.
+ */
+open class PadGroup:
+    PadGroupProtocol {
+    fileprivate let pointer: UnsafeMutableRawPointer!
+
+    /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoPointer {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+    required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
+        self.pointer = pointer
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noPointer: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noPointer: NoPointer) {
+        self.pointer = nil
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiClonePointer() -> UnsafeMutableRawPointer {
+        return try! rustCall { uniffi_ash_bindings_fn_clone_padgroup(self.pointer, $0) }
+    }
+public convenience init(me: UInt8, ownPad: [UInt8], level: SecurityLevel) {
+    let pointer =
+        try! rustCall() {
+    uniffi_ash_bindings_fn_constructor_padgroup_new(
+        FfiConverterUInt8.lower(me),
+        FfiConverterSequenceUInt8.lower(ownPad),
+        FfiConverterTypeSecurityLevel.lower(level),$0
+    )
+}
+    self.init(unsafeFromRawPointer: pointer)
+}
+
+    deinit {
+        guard let pointer = pointer else {
+            return
+        }
+
+        try! rustCall { uniffi_ash_bindings_fn_free_padgroup(pointer, $0) }
+    }
+
+    
+    /**
+     * Rebuild from export_state(); must include this device's own pad
+     */
+public static func restore(me: UInt8, states: [MemberPadState])throws  -> PadGroup {
+    return try  FfiConverterTypePadGroup.lift(try rustCallWithError(FfiConverterTypeAshError.lift) {
+    uniffi_ash_bindings_fn_constructor_padgroup_restore(
+        FfiConverterUInt8.lower(me),
+        FfiConverterSequenceTypeMemberPadState.lower(states),$0
+    )
+})
+}
+    
+
+    
+    /**
+     * Fails with SecurityDowngrade if the pad would lower the group level
+     */
+open func addMember(member: UInt8, padBytes: [UInt8], level: SecurityLevel)throws  {try rustCallWithError(FfiConverterTypeAshError.lift) {
+    uniffi_ash_bindings_fn_method_padgroup_add_member(self.uniffiClonePointer(),
+        FfiConverterUInt8.lower(member),
+        FfiConverterSequenceUInt8.lower(padBytes),
+        FfiConverterTypeSecurityLevel.lower(level),$0
+    )
+}
+}
+    
+    /**
+     * Only after the user explicitly accepted a lower level
+     */
+open func addMemberAllowDowngrade(member: UInt8, padBytes: [UInt8], level: SecurityLevel)throws  {try rustCallWithError(FfiConverterTypeAshError.lift) {
+    uniffi_ash_bindings_fn_method_padgroup_add_member_allow_downgrade(self.uniffiClonePointer(),
+        FfiConverterUInt8.lower(member),
+        FfiConverterSequenceUInt8.lower(padBytes),
+        FfiConverterTypeSecurityLevel.lower(level),$0
+    )
+}
+}
+    
+open func canSend(plaintextLength: UInt32) -> Bool {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+    uniffi_ash_bindings_fn_method_padgroup_can_send(self.uniffiClonePointer(),
+        FfiConverterUInt32.lower(plaintextLength),$0
+    )
+})
+}
+    
+    /**
+     * Check every pad; returns members whose pad is damaged
+     */
+open func checkIntegrity() -> [UInt8] {
+    return try!  FfiConverterSequenceUInt8.lift(try! rustCall() {
+    uniffi_ash_bindings_fn_method_padgroup_check_integrity(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+open func decrypt(frame: [UInt8])throws  -> GroupMessage {
+    return try  FfiConverterTypeGroupMessage.lift(try rustCallWithError(FfiConverterTypeAshError.lift) {
+    uniffi_ash_bindings_fn_method_padgroup_decrypt(self.uniffiClonePointer(),
+        FfiConverterSequenceUInt8.lower(frame),$0
+    )
+})
+}
+    
+    /**
+     * Encrypt with this device's pad; returns the encoded group frame
+     */
+open func encrypt(msgType: UInt8, plaintext: [UInt8])throws  -> [UInt8] {
+    return try  FfiConverterSequenceUInt8.lift(try rustCallWithError(FfiConverterTypeAshError.lift) {
+    uniffi_ash_bindings_fn_method_padgroup_encrypt(self.uniffiClonePointer(),
+        FfiConverterUInt8.lower(msgType),
+        FfiConverterSequenceUInt8.lower(plaintext),$0
+    )
+})
+}
+    
+    /**
+     * Persist after every send and receive
+     */
+open func exportState() -> [MemberPadState] {
+    return try!  FfiConverterSequenceTypeMemberPadState.lift(try! rustCall() {
+    uniffi_ash_bindings_fn_method_padgroup_export_state(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+open func health(member: UInt8) -> MemberHealth? {
+    return try!  FfiConverterOptionTypeMemberHealth.lift(try! rustCall() {
+    uniffi_ash_bindings_fn_method_padgroup_health(self.uniffiClonePointer(),
+        FfiConverterUInt8.lower(member),$0
+    )
+})
+}
+    
+open func me() -> UInt8 {
+    return try!  FfiConverterUInt8.lift(try! rustCall() {
+    uniffi_ash_bindings_fn_method_padgroup_me(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+open func memberLevel(member: UInt8) -> SecurityLevel? {
+    return try!  FfiConverterOptionTypeSecurityLevel.lift(try! rustCall() {
+    uniffi_ash_bindings_fn_method_padgroup_member_level(self.uniffiClonePointer(),
+        FfiConverterUInt8.lower(member),$0
+    )
+})
+}
+    
+open func members() -> [UInt8] {
+    return try!  FfiConverterSequenceUInt8.lift(try! rustCall() {
+    uniffi_ash_bindings_fn_method_padgroup_members(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+open func removeMember(member: UInt8) -> Bool {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+    uniffi_ash_bindings_fn_method_padgroup_remove_member(self.uniffiClonePointer(),
+        FfiConverterUInt8.lower(member),$0
+    )
+})
+}
+    
+    /**
+     * Fails with SecurityDowngrade if the new pad is weaker than the old one
+     */
+open func replacePad(member: UInt8, padBytes: [UInt8], level: SecurityLevel)throws  {try rustCallWithError(FfiConverterTypeAshError.lift) {
+    uniffi_ash_bindings_fn_method_padgroup_replace_pad(self.uniffiClonePointer(),
+        FfiConverterUInt8.lower(member),
+        FfiConverterSequenceUInt8.lower(padBytes),
+        FfiConverterTypeSecurityLevel.lower(level),$0
+    )
+}
+}
+    
+    /**
+     * Only after the user explicitly accepted a lower level
+     */
+open func replacePadAllowDowngrade(member: UInt8, padBytes: [UInt8], level: SecurityLevel)throws  {try rustCallWithError(FfiConverterTypeAshError.lift) {
+    uniffi_ash_bindings_fn_method_padgroup_replace_pad_allow_downgrade(self.uniffiClonePointer(),
+        FfiConverterUInt8.lower(member),
+        FfiConverterSequenceUInt8.lower(padBytes),
+        FfiConverterTypeSecurityLevel.lower(level),$0
+    )
+}
+}
+    
+    /**
+     * Level of the weakest pad in the group
+     */
+open func securityLevel() -> SecurityLevel {
+    return try!  FfiConverterTypeSecurityLevel.lift(try! rustCall() {
+    uniffi_ash_bindings_fn_method_padgroup_security_level(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePadGroup: FfiConverter {
+
+    typealias FfiType = UnsafeMutableRawPointer
+    typealias SwiftType = PadGroup
+
+    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> PadGroup {
+        return PadGroup(unsafeFromRawPointer: pointer)
+    }
+
+    public static func lower(_ value: PadGroup) -> UnsafeMutableRawPointer {
+        return value.uniffiClonePointer()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PadGroup {
+        let v: UInt64 = try readInt(&buf)
+        // The Rust code won't compile if a pointer won't fit in a UInt64.
+        // We have to go via `UInt` because that's the thing that's the size of a pointer.
+        let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
+        if (ptr == nil) {
+            throw UniffiInternalError.unexpectedNullPointer
+        }
+        return try lift(ptr!)
+    }
+
+    public static func write(_ value: PadGroup, into buf: inout [UInt8]) {
+        // This fiddling is because `Int` is the thing that's the same size as a pointer.
+        // The Rust code won't compile if a pointer won't fit in a `UInt64`.
+        writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
+    }
+}
+
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public nonisolated func FfiConverterTypePadGroup_lift(_ pointer: UnsafeMutableRawPointer) throws -> PadGroup {
+    return try FfiConverterTypePadGroup.lift(pointer)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public nonisolated func FfiConverterTypePadGroup_lower(_ value: PadGroup) -> UnsafeMutableRawPointer {
+    return FfiConverterTypePadGroup.lower(value)
+}
+
+
+
+
+/**
+ * Device receiving a copy of someone's pad. Steps must run in order; any
+ * failure ends the transfer.
+ */
+public protocol PadTransferReceiverProtocol : AnyObject {
+    
+    /**
+     * First message, to send to the pad owner
+     */
+    func offer()  -> [UInt8]
+    
+    /**
+     * nonce: 32 fresh random bytes; returns the message to send
+     */
+    func onResponse(response: [UInt8], nonce: [UInt8]) throws  -> [UInt8]
+    
+    /**
+     * Returns the six words people must compare
+     */
+    func onReveal(reveal: [UInt8]) throws  -> [String]
+    
+    /**
+     * Only after people confirmed the words match
+     */
+    func openPad(sealed: [UInt8]) throws  -> ReceivedPad
+    
+}
+
+/**
+ * Device receiving a copy of someone's pad. Steps must run in order; any
+ * failure ends the transfer.
+ */
+open class PadTransferReceiver:
+    PadTransferReceiverProtocol {
+    fileprivate let pointer: UnsafeMutableRawPointer!
+
+    /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoPointer {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+    required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
+        self.pointer = pointer
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noPointer: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noPointer: NoPointer) {
+        self.pointer = nil
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiClonePointer() -> UnsafeMutableRawPointer {
+        return try! rustCall { uniffi_ash_bindings_fn_clone_padtransferreceiver(self.pointer, $0) }
+    }
+    /**
+     * seed: 32 bytes from a secure random source
+     */
+public convenience init(seed: [UInt8])throws  {
+    let pointer =
+        try rustCallWithError(FfiConverterTypeAshError.lift) {
+    uniffi_ash_bindings_fn_constructor_padtransferreceiver_new(
+        FfiConverterSequenceUInt8.lower(seed),$0
+    )
+}
+    self.init(unsafeFromRawPointer: pointer)
+}
+
+    deinit {
+        guard let pointer = pointer else {
+            return
+        }
+
+        try! rustCall { uniffi_ash_bindings_fn_free_padtransferreceiver(pointer, $0) }
+    }
+
+    
+
+    
+    /**
+     * First message, to send to the pad owner
+     */
+open func offer() -> [UInt8] {
+    return try!  FfiConverterSequenceUInt8.lift(try! rustCall() {
+    uniffi_ash_bindings_fn_method_padtransferreceiver_offer(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+    /**
+     * nonce: 32 fresh random bytes; returns the message to send
+     */
+open func onResponse(response: [UInt8], nonce: [UInt8])throws  -> [UInt8] {
+    return try  FfiConverterSequenceUInt8.lift(try rustCallWithError(FfiConverterTypeAshError.lift) {
+    uniffi_ash_bindings_fn_method_padtransferreceiver_on_response(self.uniffiClonePointer(),
+        FfiConverterSequenceUInt8.lower(response),
+        FfiConverterSequenceUInt8.lower(nonce),$0
+    )
+})
+}
+    
+    /**
+     * Returns the six words people must compare
+     */
+open func onReveal(reveal: [UInt8])throws  -> [String] {
+    return try  FfiConverterSequenceString.lift(try rustCallWithError(FfiConverterTypeAshError.lift) {
+    uniffi_ash_bindings_fn_method_padtransferreceiver_on_reveal(self.uniffiClonePointer(),
+        FfiConverterSequenceUInt8.lower(reveal),$0
+    )
+})
+}
+    
+    /**
+     * Only after people confirmed the words match
+     */
+open func openPad(sealed: [UInt8])throws  -> ReceivedPad {
+    return try  FfiConverterTypeReceivedPad.lift(try rustCallWithError(FfiConverterTypeAshError.lift) {
+    uniffi_ash_bindings_fn_method_padtransferreceiver_open_pad(self.uniffiClonePointer(),
+        FfiConverterSequenceUInt8.lower(sealed),$0
+    )
+})
+}
+    
+
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePadTransferReceiver: FfiConverter {
+
+    typealias FfiType = UnsafeMutableRawPointer
+    typealias SwiftType = PadTransferReceiver
+
+    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> PadTransferReceiver {
+        return PadTransferReceiver(unsafeFromRawPointer: pointer)
+    }
+
+    public static func lower(_ value: PadTransferReceiver) -> UnsafeMutableRawPointer {
+        return value.uniffiClonePointer()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PadTransferReceiver {
+        let v: UInt64 = try readInt(&buf)
+        // The Rust code won't compile if a pointer won't fit in a UInt64.
+        // We have to go via `UInt` because that's the thing that's the size of a pointer.
+        let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
+        if (ptr == nil) {
+            throw UniffiInternalError.unexpectedNullPointer
+        }
+        return try lift(ptr!)
+    }
+
+    public static func write(_ value: PadTransferReceiver, into buf: inout [UInt8]) {
+        // This fiddling is because `Int` is the thing that's the same size as a pointer.
+        // The Rust code won't compile if a pointer won't fit in a `UInt64`.
+        writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
+    }
+}
+
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public nonisolated func FfiConverterTypePadTransferReceiver_lift(_ pointer: UnsafeMutableRawPointer) throws -> PadTransferReceiver {
+    return try FfiConverterTypePadTransferReceiver.lift(pointer)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public nonisolated func FfiConverterTypePadTransferReceiver_lower(_ value: PadTransferReceiver) -> UnsafeMutableRawPointer {
+    return FfiConverterTypePadTransferReceiver.lower(value)
+}
+
+
+
+
+/**
+ * Pad owner handing over a copy. Steps must run in order; any failure ends
+ * the transfer.
+ */
+public protocol PadTransferSenderProtocol : AnyObject {
+    
+    func onNonce(nonce: [UInt8]) throws  -> SenderReveal
+    
+    /**
+     * Response to send to the receiver
+     */
+    func response()  -> [UInt8]
+    
+    /**
+     * Only after people confirmed the words match; Maximum is refused
+     */
+    func sealPad(pad: [UInt8], level: SecurityLevel) throws  -> [UInt8]
+    
+}
+
+/**
+ * Pad owner handing over a copy. Steps must run in order; any failure ends
+ * the transfer.
+ */
+open class PadTransferSender:
+    PadTransferSenderProtocol {
+    fileprivate let pointer: UnsafeMutableRawPointer!
+
+    /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoPointer {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+    required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
+        self.pointer = pointer
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noPointer: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noPointer: NoPointer) {
+        self.pointer = nil
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiClonePointer() -> UnsafeMutableRawPointer {
+        return try! rustCall { uniffi_ash_bindings_fn_clone_padtransfersender(self.pointer, $0) }
+    }
+    /**
+     * encapsulation_seed: 64 random bytes; nonce: 32 random bytes
+     */
+public convenience init(offer: [UInt8], encapsulationSeed: [UInt8], nonce: [UInt8])throws  {
+    let pointer =
+        try rustCallWithError(FfiConverterTypeAshError.lift) {
+    uniffi_ash_bindings_fn_constructor_padtransfersender_new(
+        FfiConverterSequenceUInt8.lower(offer),
+        FfiConverterSequenceUInt8.lower(encapsulationSeed),
+        FfiConverterSequenceUInt8.lower(nonce),$0
+    )
+}
+    self.init(unsafeFromRawPointer: pointer)
+}
+
+    deinit {
+        guard let pointer = pointer else {
+            return
+        }
+
+        try! rustCall { uniffi_ash_bindings_fn_free_padtransfersender(pointer, $0) }
+    }
+
+    
+
+    
+open func onNonce(nonce: [UInt8])throws  -> SenderReveal {
+    return try  FfiConverterTypeSenderReveal.lift(try rustCallWithError(FfiConverterTypeAshError.lift) {
+    uniffi_ash_bindings_fn_method_padtransfersender_on_nonce(self.uniffiClonePointer(),
+        FfiConverterSequenceUInt8.lower(nonce),$0
+    )
+})
+}
+    
+    /**
+     * Response to send to the receiver
+     */
+open func response() -> [UInt8] {
+    return try!  FfiConverterSequenceUInt8.lift(try! rustCall() {
+    uniffi_ash_bindings_fn_method_padtransfersender_response(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+    /**
+     * Only after people confirmed the words match; Maximum is refused
+     */
+open func sealPad(pad: [UInt8], level: SecurityLevel)throws  -> [UInt8] {
+    return try  FfiConverterSequenceUInt8.lift(try rustCallWithError(FfiConverterTypeAshError.lift) {
+    uniffi_ash_bindings_fn_method_padtransfersender_seal_pad(self.uniffiClonePointer(),
+        FfiConverterSequenceUInt8.lower(pad),
+        FfiConverterTypeSecurityLevel.lower(level),$0
+    )
+})
+}
+    
+
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePadTransferSender: FfiConverter {
+
+    typealias FfiType = UnsafeMutableRawPointer
+    typealias SwiftType = PadTransferSender
+
+    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> PadTransferSender {
+        return PadTransferSender(unsafeFromRawPointer: pointer)
+    }
+
+    public static func lower(_ value: PadTransferSender) -> UnsafeMutableRawPointer {
+        return value.uniffiClonePointer()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PadTransferSender {
+        let v: UInt64 = try readInt(&buf)
+        // The Rust code won't compile if a pointer won't fit in a UInt64.
+        // We have to go via `UInt` because that's the thing that's the size of a pointer.
+        let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
+        if (ptr == nil) {
+            throw UniffiInternalError.unexpectedNullPointer
+        }
+        return try lift(ptr!)
+    }
+
+    public static func write(_ value: PadTransferSender, into buf: inout [UInt8]) {
+        // This fiddling is because `Int` is the thing that's the same size as a pointer.
+        // The Rust code won't compile if a pointer won't fit in a `UInt64`.
+        writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
+    }
+}
+
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public nonisolated func FfiConverterTypePadTransferSender_lift(_ pointer: UnsafeMutableRawPointer) throws -> PadTransferSender {
+    return try FfiConverterTypePadTransferSender.lift(pointer)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public nonisolated func FfiConverterTypePadTransferSender_lower(_ value: PadTransferSender) -> UnsafeMutableRawPointer {
+    return FfiConverterTypePadTransferSender.lower(value)
+}
+
+
 /**
  * Authorization tokens derived from pad during ceremony
  */
@@ -1880,6 +2585,397 @@ public nonisolated func FfiConverterTypeFountainCeremonyResult_lower(_ value: Fo
 
 
 /**
+ * A verified, decrypted group message.
+ */
+public struct GroupMessage {
+    public let sender: UInt8
+    public let msgType: UInt8
+    public let plaintext: [UInt8]
+    /**
+     * Level of the sender's pad, which bounds this message's security
+     */
+    public let level: SecurityLevel
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(sender: UInt8, msgType: UInt8, plaintext: [UInt8], 
+        /**
+         * Level of the sender's pad, which bounds this message's security
+         */level: SecurityLevel) {
+        self.sender = sender
+        self.msgType = msgType
+        self.plaintext = plaintext
+        self.level = level
+    }
+}
+
+
+
+extension GroupMessage: Equatable, Hashable {
+    public static func ==(lhs: GroupMessage, rhs: GroupMessage) -> Bool {
+        if lhs.sender != rhs.sender {
+            return false
+        }
+        if lhs.msgType != rhs.msgType {
+            return false
+        }
+        if lhs.plaintext != rhs.plaintext {
+            return false
+        }
+        if lhs.level != rhs.level {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(sender)
+        hasher.combine(msgType)
+        hasher.combine(plaintext)
+        hasher.combine(level)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeGroupMessage: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> GroupMessage {
+        return
+            try GroupMessage(
+                sender: FfiConverterUInt8.read(from: &buf), 
+                msgType: FfiConverterUInt8.read(from: &buf), 
+                plaintext: FfiConverterSequenceUInt8.read(from: &buf), 
+                level: FfiConverterTypeSecurityLevel.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: GroupMessage, into buf: inout [UInt8]) {
+        FfiConverterUInt8.write(value.sender, into: &buf)
+        FfiConverterUInt8.write(value.msgType, into: &buf)
+        FfiConverterSequenceUInt8.write(value.plaintext, into: &buf)
+        FfiConverterTypeSecurityLevel.write(value.level, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public nonisolated func FfiConverterTypeGroupMessage_lift(_ buf: RustBuffer) throws -> GroupMessage {
+    return try FfiConverterTypeGroupMessage.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public nonisolated func FfiConverterTypeGroupMessage_lower(_ value: GroupMessage) -> RustBuffer {
+    return FfiConverterTypeGroupMessage.lower(value)
+}
+
+
+/**
+ * State needed to restore one member's pad from secure storage.
+ */
+public struct MemberPadState {
+    public let member: UInt8
+    public let pad: [UInt8]
+    public let used: [UsedRange]
+    public let checksums: [UInt32]
+    public let level: SecurityLevel
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(member: UInt8, pad: [UInt8], used: [UsedRange], checksums: [UInt32], level: SecurityLevel) {
+        self.member = member
+        self.pad = pad
+        self.used = used
+        self.checksums = checksums
+        self.level = level
+    }
+}
+
+
+
+extension MemberPadState: Equatable, Hashable {
+    public static func ==(lhs: MemberPadState, rhs: MemberPadState) -> Bool {
+        if lhs.member != rhs.member {
+            return false
+        }
+        if lhs.pad != rhs.pad {
+            return false
+        }
+        if lhs.used != rhs.used {
+            return false
+        }
+        if lhs.checksums != rhs.checksums {
+            return false
+        }
+        if lhs.level != rhs.level {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(member)
+        hasher.combine(pad)
+        hasher.combine(used)
+        hasher.combine(checksums)
+        hasher.combine(level)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeMemberPadState: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> MemberPadState {
+        return
+            try MemberPadState(
+                member: FfiConverterUInt8.read(from: &buf), 
+                pad: FfiConverterSequenceUInt8.read(from: &buf), 
+                used: FfiConverterSequenceTypeUsedRange.read(from: &buf), 
+                checksums: FfiConverterSequenceUInt32.read(from: &buf), 
+                level: FfiConverterTypeSecurityLevel.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: MemberPadState, into buf: inout [UInt8]) {
+        FfiConverterUInt8.write(value.member, into: &buf)
+        FfiConverterSequenceUInt8.write(value.pad, into: &buf)
+        FfiConverterSequenceTypeUsedRange.write(value.used, into: &buf)
+        FfiConverterSequenceUInt32.write(value.checksums, into: &buf)
+        FfiConverterTypeSecurityLevel.write(value.level, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public nonisolated func FfiConverterTypeMemberPadState_lift(_ buf: RustBuffer) throws -> MemberPadState {
+    return try FfiConverterTypeMemberPadState.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public nonisolated func FfiConverterTypeMemberPadState_lower(_ value: MemberPadState) -> RustBuffer {
+    return FfiConverterTypeMemberPadState.lower(value)
+}
+
+
+/**
+ * Pad received at the end of a transfer.
+ */
+public struct ReceivedPad {
+    public let pad: [UInt8]
+    public let level: SecurityLevel
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(pad: [UInt8], level: SecurityLevel) {
+        self.pad = pad
+        self.level = level
+    }
+}
+
+
+
+extension ReceivedPad: Equatable, Hashable {
+    public static func ==(lhs: ReceivedPad, rhs: ReceivedPad) -> Bool {
+        if lhs.pad != rhs.pad {
+            return false
+        }
+        if lhs.level != rhs.level {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(pad)
+        hasher.combine(level)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeReceivedPad: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ReceivedPad {
+        return
+            try ReceivedPad(
+                pad: FfiConverterSequenceUInt8.read(from: &buf), 
+                level: FfiConverterTypeSecurityLevel.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ReceivedPad, into buf: inout [UInt8]) {
+        FfiConverterSequenceUInt8.write(value.pad, into: &buf)
+        FfiConverterTypeSecurityLevel.write(value.level, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public nonisolated func FfiConverterTypeReceivedPad_lift(_ buf: RustBuffer) throws -> ReceivedPad {
+    return try FfiConverterTypeReceivedPad.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public nonisolated func FfiConverterTypeReceivedPad_lower(_ value: ReceivedPad) -> RustBuffer {
+    return FfiConverterTypeReceivedPad.lower(value)
+}
+
+
+/**
+ * Sender's reply to the receiver's nonce, with the words to compare.
+ */
+public struct SenderReveal {
+    public let reveal: [UInt8]
+    public let words: [String]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(reveal: [UInt8], words: [String]) {
+        self.reveal = reveal
+        self.words = words
+    }
+}
+
+
+
+extension SenderReveal: Equatable, Hashable {
+    public static func ==(lhs: SenderReveal, rhs: SenderReveal) -> Bool {
+        if lhs.reveal != rhs.reveal {
+            return false
+        }
+        if lhs.words != rhs.words {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(reveal)
+        hasher.combine(words)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSenderReveal: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SenderReveal {
+        return
+            try SenderReveal(
+                reveal: FfiConverterSequenceUInt8.read(from: &buf), 
+                words: FfiConverterSequenceString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: SenderReveal, into buf: inout [UInt8]) {
+        FfiConverterSequenceUInt8.write(value.reveal, into: &buf)
+        FfiConverterSequenceString.write(value.words, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public nonisolated func FfiConverterTypeSenderReveal_lift(_ buf: RustBuffer) throws -> SenderReveal {
+    return try FfiConverterTypeSenderReveal.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public nonisolated func FfiConverterTypeSenderReveal_lower(_ value: SenderReveal) -> RustBuffer {
+    return FfiConverterTypeSenderReveal.lower(value)
+}
+
+
+/**
+ * Consumed [start, end) range of a pad.
+ */
+public struct UsedRange {
+    public let start: UInt64
+    public let end: UInt64
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(start: UInt64, end: UInt64) {
+        self.start = start
+        self.end = end
+    }
+}
+
+
+
+extension UsedRange: Equatable, Hashable {
+    public static func ==(lhs: UsedRange, rhs: UsedRange) -> Bool {
+        if lhs.start != rhs.start {
+            return false
+        }
+        if lhs.end != rhs.end {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(start)
+        hasher.combine(end)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeUsedRange: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> UsedRange {
+        return
+            try UsedRange(
+                start: FfiConverterUInt64.read(from: &buf), 
+                end: FfiConverterUInt64.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: UsedRange, into buf: inout [UInt8]) {
+        FfiConverterUInt64.write(value.start, into: &buf)
+        FfiConverterUInt64.write(value.end, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public nonisolated func FfiConverterTypeUsedRange_lift(_ buf: RustBuffer) throws -> UsedRange {
+    return try FfiConverterTypeUsedRange.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public nonisolated func FfiConverterTypeUsedRange_lower(_ value: UsedRange) -> RustBuffer {
+    return FfiConverterTypeUsedRange.lower(value)
+}
+
+
+/**
  * Error types for ASH operations
  */
 public enum AshError {
@@ -1951,6 +3047,66 @@ public enum AshError {
      */
     case InvalidPadding(message: String)
     
+    /**
+     * Group message from an unknown member
+     */
+    case UnknownMember(message: String)
+    
+    /**
+     * Group member id already taken
+     */
+    case DuplicateMember(message: String)
+    
+    /**
+     * Pad bytes already consumed (replay or own message echoed back)
+     */
+    case PadRangeAlreadyUsed(message: String)
+    
+    /**
+     * Local pad copy failed its integrity check
+     */
+    case PadCorrupted(message: String)
+    
+    /**
+     * Operation would lower the security level without consent
+     */
+    case SecurityDowngrade(message: String)
+    
+    /**
+     * Unknown message type byte
+     */
+    case InvalidMessageType(message: String)
+    
+    /**
+     * Peer's transfer public key is invalid
+     */
+    case InvalidPublicKey(message: String)
+    
+    /**
+     * Transfer tampered with (commitment did not match)
+     */
+    case CommitmentMismatch(message: String)
+    
+    /**
+     * Sealed pad failed authentication
+     */
+    case DecryptionFailed(message: String)
+    
+    /**
+     * Security level not allowed for this channel
+     */
+    case LevelNotAllowed(message: String)
+    
+    /**
+     * Transfer message has the wrong type, version or length
+     */
+    case MalformedMessage(message: String)
+    
+    /**
+     * Transfer step called out of order
+     */
+    case InvalidState(message: String)
+    
 }
 
 
@@ -2019,6 +3175,54 @@ public struct FfiConverterTypeAshError: FfiConverterRustBuffer {
             message: try FfiConverterString.read(from: &buf)
         )
         
+        case 14: return .UnknownMember(
+            message: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 15: return .DuplicateMember(
+            message: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 16: return .PadRangeAlreadyUsed(
+            message: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 17: return .PadCorrupted(
+            message: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 18: return .SecurityDowngrade(
+            message: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 19: return .InvalidMessageType(
+            message: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 20: return .InvalidPublicKey(
+            message: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 21: return .CommitmentMismatch(
+            message: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 22: return .DecryptionFailed(
+            message: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 23: return .LevelNotAllowed(
+            message: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 24: return .MalformedMessage(
+            message: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 25: return .InvalidState(
+            message: try FfiConverterString.read(from: &buf)
+        )
+        
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -2056,6 +3260,30 @@ public struct FfiConverterTypeAshError: FfiConverterRustBuffer {
             writeInt(&buf, Int32(12))
         case .InvalidPadding(_ /* message is ignored*/):
             writeInt(&buf, Int32(13))
+        case .UnknownMember(_ /* message is ignored*/):
+            writeInt(&buf, Int32(14))
+        case .DuplicateMember(_ /* message is ignored*/):
+            writeInt(&buf, Int32(15))
+        case .PadRangeAlreadyUsed(_ /* message is ignored*/):
+            writeInt(&buf, Int32(16))
+        case .PadCorrupted(_ /* message is ignored*/):
+            writeInt(&buf, Int32(17))
+        case .SecurityDowngrade(_ /* message is ignored*/):
+            writeInt(&buf, Int32(18))
+        case .InvalidMessageType(_ /* message is ignored*/):
+            writeInt(&buf, Int32(19))
+        case .InvalidPublicKey(_ /* message is ignored*/):
+            writeInt(&buf, Int32(20))
+        case .CommitmentMismatch(_ /* message is ignored*/):
+            writeInt(&buf, Int32(21))
+        case .DecryptionFailed(_ /* message is ignored*/):
+            writeInt(&buf, Int32(22))
+        case .LevelNotAllowed(_ /* message is ignored*/):
+            writeInt(&buf, Int32(23))
+        case .MalformedMessage(_ /* message is ignored*/):
+            writeInt(&buf, Int32(24))
+        case .InvalidState(_ /* message is ignored*/):
+            writeInt(&buf, Int32(25))
 
         
         }
@@ -2070,6 +3298,89 @@ extension AshError: Foundation.LocalizedError {
         String(reflecting: self)
     }
 }
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+/**
+ * Integrity status of a member's pad as seen from this device.
+ */
+
+public enum MemberHealth {
+    
+    case healthy
+    /**
+     * This device's copy of the member's pad is damaged
+     */
+    case corruptedLocally
+    /**
+     * Repeated authentication failures: damaged sender copy or forgery
+     */
+    case suspect(consecutiveFailures: UInt32
+    )
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeMemberHealth: FfiConverterRustBuffer {
+    typealias SwiftType = MemberHealth
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> MemberHealth {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .healthy
+        
+        case 2: return .corruptedLocally
+        
+        case 3: return .suspect(consecutiveFailures: try FfiConverterUInt32.read(from: &buf)
+        )
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: MemberHealth, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .healthy:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .corruptedLocally:
+            writeInt(&buf, Int32(2))
+        
+        
+        case let .suspect(consecutiveFailures):
+            writeInt(&buf, Int32(3))
+            FfiConverterUInt32.write(consecutiveFailures, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public nonisolated func FfiConverterTypeMemberHealth_lift(_ buf: RustBuffer) throws -> MemberHealth {
+    return try FfiConverterTypeMemberHealth.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public nonisolated func FfiConverterTypeMemberHealth_lower(_ value: MemberHealth) -> RustBuffer {
+    return FfiConverterTypeMemberHealth.lower(value)
+}
+
+
+
+extension MemberHealth: Equatable, Hashable {}
+
+
 
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
@@ -2254,6 +3565,89 @@ extension Role: Equatable, Hashable {}
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 /**
+ * How a pad was distributed, weakest to strongest.
+ */
+
+public enum SecurityLevel {
+    
+    /**
+     * Sent remotely through the relay (computational cryptography)
+     */
+    case standard
+    /**
+     * Exchanged in person over short-range radio (computational cryptography)
+     */
+    case enhanced
+    /**
+     * Exchanged in person by QR code (no computational assumption)
+     */
+    case maximum
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSecurityLevel: FfiConverterRustBuffer {
+    typealias SwiftType = SecurityLevel
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SecurityLevel {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .standard
+        
+        case 2: return .enhanced
+        
+        case 3: return .maximum
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: SecurityLevel, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .standard:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .enhanced:
+            writeInt(&buf, Int32(2))
+        
+        
+        case .maximum:
+            writeInt(&buf, Int32(3))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public nonisolated func FfiConverterTypeSecurityLevel_lift(_ buf: RustBuffer) throws -> SecurityLevel {
+    return try FfiConverterTypeSecurityLevel.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public nonisolated func FfiConverterTypeSecurityLevel_lower(_ value: SecurityLevel) -> RustBuffer {
+    return FfiConverterTypeSecurityLevel.lower(value)
+}
+
+
+
+extension SecurityLevel: Equatable, Hashable {}
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+/**
  * Transfer method for QR ceremony.
  *
  * Determines which erasure coding strategy is used for pad transfer.
@@ -2364,6 +3758,54 @@ fileprivate struct FfiConverterOptionTypeFountainCeremonyResult: FfiConverterRus
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeMemberHealth: FfiConverterRustBuffer {
+    typealias SwiftType = MemberHealth?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeMemberHealth.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeMemberHealth.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypeSecurityLevel: FfiConverterRustBuffer {
+    typealias SwiftType = SecurityLevel?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeSecurityLevel.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeSecurityLevel.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypeTransferMethod: FfiConverterRustBuffer {
     typealias SwiftType = TransferMethod?
 
@@ -2413,6 +3855,31 @@ fileprivate struct FfiConverterSequenceUInt8: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceUInt32: FfiConverterRustBuffer {
+    typealias SwiftType = [UInt32]
+
+    public static func write(_ value: [UInt32], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterUInt32.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [UInt32] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [UInt32]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterUInt32.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceString: FfiConverterRustBuffer {
     typealias SwiftType = [String]
 
@@ -2430,6 +3897,56 @@ fileprivate struct FfiConverterSequenceString: FfiConverterRustBuffer {
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             seq.append(try FfiConverterString.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeMemberPadState: FfiConverterRustBuffer {
+    typealias SwiftType = [MemberPadState]
+
+    public static func write(_ value: [MemberPadState], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeMemberPadState.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [MemberPadState] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [MemberPadState]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeMemberPadState.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeUsedRange: FfiConverterRustBuffer {
+    typealias SwiftType = [UsedRange]
+
+    public static func write(_ value: [UsedRange], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeUsedRange.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [UsedRange] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [UsedRange]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeUsedRange.read(from: &buf))
         }
         return seq
     }
@@ -2892,6 +4409,72 @@ nonisolated(unsafe) private var initializationResult: InitializationResult = {
     if (uniffi_ash_bindings_checksum_method_pad_zero_bytes_at() != 25947) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_ash_bindings_checksum_method_padgroup_add_member() != 41839) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ash_bindings_checksum_method_padgroup_add_member_allow_downgrade() != 47042) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ash_bindings_checksum_method_padgroup_can_send() != 56547) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ash_bindings_checksum_method_padgroup_check_integrity() != 24774) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ash_bindings_checksum_method_padgroup_decrypt() != 9335) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ash_bindings_checksum_method_padgroup_encrypt() != 48325) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ash_bindings_checksum_method_padgroup_export_state() != 46753) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ash_bindings_checksum_method_padgroup_health() != 58340) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ash_bindings_checksum_method_padgroup_me() != 13232) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ash_bindings_checksum_method_padgroup_member_level() != 41377) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ash_bindings_checksum_method_padgroup_members() != 31583) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ash_bindings_checksum_method_padgroup_remove_member() != 5689) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ash_bindings_checksum_method_padgroup_replace_pad() != 13347) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ash_bindings_checksum_method_padgroup_replace_pad_allow_downgrade() != 13983) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ash_bindings_checksum_method_padgroup_security_level() != 22861) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ash_bindings_checksum_method_padtransferreceiver_offer() != 20354) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ash_bindings_checksum_method_padtransferreceiver_on_response() != 37433) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ash_bindings_checksum_method_padtransferreceiver_on_reveal() != 48329) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ash_bindings_checksum_method_padtransferreceiver_open_pad() != 5489) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ash_bindings_checksum_method_padtransfersender_on_nonce() != 43788) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ash_bindings_checksum_method_padtransfersender_response() != 45151) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ash_bindings_checksum_method_padtransfersender_seal_pad() != 39490) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_ash_bindings_checksum_constructor_fountainframereceiver_new() != 53774) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -2902,6 +4485,18 @@ nonisolated(unsafe) private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_ash_bindings_checksum_constructor_pad_from_entropy() != 28891) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ash_bindings_checksum_constructor_padgroup_new() != 52715) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ash_bindings_checksum_constructor_padgroup_restore() != 4275) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ash_bindings_checksum_constructor_padtransferreceiver_new() != 18034) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ash_bindings_checksum_constructor_padtransfersender_new() != 36395) {
         return InitializationResult.apiChecksumMismatch
     }
 
