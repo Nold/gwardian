@@ -76,6 +76,23 @@ jobs:
             -quiet \
             CODE_SIGNING_ALLOWED=NO
 
+      - name: Run pad transfer tests
+        working-directory: apps/ios/Ash
+        run: |
+          # Any available iPhone simulator; names change with each Xcode release
+          DEVICE_ID=$(xcrun simctl list devices available --json | python3 -c '
+          import json, sys
+          devices = json.load(sys.stdin)["devices"]
+          print(next(d["udid"] for runtime, ds in devices.items() if "iOS" in runtime
+                     for d in ds if d["name"].startswith("iPhone")))')
+          xcodebuild test \
+            -project Ash.xcodeproj \
+            -scheme Ash \
+            -destination "id=$DEVICE_ID" \
+            -only-testing:AshTests/PadTransferFlowTests \
+            -quiet \
+            CODE_SIGNING_ALLOWED=NO
+
   swiftlint:
     name: SwiftLint
     runs-on: macos-26
