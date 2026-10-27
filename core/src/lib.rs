@@ -112,8 +112,8 @@ pub mod frame;
 pub mod gf128;
 pub mod group;
 pub mod mac;
-pub mod mnemonic;
 pub mod message;
+pub mod mnemonic;
 pub mod pad;
 pub mod pad_calculator;
 pub mod passphrase;
@@ -128,26 +128,28 @@ pub(crate) mod otp;
 // Re-export main types at crate root
 pub use ceremony::{CeremonyMetadata, NotificationFlags, DEFAULT_TTL_SECONDS, METADATA_VERSION};
 pub use error::{Error, Result};
-pub use fountain::{EncodedBlock, FountainDecoder, FountainEncoder, LegacyLTEncoder, LegacyLTDecoder};
-pub use raptor::{RaptorDecoder, RaptorEncoder};
+pub use fountain::{
+    EncodedBlock, FountainDecoder, FountainEncoder, LegacyLTDecoder, LegacyLTEncoder,
+};
 pub use frame::{
     create_fountain_ceremony, FountainCeremonyResult, FountainFrameGenerator,
     FountainFrameReceiver, TransferMethod, DEFAULT_BLOCK_SIZE,
 };
+pub use raptor::{RaptorDecoder, RaptorEncoder};
 
 // Re-export pad calculator types for convenience
-pub use pad_calculator::{
-    calculate_pad_stats, calculate_pad_stats_with_qr_size, expected_frames, redundancy_blocks,
-    PadCalculator, PadStats, METADATA_OVERHEAD, DEFAULT_QR_BLOCK_SIZE,
-};
 pub use group::{Group, GroupFrame, MemberHealth, MemberId, MemberPad};
 pub use pad::{Pad, PadSize, Role};
+pub use pad_calculator::{
+    calculate_pad_stats, calculate_pad_stats_with_qr_size, expected_frames, redundancy_blocks,
+    PadCalculator, PadStats, DEFAULT_QR_BLOCK_SIZE, METADATA_OVERHEAD,
+};
 
 // Re-export authenticated message types - the primary API for encryption
 pub use mac::{AuthKey, AUTH_KEY_SIZE, TAG_SIZE};
 pub use message::{
-    pad_message, unpad_message, MessageFrame, MessageType,
-    HEADER_SIZE, MIN_FRAME_SIZE, MIN_PADDED_SIZE,
+    pad_message, unpad_message, MessageFrame, MessageType, HEADER_SIZE, MIN_FRAME_SIZE,
+    MIN_PADDED_SIZE,
 };
 
 /// Library version.
@@ -210,21 +212,22 @@ mod tests {
         // Consume auth key (64 bytes) + encryption key (plaintext length)
         let init_auth_bytes = initiator.consume(AUTH_KEY_SIZE, Role::Initiator).unwrap();
         let init_auth_key = AuthKey::from_slice(&init_auth_bytes);
-        let init_enc_key = initiator.consume(plaintext1.len(), Role::Initiator).unwrap();
+        let init_enc_key = initiator
+            .consume(plaintext1.len(), Role::Initiator)
+            .unwrap();
 
         // Create authenticated frame
-        let frame1 = MessageFrame::encrypt(
-            MessageType::Text,
-            plaintext1,
-            &init_enc_key,
-            &init_auth_key,
-        ).unwrap();
+        let frame1 =
+            MessageFrame::encrypt(MessageType::Text, plaintext1, &init_enc_key, &init_auth_key)
+                .unwrap();
         let wire1 = frame1.encode();
 
         // Responder verifies and decrypts
         let resp_auth_bytes = responder.consume(AUTH_KEY_SIZE, Role::Initiator).unwrap();
         let resp_auth_key = AuthKey::from_slice(&resp_auth_bytes);
-        let resp_enc_key = responder.consume(plaintext1.len(), Role::Initiator).unwrap();
+        let resp_enc_key = responder
+            .consume(plaintext1.len(), Role::Initiator)
+            .unwrap();
 
         let received1 = MessageFrame::decode(&wire1).unwrap();
         let decrypted1 = received1.decrypt(&resp_enc_key, &resp_auth_key).unwrap();
@@ -235,23 +238,30 @@ mod tests {
 
         let resp_send_auth_bytes = responder.consume(AUTH_KEY_SIZE, Role::Responder).unwrap();
         let resp_send_auth_key = AuthKey::from_slice(&resp_send_auth_bytes);
-        let resp_send_enc_key = responder.consume(plaintext2.len(), Role::Responder).unwrap();
+        let resp_send_enc_key = responder
+            .consume(plaintext2.len(), Role::Responder)
+            .unwrap();
 
         let frame2 = MessageFrame::encrypt(
             MessageType::Text,
             plaintext2,
             &resp_send_enc_key,
             &resp_send_auth_key,
-        ).unwrap();
+        )
+        .unwrap();
         let wire2 = frame2.encode();
 
         // Initiator verifies and decrypts
         let init_recv_auth_bytes = initiator.consume(AUTH_KEY_SIZE, Role::Responder).unwrap();
         let init_recv_auth_key = AuthKey::from_slice(&init_recv_auth_bytes);
-        let init_recv_enc_key = initiator.consume(plaintext2.len(), Role::Responder).unwrap();
+        let init_recv_enc_key = initiator
+            .consume(plaintext2.len(), Role::Responder)
+            .unwrap();
 
         let received2 = MessageFrame::decode(&wire2).unwrap();
-        let decrypted2 = received2.decrypt(&init_recv_enc_key, &init_recv_auth_key).unwrap();
+        let decrypted2 = received2
+            .decrypt(&init_recv_enc_key, &init_recv_auth_key)
+            .unwrap();
         assert_eq!(decrypted2, plaintext2);
     }
 
@@ -267,18 +277,25 @@ mod tests {
         // Sender creates authenticated frame
         let auth_bytes = sender_pad.consume(AUTH_KEY_SIZE, Role::Initiator).unwrap();
         let auth_key = AuthKey::from_slice(&auth_bytes);
-        let enc_key = sender_pad.consume(plaintext.len(), Role::Initiator).unwrap();
+        let enc_key = sender_pad
+            .consume(plaintext.len(), Role::Initiator)
+            .unwrap();
 
-        let frame = MessageFrame::encrypt(MessageType::Text, plaintext, &enc_key, &auth_key).unwrap();
+        let frame =
+            MessageFrame::encrypt(MessageType::Text, plaintext, &enc_key, &auth_key).unwrap();
         let mut wire = frame.encode();
 
         // Attacker tampers with ciphertext
         wire[HEADER_SIZE] ^= 0xFF;
 
         // Receiver tries to decrypt
-        let recv_auth_bytes = receiver_pad.consume(AUTH_KEY_SIZE, Role::Initiator).unwrap();
+        let recv_auth_bytes = receiver_pad
+            .consume(AUTH_KEY_SIZE, Role::Initiator)
+            .unwrap();
         let recv_auth_key = AuthKey::from_slice(&recv_auth_bytes);
-        let recv_enc_key = receiver_pad.consume(plaintext.len(), Role::Initiator).unwrap();
+        let recv_enc_key = receiver_pad
+            .consume(plaintext.len(), Role::Initiator)
+            .unwrap();
 
         let received = MessageFrame::decode(&wire).unwrap();
         let result = received.decrypt(&recv_enc_key, &recv_auth_key);
@@ -306,9 +323,14 @@ mod tests {
     fn fountain_corruption_detected() {
         let metadata = CeremonyMetadata::default();
         let pad = vec![0u8; 1000];
-        let mut generator =
-            frame::create_fountain_ceremony(&metadata, &pad, 256, None, frame::TransferMethod::Raptor)
-                .unwrap();
+        let mut generator = frame::create_fountain_ceremony(
+            &metadata,
+            &pad,
+            256,
+            None,
+            frame::TransferMethod::Raptor,
+        )
+        .unwrap();
 
         let mut frame = generator.next_frame();
 

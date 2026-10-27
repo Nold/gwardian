@@ -279,11 +279,7 @@ impl fmt::Display for Error {
                 )
             }
             Error::FrameTooShort { size, minimum } => {
-                write!(
-                    f,
-                    "frame too short: {} bytes, minimum is {}",
-                    size, minimum
-                )
+                write!(f, "frame too short: {} bytes, minimum is {}", size, minimum)
             }
             Error::UnsupportedFrameVersion { version } => {
                 write!(f, "unsupported frame version: {}", version)

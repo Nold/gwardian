@@ -69,7 +69,7 @@ fn generate_test_credentials_with_seed(seed: u8) -> TestCredentials {
 async fn build_test_server() -> TestServer {
     let config = Config::default();
     let store = Arc::new(Store::new(config.clone()));
-    let apns = apns::create_client(&config).await;
+    let apns = apns::create_client(&config);
     let state = AppState::new(store, apns);
 
     let app = build_router(state);
@@ -78,7 +78,7 @@ async fn build_test_server() -> TestServer {
 
 /// Create authorization header value
 fn auth_header(token: &str) -> String {
-    format!("Bearer {}", token)
+    format!("Bearer {token}")
 }
 
 // =============================================================================
@@ -836,7 +836,7 @@ async fn test_multiple_messages_ordering() {
     for seq in [3, 1, 2] {
         let ciphertext = base64::Engine::encode(
             &base64::engine::general_purpose::STANDARD,
-            format!("message-{}", seq).as_bytes(),
+            format!("message-{seq}").as_bytes(),
         );
 
         server

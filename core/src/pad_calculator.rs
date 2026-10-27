@@ -87,7 +87,10 @@ pub fn redundancy_blocks(source_blocks: usize, method: TransferMethod) -> usize 
     match method {
         TransferMethod::Raptor => {
             // Raptor needs less redundancy (2-5 blocks typical)
-            std::cmp::max(MIN_REDUNDANCY, (source_blocks as f64 * REDUNDANCY_PERCENTAGE) as usize)
+            std::cmp::max(
+                MIN_REDUNDANCY,
+                (source_blocks as f64 * REDUNDANCY_PERCENTAGE) as usize,
+            )
         }
         TransferMethod::LT => {
             // LT needs more redundancy: O(√K)
@@ -236,7 +239,7 @@ pub fn calculate_pad_stats_with_qr_size(pad_size: usize, qr_block_size: usize) -
     let source_blocks = if qr_block_size == 0 {
         0
     } else {
-        (total_data + qr_block_size - 1) / qr_block_size
+        total_data.div_ceil(qr_block_size)
     };
 
     // qr_codes_needed is deprecated, kept for compatibility (same as source_blocks)
@@ -302,7 +305,7 @@ impl PadCalculator {
         let source_blocks = if self.qr_block_size == 0 {
             0
         } else {
-            (total_data + self.qr_block_size - 1) / self.qr_block_size
+            total_data.div_ceil(self.qr_block_size)
         };
 
         let qr_codes_needed = source_blocks;
@@ -331,10 +334,10 @@ impl PadCalculator {
     pub fn message_capacity_table(&self) -> Vec<(usize, usize)> {
         let stats = self.calculate();
         vec![
-            (50, stats.messages_at_avg(50)),    // Short messages
-            (100, stats.messages_at_avg(100)),  // Medium messages
-            (200, stats.messages_at_avg(200)),  // Longer messages
-            (500, stats.messages_at_avg(500)),  // Long messages
+            (50, stats.messages_at_avg(50)),     // Short messages
+            (100, stats.messages_at_avg(100)),   // Medium messages
+            (200, stats.messages_at_avg(200)),   // Longer messages
+            (500, stats.messages_at_avg(500)),   // Long messages
             (1000, stats.messages_at_avg(1000)), // Very long messages
         ]
     }
@@ -478,7 +481,11 @@ mod tests {
 
         // Verify some entries
         for (avg_size, count) in &table {
-            assert!(*count > 0, "Should have positive message count for size {}", avg_size);
+            assert!(
+                *count > 0,
+                "Should have positive message count for size {}",
+                avg_size
+            );
         }
 
         // Larger messages should have fewer count
@@ -505,12 +512,12 @@ mod tests {
     fn various_pad_sizes() {
         // Test a range of valid pad sizes
         let sizes = [
-            32 * 1024,        // 32 KB (minimum)
-            64 * 1024,        // 64 KB
-            256 * 1024,       // 256 KB
-            512 * 1024,       // 512 KB
-            1024 * 1024,      // 1 MB
-            10 * 1024 * 1024, // 10 MB
+            32 * 1024,         // 32 KB (minimum)
+            64 * 1024,         // 64 KB
+            256 * 1024,        // 256 KB
+            512 * 1024,        // 512 KB
+            1024 * 1024,       // 1 MB
+            10 * 1024 * 1024,  // 10 MB
             100 * 1024 * 1024, // 100 MB
         ];
 

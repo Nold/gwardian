@@ -160,7 +160,7 @@ impl SequentialEncoder {
     /// Create a new sequential encoder.
     fn new(data: &[u8], block_size: usize) -> Self {
         let original_len = data.len();
-        let source_count = (data.len() + block_size - 1) / block_size;
+        let source_count = data.len().div_ceil(block_size);
 
         let mut source_blocks = Vec::with_capacity(source_count);
         for i in 0..source_count {
@@ -711,7 +711,7 @@ impl FountainFrameReceiver {
 
     /// Number of unique blocks received (excluding duplicates).
     ///
-    /// This is more useful for progress tracking than [`blocks_received`]
+    /// This is more useful for progress tracking than [`Self::blocks_received`]
     /// since it excludes frames that were scanned multiple times.
     pub fn unique_blocks_received(&self) -> usize {
         self.decoder
@@ -817,9 +817,14 @@ mod tests {
         let passphrase = "secret phrase";
 
         // Test single block round-trip
-        let mut generator =
-            create_fountain_ceremony(&metadata, &pad, 256, Some(passphrase), TransferMethod::Raptor)
-                .unwrap();
+        let mut generator = create_fountain_ceremony(
+            &metadata,
+            &pad,
+            256,
+            Some(passphrase),
+            TransferMethod::Raptor,
+        )
+        .unwrap();
         let encrypted_frame = generator.next_frame();
 
         // Verify decryption works (strip method byte before decoding)
@@ -828,9 +833,14 @@ mod tests {
         assert!(block.is_ok(), "Decrypted block should be valid");
 
         // Full roundtrip
-        let mut generator =
-            create_fountain_ceremony(&metadata, &pad, 256, Some(passphrase), TransferMethod::Raptor)
-                .unwrap();
+        let mut generator = create_fountain_ceremony(
+            &metadata,
+            &pad,
+            256,
+            Some(passphrase),
+            TransferMethod::Raptor,
+        )
+        .unwrap();
         let mut receiver = FountainFrameReceiver::new(Some(passphrase));
 
         while !receiver.is_complete() {
@@ -882,20 +892,16 @@ mod tests {
         // Receive every other block
         let mut receiver = FountainFrameReceiver::new(None);
         for (i, frame) in frames.iter().enumerate() {
-            if i % 2 == 0 {
-                if receiver.add_frame(frame).unwrap() {
-                    break;
-                }
+            if i % 2 == 0 && receiver.add_frame(frame).unwrap() {
+                break;
             }
         }
 
         // Add remaining if needed
         if !receiver.is_complete() {
             for (i, frame) in frames.iter().enumerate() {
-                if i % 2 == 1 {
-                    if receiver.add_frame(frame).unwrap() {
-                        break;
-                    }
+                if i % 2 == 1 && receiver.add_frame(frame).unwrap() {
+                    break;
                 }
             }
         }
@@ -1134,8 +1140,7 @@ mod tests {
             TransferMethod::LT,
             TransferMethod::Sequential,
         ] {
-            let generator =
-                create_fountain_ceremony(&metadata, &pad, 256, None, method).unwrap();
+            let generator = create_fountain_ceremony(&metadata, &pad, 256, None, method).unwrap();
 
             // Check first 10 frames all have correct method byte
             for i in 0..10 {

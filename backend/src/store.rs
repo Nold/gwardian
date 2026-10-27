@@ -176,7 +176,7 @@ impl Store {
     /// Delete a specific blob by ID (used for ACK).
     ///
     /// Returns `true` if the blob was found and deleted.
-    pub async fn delete_blob(&self, conversation_id: &ConversationId, blob_id: &Uuid) -> bool {
+    pub fn delete_blob(&self, conversation_id: &ConversationId, blob_id: &Uuid) -> bool {
         if let Some(mut entry) = self.blobs.get_mut(conversation_id) {
             let before = entry.value().len();
             entry.value_mut().retain(|b| b.id != *blob_id);
@@ -426,8 +426,8 @@ mod tests {
             .await
             .unwrap();
 
-        assert!(store.delete_blob(&conv_id, &blob_id).await);
-        assert!(!store.delete_blob(&conv_id, &blob_id).await); // Already deleted
+        assert!(store.delete_blob(&conv_id, &blob_id));
+        assert!(!store.delete_blob(&conv_id, &blob_id)); // Already deleted
 
         let (blobs, _) = store.get_blobs(&conv_id, None);
         assert!(blobs.is_empty());

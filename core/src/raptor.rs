@@ -84,7 +84,11 @@ impl RaptorEncoder {
         assert!(block_size > 0, "block_size must be > 0");
 
         let original_len = data.len();
-        let k = if data.is_empty() { 1 } else { data.len().div_ceil(block_size) };
+        let k = if data.is_empty() {
+            1
+        } else {
+            data.len().div_ceil(block_size)
+        };
 
         // Split source data into K blocks
         let mut source = Vec::with_capacity(k);
@@ -125,7 +129,7 @@ impl RaptorEncoder {
         let k = source.len();
         let mut parity = vec![vec![0u8; block_size]; p];
 
-        for i in 0..p {
+        for (i, block) in parity.iter_mut().enumerate() {
             // FROZEN: seed = i + 0x12345678
             let mut rng = PseudoRng::new(i as u64 + 0x12345678);
 
@@ -134,10 +138,12 @@ impl RaptorEncoder {
 
             let mut indices: Vec<usize> = (0..k).collect();
             for _ in 0..degree {
-                if indices.is_empty() { break; }
+                if indices.is_empty() {
+                    break;
+                }
                 let idx = rng.next_usize() % indices.len();
                 let src_idx = indices.swap_remove(idx);
-                xor_block(&mut parity[i], &source[src_idx]);
+                xor_block(block, &source[src_idx]);
             }
         }
 
@@ -194,7 +200,9 @@ impl RaptorEncoder {
         let mut indices: Vec<usize> = (0..total).collect();
 
         for _ in 0..degree.min(total) {
-            if indices.is_empty() { break; }
+            if indices.is_empty() {
+                break;
+            }
             let idx = rng.next_usize() % indices.len();
             let blk_idx = indices.swap_remove(idx);
 
@@ -218,16 +226,25 @@ impl RaptorEncoder {
     /// - 7% degree 5-10
     /// - 3% degree 10-20
     fn sample_degree(&self, rng: &mut PseudoRng, n: usize) -> usize {
-        if n <= 2 { return 1; }
+        if n <= 2 {
+            return 1;
+        }
 
         let r = rng.next_f64();
 
-        if r < 0.05 { 1 }
-        else if r < 0.45 { 2 }
-        else if r < 0.75 { 3 }
-        else if r < 0.90 { 4 }
-        else if r < 0.97 { (n / 4).max(5).min(10) }
-        else { (n / 2).max(10).min(20) }
+        if r < 0.05 {
+            1
+        } else if r < 0.45 {
+            2
+        } else if r < 0.75 {
+            3
+        } else if r < 0.90 {
+            4
+        } else if r < 0.97 {
+            (n / 4).clamp(5, 10)
+        } else {
+            (n / 2).clamp(10, 20)
+        }
     }
 
     /// Number of source blocks (K).
@@ -298,7 +315,11 @@ impl RaptorDecoder {
 
     /// Create decoder from first received block.
     pub fn from_block(block: &EncodedBlock) -> Self {
-        Self::new(block.source_count, block.block_size, block.original_len as usize)
+        Self::new(
+            block.source_count,
+            block.block_size,
+            block.original_len as usize,
+        )
     }
 
     /// Add a received block. Returns true if decoding is complete.
@@ -343,13 +364,16 @@ impl RaptorDecoder {
         let mut available: Vec<usize> = (0..total).collect();
 
         for _ in 0..degree.min(total) {
-            if available.is_empty() { break; }
+            if available.is_empty() {
+                break;
+            }
             let idx = rng.next_usize() % available.len();
             indices.push(available.swap_remove(idx));
         }
 
         // Try immediate decoding
-        let unknown: Vec<usize> = indices.iter()
+        let unknown: Vec<usize> = indices
+            .iter()
             .filter(|&&i| self.get_block(i).is_none())
             .copied()
             .collect();
@@ -384,23 +408,34 @@ impl RaptorDecoder {
 
     /// Sample degree (must match encoder distribution).
     fn sample_degree(&self, rng: &mut PseudoRng, n: usize) -> usize {
-        if n <= 2 { return 1; }
+        if n <= 2 {
+            return 1;
+        }
 
         let r = rng.next_f64();
 
-        if r < 0.05 { 1 }
-        else if r < 0.45 { 2 }
-        else if r < 0.75 { 3 }
-        else if r < 0.90 { 4 }
-        else if r < 0.97 { (n / 4).max(5).min(10) }
-        else { (n / 2).max(10).min(20) }
+        if r < 0.05 {
+            1
+        } else if r < 0.45 {
+            2
+        } else if r < 0.75 {
+            3
+        } else if r < 0.90 {
+            4
+        } else if r < 0.97 {
+            (n / 4).clamp(5, 10)
+        } else {
+            (n / 2).clamp(10, 20)
+        }
     }
 
     fn get_block(&self, idx: usize) -> Option<&Vec<u8>> {
         if idx < self.k {
             self.decoded_source[idx].as_ref()
         } else {
-            self.decoded_parity.get(idx - self.k).and_then(|s| s.as_ref())
+            self.decoded_parity
+                .get(idx - self.k)
+                .and_then(|s| s.as_ref())
         }
     }
 
@@ -423,7 +458,8 @@ impl RaptorDecoder {
             let mut to_decode = Vec::new();
 
             for (idx, (data, indices)) in self.pending.iter().enumerate() {
-                let unknown: Vec<usize> = indices.iter()
+                let unknown: Vec<usize> = indices
+                    .iter()
                     .filter(|&&i| self.get_block(i).is_none())
                     .copied()
                     .collect();
@@ -481,13 +517,16 @@ impl RaptorDecoder {
             let mut available: Vec<usize> = (0..self.k).collect();
 
             for _ in 0..degree {
-                if available.is_empty() { break; }
+                if available.is_empty() {
+                    break;
+                }
                 let idx = rng.next_usize() % available.len();
                 source_indices.push(available.swap_remove(idx));
             }
 
             // Check how many source blocks are unknown
-            let unknown: Vec<usize> = source_indices.iter()
+            let unknown: Vec<usize> = source_indices
+                .iter()
                 .filter(|&&i| self.decoded_source[i].is_none())
                 .copied()
                 .collect();
@@ -520,7 +559,9 @@ impl RaptorDecoder {
 
     /// Decoding progress (0.0 to 1.0).
     pub fn progress(&self) -> f64 {
-        if self.k == 0 { return 1.0; }
+        if self.k == 0 {
+            return 1.0;
+        }
         self.decoded_source.iter().filter(|s| s.is_some()).count() as f64 / self.k as f64
     }
 
@@ -613,7 +654,7 @@ mod tests {
             block_size: 64,
             original_len: 500,
             data: vec![0xAB; 64],
-            checksum: crc::compute(&vec![0xAB; 64]),
+            checksum: crc::compute(&[0xAB; 64]),
         };
 
         let encoded = block.encode();
@@ -625,13 +666,13 @@ mod tests {
     fn raptor_small_data() {
         let data = b"Hello, Raptor codes!";
         let mut encoder = RaptorEncoder::new(data, 8);
-        let mut decoder = RaptorDecoder::new(
-            encoder.source_count() as u16,
-            8,
-            data.len(),
-        );
+        let mut decoder = RaptorDecoder::new(encoder.source_count() as u16, 8, data.len());
 
-        println!("Small: K={}, P={}", encoder.source_count(), encoder.parity_count());
+        println!(
+            "Small: K={}, P={}",
+            encoder.source_count(),
+            encoder.parity_count()
+        );
 
         let mut blocks_used = 0;
         while !decoder.is_complete() {
@@ -645,7 +686,7 @@ mod tests {
             "Small: {} blocks for K={} (overhead: {})",
             blocks_used,
             encoder.source_count(),
-            blocks_used as i32 - encoder.source_count() as i32
+            blocks_used - encoder.source_count() as i32
         );
     }
 
@@ -653,13 +694,13 @@ mod tests {
     fn raptor_medium_data() {
         let data: Vec<u8> = (0..1024).map(|i| (i % 256) as u8).collect();
         let mut encoder = RaptorEncoder::new(&data, 64);
-        let mut decoder = RaptorDecoder::new(
-            encoder.source_count() as u16,
-            64,
-            data.len(),
-        );
+        let mut decoder = RaptorDecoder::new(encoder.source_count() as u16, 64, data.len());
 
-        println!("Medium: K={}, P={}", encoder.source_count(), encoder.parity_count());
+        println!(
+            "Medium: K={}, P={}",
+            encoder.source_count(),
+            encoder.parity_count()
+        );
 
         let mut blocks_used = 0;
         while !decoder.is_complete() {
@@ -673,7 +714,7 @@ mod tests {
             "Medium: {} blocks for K={} (overhead: {})",
             blocks_used,
             encoder.source_count(),
-            blocks_used as i32 - encoder.source_count() as i32
+            blocks_used - encoder.source_count() as i32
         );
     }
 
@@ -681,11 +722,7 @@ mod tests {
     fn raptor_large_data() {
         let data: Vec<u8> = (0..65536).map(|i| (i % 256) as u8).collect();
         let mut encoder = RaptorEncoder::new(&data, 512);
-        let mut decoder = RaptorDecoder::new(
-            encoder.source_count() as u16,
-            512,
-            data.len(),
-        );
+        let mut decoder = RaptorDecoder::new(encoder.source_count() as u16, 512, data.len());
 
         let k = encoder.source_count();
         println!("Large: K={}, P={}", k, encoder.parity_count());
@@ -694,7 +731,12 @@ mod tests {
         while !decoder.is_complete() {
             decoder.add_block(&encoder.next_block());
             blocks_used += 1;
-            assert!(blocks_used < k + 20, "Too many blocks: {} for K={}", blocks_used, k);
+            assert!(
+                blocks_used < k + 20,
+                "Too many blocks: {} for K={}",
+                blocks_used,
+                k
+            );
         }
 
         assert_eq!(decoder.get_data().unwrap(), data);
@@ -773,7 +815,11 @@ mod tests {
             }
         }
 
-        assert!(decoder.is_complete(), "Failed with 20% loss after {} blocks", received);
+        assert!(
+            decoder.is_complete(),
+            "Failed with 20% loss after {} blocks",
+            received
+        );
         assert_eq!(decoder.get_data().unwrap(), data);
         println!("20% loss: recovered with {} blocks for K={}", received, k);
     }
@@ -782,10 +828,13 @@ mod tests {
 
     #[test]
     fn compare_raptor_vs_lt() {
-        use crate::fountain::{LegacyLTEncoder, LegacyLTDecoder};
+        use crate::fountain::{LegacyLTDecoder, LegacyLTEncoder};
 
         println!("\n=== Raptor vs LT Comparison ===");
-        println!("{:>8} {:>6} {:>12} {:>12} {:>10}", "Size", "K", "LT blocks", "Raptor", "Savings");
+        println!(
+            "{:>8} {:>6} {:>12} {:>12} {:>10}",
+            "Size", "K", "LT blocks", "Raptor", "Savings"
+        );
 
         for size in [1024, 4096, 16384, 65536] {
             let data: Vec<u8> = (0..size).map(|i| (i % 256) as u8).collect();
@@ -837,7 +886,10 @@ mod tests {
     #[test]
     fn raptor_overhead_stats() {
         println!("\n=== Raptor Overhead Statistics ===");
-        println!("{:>8} {:>6} {:>6} {:>8} {:>8} {:>8}", "Size", "K", "P", "Min", "Max", "Avg");
+        println!(
+            "{:>8} {:>6} {:>6} {:>8} {:>8} {:>8}",
+            "Size", "K", "P", "Min", "Max", "Avg"
+        );
 
         for size in [1024, 4096, 16384, 65536] {
             let data: Vec<u8> = (0..size).map(|i| (i % 256) as u8).collect();
@@ -871,7 +923,12 @@ mod tests {
             let avg = total_blocks as f64 / runs as f64;
             println!(
                 "{:>7}K {:>6} {:>6} {:>8} {:>8} {:>8.1}",
-                size / 1024, k, p, min_blocks, max_blocks, avg
+                size / 1024,
+                k,
+                p,
+                min_blocks,
+                max_blocks,
+                avg
             );
         }
     }

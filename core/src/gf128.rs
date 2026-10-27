@@ -398,7 +398,10 @@ mod tests {
         // a * (b + c) should equal (a * b) + (a * c)
         let left = a.mul(&b.add(&c));
         let right = a.mul(&b).add(&a.mul(&c));
-        assert_eq!(left, right, "Multiplication should be distributive over addition");
+        assert_eq!(
+            left, right,
+            "Multiplication should be distributive over addition"
+        );
     }
 
     // GHASH test vector from NIST SP 800-38D

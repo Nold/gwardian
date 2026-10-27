@@ -256,9 +256,8 @@ impl MessageFrame {
             return Err(Error::UnsupportedFrameVersion { version });
         }
 
-        let msg_type = MessageType::from_byte(bytes[1]).ok_or(Error::InvalidMessageType {
-            msg_type: bytes[1],
-        })?;
+        let msg_type = MessageType::from_byte(bytes[1])
+            .ok_or(Error::InvalidMessageType { msg_type: bytes[1] })?;
 
         let declared_len = u16::from_be_bytes([bytes[2], bytes[3]]) as usize;
 
@@ -287,7 +286,12 @@ impl MessageFrame {
     /// Build the header bytes for authentication.
     fn build_header(msg_type: MessageType, ciphertext_len: usize) -> [u8; HEADER_SIZE] {
         let len_bytes = (ciphertext_len as u16).to_be_bytes();
-        [FRAME_VERSION, msg_type.to_byte(), len_bytes[0], len_bytes[1]]
+        [
+            FRAME_VERSION,
+            msg_type.to_byte(),
+            len_bytes[0],
+            len_bytes[1],
+        ]
     }
 
     /// Get the header bytes of this frame.
@@ -402,7 +406,10 @@ pub fn unpad_message(padded: &[u8]) -> Result<Vec<u8>> {
     // Check marker
     if padded[0] != PADDING_MARKER {
         return Err(Error::InvalidPadding {
-            reason: format!("invalid marker byte: expected 0x00, got 0x{:02X}", padded[0]),
+            reason: format!(
+                "invalid marker byte: expected 0x00, got 0x{:02X}",
+                padded[0]
+            ),
         });
     }
 

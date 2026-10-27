@@ -623,7 +623,7 @@ mod tests {
             block_size: 64,
             original_len: 300,
             data: vec![0x12; 64],
-            checksum: crc::compute(&vec![0x12; 64]),
+            checksum: crc::compute(&[0x12; 64]),
         };
 
         let mut encoded = block.encode();
@@ -733,20 +733,16 @@ mod tests {
 
         // Add every other block
         for (i, block) in blocks.iter().enumerate() {
-            if i % 2 == 0 {
-                if decoder.add_block(block) {
-                    break;
-                }
+            if i % 2 == 0 && decoder.add_block(block) {
+                break;
             }
         }
 
         // If not complete, add the rest
         if !decoder.is_complete() {
             for (i, block) in blocks.iter().enumerate() {
-                if i % 2 == 1 {
-                    if decoder.add_block(block) {
-                        break;
-                    }
+                if i % 2 == 1 && decoder.add_block(block) {
+                    break;
                 }
             }
         }

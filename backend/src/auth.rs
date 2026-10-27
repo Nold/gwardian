@@ -322,11 +322,11 @@ mod tests {
         // For real tests, we'd mock MAX_CONVERSATIONS
         for i in 0..100 {
             let result = store.register(
-                &format!("conv-{:064x}", i),
-                format!("{:064x}", i),
+                &format!("conv-{i:064x}"),
+                format!("{i:064x}"),
                 format!("{:064x}", i + 1000),
             );
-            assert_eq!(result, RegisterResult::Ok, "Failed at {}", i);
+            assert_eq!(result, RegisterResult::Ok, "Failed at {i}");
         }
 
         assert_eq!(store.len(), 100);

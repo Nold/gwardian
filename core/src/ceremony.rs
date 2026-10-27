@@ -548,5 +548,4 @@ mod tests {
 
         assert_eq!(decoded.transfer_method, TransferMethod::LT);
     }
-
 }
