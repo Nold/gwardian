@@ -335,7 +335,9 @@ final class PerformCeremonyUseCase: PerformCeremonyUseCaseProtocol, Sendable {
                     try await relay.registerConversation(
                         conversationId: conversation.id,
                         authTokenHash: authTokenHash,
-                        burnTokenHash: burnTokenHash
+                        burnTokenHash: burnTokenHash,
+                        ttlSeconds: messageRetention.seconds,
+                        members: 2
                     )
                     Log.info(.ceremony, "Conversation registered with relay")
                 } catch {

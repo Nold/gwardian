@@ -562,6 +562,11 @@ void uniffi_ash_bindings_fn_method_padgroup_replace_pad_allow_downgrade(void*_No
 RustBuffer uniffi_ash_bindings_fn_method_padgroup_security_level(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_METHOD_PADGROUP_TAKE_RELAY_TOKENS
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_METHOD_PADGROUP_TAKE_RELAY_TOKENS
+RustBuffer uniffi_ash_bindings_fn_method_padgroup_take_relay_tokens(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_CLONE_PADTRANSFERRECEIVER
 #define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_CLONE_PADTRANSFERRECEIVER
 void*_Nonnull uniffi_ash_bindings_fn_clone_padtransferreceiver(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
@@ -680,6 +685,11 @@ void*_Nonnull uniffi_ash_bindings_fn_func_create_fountain_generator(RustBuffer m
 RustBuffer uniffi_ash_bindings_fn_func_decode_ceremony_payload(RustBuffer payload, RustCallStatus *_Nonnull out_status
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_FUNC_DECODE_MEMBER_CARD
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_FUNC_DECODE_MEMBER_CARD
+RustBuffer uniffi_ash_bindings_fn_func_decode_member_card(RustBuffer bytes, RustCallStatus *_Nonnull out_status
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_FUNC_DECRYPT
 #define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_FUNC_DECRYPT
 RustBuffer uniffi_ash_bindings_fn_func_decrypt(RustBuffer key, RustBuffer ciphertext, RustCallStatus *_Nonnull out_status
@@ -713,6 +723,11 @@ RustBuffer uniffi_ash_bindings_fn_func_derive_conversation_id(RustBuffer pad_byt
 #ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_FUNC_ENCODE_CEREMONY_PAYLOAD
 #define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_FUNC_ENCODE_CEREMONY_PAYLOAD
 RustBuffer uniffi_ash_bindings_fn_func_encode_ceremony_payload(RustBuffer metadata, RustBuffer pad_bytes, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_FUNC_ENCODE_MEMBER_CARD
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_FUNC_ENCODE_MEMBER_CARD
+RustBuffer uniffi_ash_bindings_fn_func_encode_member_card(RustBuffer card, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_FUNC_ENCRYPT
@@ -749,6 +764,12 @@ uint32_t uniffi_ash_bindings_fn_func_get_auth_overhead(RustCallStatus *_Nonnull 
 #ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_FUNC_GET_DEFAULT_BLOCK_SIZE
 #define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_FUNC_GET_DEFAULT_BLOCK_SIZE
 uint32_t uniffi_ash_bindings_fn_func_get_default_block_size(RustCallStatus *_Nonnull out_status
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_FUNC_GET_MAX_GROUP_MEMBERS
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_FUNC_GET_MAX_GROUP_MEMBERS
+uint8_t uniffi_ash_bindings_fn_func_get_max_group_members(RustCallStatus *_Nonnull out_status
     
 );
 #endif
@@ -1129,6 +1150,12 @@ uint16_t uniffi_ash_bindings_checksum_func_decode_ceremony_payload(void
     
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_FUNC_DECODE_MEMBER_CARD
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_FUNC_DECODE_MEMBER_CARD
+uint16_t uniffi_ash_bindings_checksum_func_decode_member_card(void
+    
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_FUNC_DECRYPT
 #define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_FUNC_DECRYPT
 uint16_t uniffi_ash_bindings_checksum_func_decrypt(void
@@ -1171,6 +1198,12 @@ uint16_t uniffi_ash_bindings_checksum_func_encode_ceremony_payload(void
     
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_FUNC_ENCODE_MEMBER_CARD
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_FUNC_ENCODE_MEMBER_CARD
+uint16_t uniffi_ash_bindings_checksum_func_encode_member_card(void
+    
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_FUNC_ENCRYPT
 #define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_FUNC_ENCRYPT
 uint16_t uniffi_ash_bindings_checksum_func_encrypt(void
@@ -1210,6 +1243,12 @@ uint16_t uniffi_ash_bindings_checksum_func_get_auth_overhead(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_FUNC_GET_DEFAULT_BLOCK_SIZE
 #define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_FUNC_GET_DEFAULT_BLOCK_SIZE
 uint16_t uniffi_ash_bindings_checksum_func_get_default_block_size(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_FUNC_GET_MAX_GROUP_MEMBERS
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_FUNC_GET_MAX_GROUP_MEMBERS
+uint16_t uniffi_ash_bindings_checksum_func_get_max_group_members(void
     
 );
 #endif
@@ -1522,6 +1561,12 @@ uint16_t uniffi_ash_bindings_checksum_method_padgroup_replace_pad_allow_downgrad
 #ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_METHOD_PADGROUP_SECURITY_LEVEL
 #define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_METHOD_PADGROUP_SECURITY_LEVEL
 uint16_t uniffi_ash_bindings_checksum_method_padgroup_security_level(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_METHOD_PADGROUP_TAKE_RELAY_TOKENS
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_METHOD_PADGROUP_TAKE_RELAY_TOKENS
+uint16_t uniffi_ash_bindings_checksum_method_padgroup_take_relay_tokens(void
     
 );
 #endif

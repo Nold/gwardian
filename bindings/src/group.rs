@@ -5,7 +5,7 @@ use std::sync::Mutex;
 use ash_core::group::{Group, GroupFrame, MemberPad};
 use ash_core::MessageType;
 
-use crate::AshError;
+use crate::{AshError, AuthTokens};
 
 /// How a pad was distributed; see `ash_core::group::SecurityLevel`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -215,6 +215,17 @@ impl PadGroup {
         Ok(self.group().encrypt(msg_type, &plaintext)?.encode())
     }
 
+    /// Relay tokens from member 0's pad; those bytes are consumed so they
+    /// never also serve as message keys. Call once when the group is formed.
+    pub fn take_relay_tokens(&self) -> Result<AuthTokens, AshError> {
+        let (conversation_id, auth_token, burn_token) = self.group().take_relay_tokens()?;
+        Ok(AuthTokens {
+            conversation_id,
+            auth_token,
+            burn_token,
+        })
+    }
+
     /// Verify and decrypt an encoded group frame from another member.
     pub fn decrypt(&self, frame: Vec<u8>) -> Result<GroupMessage, AshError> {
         let frame = GroupFrame::decode(&frame)?;
@@ -274,6 +285,19 @@ mod tests {
         let bob = PadGroup::new(1, bytes(1), SecurityLevel::Maximum);
         bob.add_member(0, bytes(0), SecurityLevel::Maximum).unwrap();
         (alice, bob)
+    }
+
+    #[test]
+    fn relay_tokens_are_shared_and_taken_once() {
+        let (alice, bob) = pair();
+        let tokens = alice.take_relay_tokens().unwrap();
+        let theirs = bob.take_relay_tokens().unwrap();
+        assert_eq!(theirs.conversation_id, tokens.conversation_id);
+        assert_eq!(theirs.auth_token, tokens.auth_token);
+        assert_eq!(theirs.burn_token, tokens.burn_token);
+        assert!(alice.take_relay_tokens().is_err());
+        let frame = alice.encrypt(0x01, b"hi".to_vec()).unwrap();
+        assert_eq!(bob.decrypt(frame).unwrap().plaintext, b"hi");
     }
 
     #[test]

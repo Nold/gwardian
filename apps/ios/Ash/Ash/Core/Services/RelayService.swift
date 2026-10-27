@@ -43,15 +43,35 @@ protocol RelayServiceProtocol: Sendable {
         deviceToken: String
     ) async throws
 
+    /// `members` is 2 for a conversation, up to 8 for a group; `ttlSeconds`
+    /// is the retention chosen at the ceremony (relay default when nil).
     func registerConversation(
         conversationId: String,
         authTokenHash: String,
-        burnTokenHash: String
+        burnTokenHash: String,
+        ttlSeconds: UInt64?,
+        members: UInt8
     ) async throws
 
     func burnConversation(conversationId: String, burnToken: String) async throws
 
     func checkBurnStatus(conversationId: String, authToken: String) async throws -> BurnStatus
+}
+
+extension RelayServiceProtocol {
+    func registerConversation(
+        conversationId: String,
+        authTokenHash: String,
+        burnTokenHash: String
+    ) async throws {
+        try await registerConversation(
+            conversationId: conversationId,
+            authTokenHash: authTokenHash,
+            burnTokenHash: burnTokenHash,
+            ttlSeconds: nil,
+            members: 2
+        )
+    }
 }
 
 typealias RelayCursor = String
@@ -309,7 +329,9 @@ final class RelayService: RelayServiceProtocol, Sendable {
     func registerConversation(
         conversationId: String,
         authTokenHash: String,
-        burnTokenHash: String
+        burnTokenHash: String,
+        ttlSeconds: UInt64?,
+        members: UInt8
     ) async throws {
         let url = baseURL.appendingPathComponent("v1/conversations")
         let id = logId(conversationId)
@@ -323,7 +345,9 @@ final class RelayService: RelayServiceProtocol, Sendable {
         let body = RegisterConversationRequest(
             conversationId: conversationId,
             authTokenHash: authTokenHash,
-            burnTokenHash: burnTokenHash
+            burnTokenHash: burnTokenHash,
+            ttlSeconds: ttlSeconds,
+            members: members
         )
         request.httpBody = try encoder.encode(body)
 
@@ -488,11 +512,16 @@ private struct RegisterConversationRequest: Encodable {
     let conversationId: String
     let authTokenHash: String
     let burnTokenHash: String
+    /// Omitted when nil, so the relay keeps its default
+    let ttlSeconds: UInt64?
+    let members: UInt8
 
     enum CodingKeys: String, CodingKey {
         case conversationId = "conversation_id"
         case authTokenHash = "auth_token_hash"
         case burnTokenHash = "burn_token_hash"
+        case ttlSeconds = "ttl_seconds"
+        case members
     }
 }
 

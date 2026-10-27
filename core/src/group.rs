@@ -104,7 +104,9 @@
 //! ```
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::fmt;
 
+use crate::auth::{derive_all_tokens, MIN_PAD_SIZE_FOR_TOKENS};
 use crate::crc;
 use crate::error::{Error, Result};
 use crate::mac::{AuthKey, AUTH_KEY_SIZE};
@@ -539,6 +541,27 @@ impl Group {
         Ok(())
     }
 
+    /// Derive the relay tokens (conversation id, auth token, burn token) from
+    /// member 0's pad and consume those bytes, so they never also serve as
+    /// message keys. Every member calls this once, when the group is formed.
+    ///
+    /// # Errors
+    ///
+    /// - `UnknownMember` if member 0's pad is not in the group.
+    /// - `PadRangeAlreadyUsed` if the tokens were already taken.
+    /// - `PadCorrupted` or `InsufficientPadBytes` for a damaged or short pad.
+    pub fn take_relay_tokens(&mut self) -> Result<(String, String, String)> {
+        let pad = self
+            .pads
+            .get_mut(&0)
+            .ok_or(Error::UnknownMember { member: 0 })?;
+        let end = pad.check_range(0, MIN_PAD_SIZE_FOR_TOKENS)?;
+        pad.verify_range(0, end)?;
+        let tokens = derive_all_tokens(&pad.bytes)?;
+        pad.burn(0, end);
+        Ok(tokens)
+    }
+
     /// Integrity status of a member's pad, or `None` if not a member.
     pub fn health(&self, member: MemberId) -> Option<MemberHealth> {
         if !self.pads.contains_key(&member) {
@@ -662,6 +685,118 @@ impl Group {
 
     fn own_pad(&self) -> &MemberPad {
         &self.pads[&self.me]
+    }
+}
+
+/// Largest group: members are numbered 0 to 7.
+pub const MAX_MEMBERS: u8 = 8;
+
+/// Longest member name, in bytes of UTF-8.
+pub const MAX_NAME_LEN: usize = 32;
+
+const MEMBER_CARD_MAGIC: &[u8; 4] = b"GWG1";
+
+/// What a member shows when it is their turn in the group ceremony: their
+/// place in the group, their name and their sending pad.
+///
+/// Members take turns around the table; each phone numbers itself from the
+/// cards it already scanned, so member `n` shows its card after scanning
+/// members `0` to `n - 1`. The group's relay identity is derived from
+/// member 0's pad, which every member scans first.
+///
+/// Format: `["GWG1"][member: u8][members: u8][name_len: u8][name][pad]`
+#[derive(Clone, PartialEq, Eq)]
+pub struct MemberCard {
+    /// This member's index.
+    pub member: MemberId,
+    /// Number of members in the group.
+    pub members: u8,
+    /// Name shown to the others.
+    pub name: String,
+    /// The member's sending pad.
+    pub pad: Vec<u8>,
+}
+
+impl fmt::Debug for MemberCard {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // Never print pad bytes
+        f.debug_struct("MemberCard")
+            .field("member", &self.member)
+            .field("members", &self.members)
+            .field("name", &self.name)
+            .field("pad_len", &self.pad.len())
+            .finish()
+    }
+}
+
+impl MemberCard {
+    /// Encode the card for the QR ceremony.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::InvalidMemberCard`] if a field is out of range.
+    pub fn encode(&self) -> Result<Vec<u8>> {
+        self.validate()?;
+        let name = self.name.as_bytes();
+        let mut bytes = Vec::with_capacity(7 + name.len() + self.pad.len());
+        bytes.extend_from_slice(MEMBER_CARD_MAGIC);
+        bytes.push(self.member);
+        bytes.push(self.members);
+        bytes.push(name.len() as u8);
+        bytes.extend_from_slice(name);
+        bytes.extend_from_slice(&self.pad);
+        Ok(bytes)
+    }
+
+    /// Decode a card scanned from another member.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::InvalidMemberCard`] if the bytes are not a valid card.
+    pub fn decode(bytes: &[u8]) -> Result<Self> {
+        let invalid = |reason| Error::InvalidMemberCard { reason };
+        if bytes.len() < 7 || &bytes[..4] != MEMBER_CARD_MAGIC {
+            return Err(invalid("not a member card"));
+        }
+        let name_len = usize::from(bytes[6]);
+        let rest = &bytes[7..];
+        if rest.len() < name_len {
+            return Err(invalid("truncated name"));
+        }
+        let name = core::str::from_utf8(&rest[..name_len])
+            .map_err(|_| invalid("name is not UTF-8"))?
+            .to_string();
+        let card = Self {
+            member: bytes[4],
+            members: bytes[5],
+            name,
+            pad: rest[name_len..].to_vec(),
+        };
+        card.validate()?;
+        Ok(card)
+    }
+
+    fn validate(&self) -> Result<()> {
+        let invalid = |reason| Err(Error::InvalidMemberCard { reason });
+        if !(2..=MAX_MEMBERS).contains(&self.members) {
+            return invalid("a group has 2 to 8 members");
+        }
+        if self.member >= self.members {
+            return invalid("member index out of range");
+        }
+        if self.name.len() > MAX_NAME_LEN {
+            return invalid("name too long");
+        }
+        if self.pad.is_empty() {
+            return invalid("empty pad");
+        }
+        Ok(())
+    }
+}
+
+impl Drop for MemberCard {
+    fn drop(&mut self) {
+        secure_zero(&mut self.pad);
     }
 }
 
@@ -1250,5 +1385,75 @@ mod tests {
             GroupFrame::decode(&bad_version).unwrap_err(),
             Error::UnsupportedFrameVersion { version: 99 }
         );
+    }
+
+    #[test]
+    fn member_card_round_trip() {
+        let card = MemberCard {
+            member: 2,
+            members: 4,
+            name: "Léa".to_string(),
+            pad: vec![7; 300],
+        };
+        let decoded = MemberCard::decode(&card.encode().unwrap()).unwrap();
+        assert_eq!(decoded, card);
+        assert!(!format!("{decoded:?}").contains("7, 7"));
+    }
+
+    #[test]
+    fn member_card_rejects_invalid_fields() {
+        let card = |member, members, name: &str, pad: Vec<u8>| MemberCard {
+            member,
+            members,
+            name: name.to_string(),
+            pad,
+        };
+        assert!(card(0, 1, "a", vec![1]).encode().is_err());
+        assert!(card(0, 9, "a", vec![1]).encode().is_err());
+        assert!(card(3, 3, "a", vec![1]).encode().is_err());
+        assert!(card(0, 2, &"x".repeat(33), vec![1]).encode().is_err());
+        assert!(card(0, 2, "a", vec![]).encode().is_err());
+        assert!(card(7, 8, "", vec![1]).encode().is_ok());
+
+        assert!(MemberCard::decode(b"GWG1").is_err());
+        assert!(MemberCard::decode(&[b'X', b'X', b'X', b'X', 0, 2, 0, 1]).is_err());
+        assert!(MemberCard::decode(&[b'G', b'W', b'G', b'1', 0, 2, 10, b'a']).is_err());
+        assert!(MemberCard::decode(&[b'G', b'W', b'G', b'1', 0, 2, 1, 0xFF, 1]).is_err());
+    }
+
+    #[test]
+    fn relay_tokens_match_and_are_never_message_keys() {
+        let mut groups = family(3, 4096);
+        let expected = derive_all_tokens(&pad_bytes(0, 4096)).unwrap();
+        for group in &mut groups {
+            assert_eq!(group.take_relay_tokens().unwrap(), expected);
+        }
+        // Member 0's first message starts after the token bytes
+        let frame = send(&mut groups[0], b"first");
+        assert_eq!(frame.offset as usize, MIN_PAD_SIZE_FOR_TOKENS);
+        assert_eq!(groups[1].decrypt(&frame).unwrap(), b"first");
+        assert_eq!(groups[2].decrypt(&frame).unwrap(), b"first");
+    }
+
+    #[test]
+    fn relay_tokens_are_taken_once() {
+        let mut groups = family(2, 4096);
+        groups[1].take_relay_tokens().unwrap();
+        assert!(matches!(
+            groups[1].take_relay_tokens(),
+            Err(Error::PadRangeAlreadyUsed { .. })
+        ));
+    }
+
+    #[test]
+    fn relay_tokens_need_member_zero() {
+        let mut group = Group::new(
+            1,
+            MemberPad::from_bytes(pad_bytes(1, 4096), SecurityLevel::Maximum),
+        );
+        assert!(matches!(
+            group.take_relay_tokens(),
+            Err(Error::UnknownMember { member: 0 })
+        ));
     }
 }

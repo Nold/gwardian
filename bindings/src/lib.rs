@@ -72,6 +72,8 @@ pub enum AshError {
     FrameAuthenticationFailed,
     #[error("QR frames need the six words")]
     PassphraseRequired,
+    #[error("Invalid group member card")]
+    InvalidMemberCard,
     #[error("Commitment mismatch")]
     CommitmentMismatch,
     #[error("Decryption failed")]
@@ -114,6 +116,7 @@ impl From<ash_core::Error> for AshError {
             ash_core::Error::PadRangeAlreadyUsed { .. } => AshError::PadRangeAlreadyUsed,
             ash_core::Error::PadCorrupted { .. } => AshError::PadCorrupted,
             ash_core::Error::SecurityDowngrade { .. } => AshError::SecurityDowngrade,
+            ash_core::Error::InvalidMemberCard { .. } => AshError::InvalidMemberCard,
         }
     }
 }
@@ -588,6 +591,44 @@ pub fn decode_ceremony_payload(payload: Vec<u8>) -> Result<CeremonyPayload, AshE
         metadata: metadata.into(),
         pad,
     })
+}
+
+// === Group Member Card ===
+
+/// A member's place, name and sending pad in a group ceremony
+#[derive(Debug, Clone)]
+pub struct GroupMemberCard {
+    pub member: u8,
+    pub members: u8,
+    pub name: String,
+    pub pad: Vec<u8>,
+}
+
+/// Encode a member card; it is transferred in place of the pad bytes.
+pub fn encode_member_card(card: GroupMemberCard) -> Result<Vec<u8>, AshError> {
+    Ok(ash_core::MemberCard {
+        member: card.member,
+        members: card.members,
+        name: card.name,
+        pad: card.pad,
+    }
+    .encode()?)
+}
+
+/// Decode a member card scanned from another member.
+pub fn decode_member_card(bytes: Vec<u8>) -> Result<GroupMemberCard, AshError> {
+    let card = ash_core::MemberCard::decode(&bytes)?;
+    Ok(GroupMemberCard {
+        member: card.member,
+        members: card.members,
+        name: card.name.clone(),
+        pad: card.pad.clone(),
+    })
+}
+
+/// Largest group (members are numbered 0 to 7)
+pub fn get_max_group_members() -> u8 {
+    ash_core::group::MAX_MEMBERS
 }
 
 // === Free Functions ===
@@ -1081,5 +1122,27 @@ mod tests {
         assert_eq!(PadSize::Medium.bytes(), 256 * 1024);
         assert_eq!(PadSize::Large.bytes(), 512 * 1024);
         assert_eq!(PadSize::Huge.bytes(), 1024 * 1024);
+    }
+
+    #[test]
+    fn test_member_card_round_trip() {
+        let bytes = encode_member_card(GroupMemberCard {
+            member: 1,
+            members: 3,
+            name: "Sam".to_string(),
+            pad: vec![9; 100],
+        })
+        .unwrap();
+        let card = decode_member_card(bytes).unwrap();
+        assert_eq!(
+            (card.member, card.members, card.name.as_str()),
+            (1, 3, "Sam")
+        );
+        assert_eq!(card.pad, vec![9; 100]);
+        assert!(matches!(
+            decode_member_card(vec![1, 2, 3]),
+            Err(AshError::InvalidMemberCard)
+        ));
+        assert_eq!(get_max_group_members(), 8);
     }
 }
