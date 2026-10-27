@@ -27,6 +27,17 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         return true
     }
 
+    // MARK: - Keyboard
+
+    /// Only Apple's keyboard inside the app: a third-party keyboard with full
+    /// access could read and send everything typed.
+    func application(
+        _ application: UIApplication,
+        shouldAllowExtensionPointIdentifier extensionPointIdentifier: UIApplication.ExtensionPointIdentifier
+    ) -> Bool {
+        extensionPointIdentifier != .keyboard
+    }
+
     // MARK: - Remote Notifications
 
     func application(
