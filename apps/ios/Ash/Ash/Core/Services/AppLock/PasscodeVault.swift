@@ -37,7 +37,7 @@ final class PasscodeVault: @unchecked Sendable {
     init(
         store: VaultKeyStore = KeychainVaultKeyStore(),
         attempts: LockAttemptStore = KeychainLockAttemptStore(),
-        now: @escaping @Sendable () -> Date = Date.init
+        now: @escaping @Sendable () -> Date = { Date() }
     ) {
         self.store = store
         self.attempts = attempts
@@ -164,7 +164,8 @@ final class PasscodeVault: @unchecked Sendable {
             guard let key = self.key else { throw PasscodeVaultError.locked }
             return key
         }
-        return Self.marker + (try ChaChaPoly.seal(plaintext, using: key).combined)
+        let box = try ChaChaPoly.seal(plaintext, using: key)
+        return Self.marker + box.combined
     }
 
     func open(_ sealed: Data) throws -> Data {
