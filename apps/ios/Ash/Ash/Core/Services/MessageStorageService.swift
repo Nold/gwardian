@@ -152,7 +152,7 @@ final class MessageStorageService: MessageStorageServiceProtocol, @unchecked Sen
     // MARK: - Dependencies
 
     private let factory: MessageRepositoryFactoryProtocol
-    private let settingsProvider: () -> Bool  // Returns isBiometricLockEnabled
+    private let settingsProvider: () -> Bool  // Returns whether the app lock is set up
 
     // MARK: - Initialization
 

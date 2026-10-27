@@ -26,12 +26,14 @@ struct AshTests {
         let settings = MockSettingsService()
 
         let viewModel = await AppLockViewModel(
+            vault: .inMemory(),
             biometricService: biometric,
             settingsService: settings
         )
 
         await MainActor.run {
-            #expect(viewModel.isLocked == false)
+            // No app code yet: setup comes first
+            #expect(viewModel.phase == .setup)
         }
     }
 }

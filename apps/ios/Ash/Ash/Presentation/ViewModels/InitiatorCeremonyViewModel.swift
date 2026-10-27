@@ -178,7 +178,7 @@ final class InitiatorCeremonyViewModel {
     /// Whether Face ID/biometric lock is enabled in settings
     /// Required for local message persistence
     var isFaceIDEnabled: Bool {
-        dependencies.settingsService.isBiometricLockEnabled
+        dependencies.vault.isConfigured
     }
 
     /// Whether all conditions for persistence are met

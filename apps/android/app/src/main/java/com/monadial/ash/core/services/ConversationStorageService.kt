@@ -4,6 +4,8 @@ import android.content.Context
 import androidx.core.content.edit
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
+import com.monadial.ash.core.services.applock.PasscodeVault
+import com.monadial.ash.core.services.applock.PasscodeVaultException
 import com.monadial.ash.domain.entities.Conversation
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
@@ -25,7 +27,10 @@ import kotlinx.serialization.json.Json
 data class PadStorageData(val bytes: String, val consumedFront: Long, val consumedBack: Long)
 
 @Singleton
-class ConversationStorageService @Inject constructor(@ApplicationContext private val context: Context) {
+class ConversationStorageService @Inject constructor(
+    @ApplicationContext private val context: Context,
+    private val vault: PasscodeVault
+) {
     private val masterKey =
         MasterKey.Builder(context)
             .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
@@ -52,7 +57,7 @@ class ConversationStorageService @Inject constructor(@ApplicationContext private
                 all.mapNotNull { (key, value) ->
                     if (key.startsWith("conversation_") && value is String) {
                         try {
-                            json.decodeFromString<Conversation>(value)
+                            json.decodeFromString<Conversation>(readRecord(key, value))
                         } catch (e: Exception) {
                             null
                         }
@@ -68,7 +73,7 @@ class ConversationStorageService @Inject constructor(@ApplicationContext private
         withContext(Dispatchers.IO) {
             val serialized = json.encodeToString(conversation)
             encryptedPrefs.edit {
-                putString("conversation_${conversation.id}", serialized)
+                putString("conversation_${conversation.id}", vault.sealString(serialized))
             }
             loadConversations()
         }
@@ -84,7 +89,7 @@ class ConversationStorageService @Inject constructor(@ApplicationContext private
     }
 
     suspend fun getConversation(conversationId: String): Conversation? = withContext(Dispatchers.IO) {
-        val serialized = encryptedPrefs.getString("conversation_$conversationId", null)
+        val serialized = readRecord("conversation_$conversationId")
         serialized?.let {
             try {
                 json.decodeFromString<Conversation>(it)
@@ -111,7 +116,7 @@ class ConversationStorageService @Inject constructor(@ApplicationContext private
                 )
             val serialized = json.encodeToString(storageData)
             encryptedPrefs.edit {
-                putString("pad_$conversationId", serialized)
+                putString("pad_$conversationId", vault.sealString(serialized))
             }
         }
     }
@@ -130,7 +135,7 @@ class ConversationStorageService @Inject constructor(@ApplicationContext private
                 )
             val serialized = json.encodeToString(storageData)
             encryptedPrefs.edit {
-                putString("pad_$conversationId", serialized)
+                putString("pad_$conversationId", vault.sealString(serialized))
             }
         }
     }
@@ -139,8 +144,7 @@ class ConversationStorageService @Inject constructor(@ApplicationContext private
      * Get pad bytes only (for decryption/token derivation).
      */
     suspend fun getPadBytes(conversationId: String): ByteArray? = withContext(Dispatchers.IO) {
-        val serialized =
-            encryptedPrefs.getString("pad_$conversationId", null) ?: return@withContext null
+        val serialized = readRecord("pad_$conversationId") ?: return@withContext null
         try {
             val storageData = json.decodeFromString<PadStorageData>(serialized)
             android.util.Base64.decode(storageData.bytes, android.util.Base64.NO_WRAP)
@@ -158,8 +162,7 @@ class ConversationStorageService @Inject constructor(@ApplicationContext private
      * Matching iOS: PadManager.loadPad reading from Keychain
      */
     suspend fun getPadStorageData(conversationId: String): PadStorageData? = withContext(Dispatchers.IO) {
-        val serialized =
-            encryptedPrefs.getString("pad_$conversationId", null) ?: return@withContext null
+        val serialized = readRecord("pad_$conversationId") ?: return@withContext null
         try {
             json.decodeFromString<PadStorageData>(serialized)
         } catch (e: Exception) {
@@ -200,8 +203,46 @@ class ConversationStorageService @Inject constructor(@ApplicationContext private
                 )
             val serialized = json.encodeToString(updated)
             encryptedPrefs.edit {
-                putString("pad_$conversationId", serialized)
+                putString("pad_$conversationId", vault.sealString(serialized))
             }
         }
+    }
+
+    // === App lock (docs/app-lock.md) ===
+
+    /**
+     * Seal every record still stored in plaintext; run once after the app
+     * code is set up. Returns how many records were sealed.
+     */
+    suspend fun sealLegacyRecords(): Int = withContext(Dispatchers.IO) {
+        var sealed = 0
+        encryptedPrefs.all.forEach { (key, value) ->
+            if (value is String && !PasscodeVault.isSealedString(value)) {
+                encryptedPrefs.edit(commit = true) { putString(key, vault.sealString(value)) }
+                sealed++
+            }
+        }
+        sealed
+    }
+
+    /** Delete every pad and conversation, after the vault was erased. */
+    fun wipeAll() {
+        encryptedPrefs.edit(commit = true) { clear() }
+        _conversations.value = emptyList()
+    }
+
+    /** Drop decrypted conversations from memory when the app locks. */
+    fun clearCache() {
+        _conversations.value = emptyList()
+    }
+
+    private fun readRecord(key: String): String? = encryptedPrefs.getString(key, null)?.let { readRecord(key, it) }
+
+    /** Open a sealed record; a plaintext one from before the lock is sealed now. */
+    private fun readRecord(key: String, stored: String): String {
+        if (PasscodeVault.isSealedString(stored)) return vault.openString(stored)
+        if (!vault.isUnlocked) throw PasscodeVaultException.Locked()
+        encryptedPrefs.edit { putString(key, vault.sealString(stored)) }
+        return stored
     }
 }

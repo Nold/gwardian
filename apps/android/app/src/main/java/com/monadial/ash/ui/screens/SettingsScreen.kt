@@ -47,15 +47,27 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.fragment.app.FragmentActivity
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.monadial.ash.core.services.applock.LockPolicy
+import com.monadial.ash.ui.viewmodels.LockViewModel
 import com.monadial.ash.ui.viewmodels.SettingsViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewModel()) {
-    val isBiometricEnabled by viewModel.isBiometricEnabled.collectAsState()
+fun SettingsScreen(
+    onBack: () -> Unit,
+    viewModel: SettingsViewModel = hiltViewModel(),
+    lockViewModel: LockViewModel = hiltViewModel()
+) {
+    val lockState by lockViewModel.state.collectAsState()
+    val activity = LocalContext.current as? FragmentActivity
+    var showChangeCode by remember { mutableStateOf(false) }
+    var showBiometricWarning by remember { mutableStateOf(false) }
+    var showEraseWarning by remember { mutableStateOf(false) }
     val lockOnBackground by viewModel.lockOnBackground.collectAsState()
     val editedRelayUrl by viewModel.editedRelayUrl.collectAsState()
     val hasUnsavedChanges by viewModel.hasUnsavedChanges.collectAsState()
@@ -98,21 +110,105 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewMo
                     containerColor = MaterialTheme.colorScheme.surface
                 )
             ) {
-                SettingRow(
-                    title = "Biometric Lock",
-                    description = "Require biometric authentication to open app",
-                    checked = isBiometricEnabled,
-                    onCheckedChange = { viewModel.setBiometricEnabled(it) }
-                )
+                TextButton(
+                    onClick = { showChangeCode = true },
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp)
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Change App Code", style = MaterialTheme.typography.bodyLarge)
+                        Text(
+                            "The 6-digit code that opens the app",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
+                if (lockViewModel.canUseBiometrics && activity != null) {
+                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+
+                    SettingRow(
+                        title = "Biometric Unlock",
+                        description = "Shortcut instead of the app code",
+                        checked = lockState.isBiometricUnlockEnabled,
+                        onCheckedChange = { enabled ->
+                            if (enabled) {
+                                showBiometricWarning = true
+                            } else {
+                                lockViewModel.setBiometricUnlock(activity, false)
+                            }
+                        }
+                    )
+                }
 
                 HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
 
                 SettingRow(
                     title = "Lock on Background",
-                    description = "Lock app when moved to background",
+                    description = "Ask for the code when the app returns",
                     checked = lockOnBackground,
-                    onCheckedChange = { viewModel.setLockOnBackground(it) },
-                    enabled = isBiometricEnabled
+                    onCheckedChange = { viewModel.setLockOnBackground(it) }
+                )
+
+                HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+
+                SettingRow(
+                    title = "Erase After ${LockPolicy.ERASE_THRESHOLD} Wrong Codes",
+                    description = "Destroy all conversations and pads",
+                    checked = lockState.eraseAfterFailures,
+                    onCheckedChange = { enabled ->
+                        if (enabled) showEraseWarning = true else lockViewModel.setEraseAfterFailures(false)
+                    }
+                )
+            }
+
+            if (showChangeCode) {
+                ChangePasscodeDialog(viewModel = lockViewModel, onDismiss = { showChangeCode = false })
+            }
+
+            if (showBiometricWarning && activity != null) {
+                AlertDialog(
+                    onDismissRequest = { showBiometricWarning = false },
+                    title = { Text("Unlock with biometrics?") },
+                    text = {
+                        Text(
+                            "Anyone whose fingerprint or face is registered on this phone will be able to " +
+                                "open the app. If a fingerprint or face is added later, the app code will be " +
+                                "required again."
+                        )
+                    },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            showBiometricWarning = false
+                            lockViewModel.setBiometricUnlock(activity, true)
+                        }) { Text("Enable") }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showBiometricWarning = false }) { Text("Cancel") }
+                    }
+                )
+            }
+
+            if (showEraseWarning) {
+                AlertDialog(
+                    onDismissRequest = { showEraseWarning = false },
+                    title = { Text("Erase after ${LockPolicy.ERASE_THRESHOLD} wrong codes?") },
+                    text = {
+                        Text(
+                            "After ${LockPolicy.ERASE_THRESHOLD} wrong codes in a row, all conversations and pads " +
+                                "are destroyed and cannot be recovered. Someone could trigger this on purpose by " +
+                                "entering wrong codes."
+                        )
+                    },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            showEraseWarning = false
+                            lockViewModel.setEraseAfterFailures(true)
+                        }) { Text("Enable", color = MaterialTheme.colorScheme.error) }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showEraseWarning = false }) { Text("Cancel") }
+                    }
                 )
             }
 

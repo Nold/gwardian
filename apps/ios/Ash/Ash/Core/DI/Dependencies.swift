@@ -33,7 +33,12 @@ final class Dependencies: ObservableObject, @unchecked Sendable {
 
     // MARK: - Services
 
+    /// Raw Keychain, for data that must stay readable while locked (push token)
     let keychainService: KeychainServiceProtocol
+    /// Holds the vault key that seals pads and conversations (docs/app-lock.md)
+    let vault: PasscodeVault
+    /// Keychain sealed with the vault key, used for pads and conversations
+    let vaultedKeychain: VaultedKeychainService
     let cryptoService: CryptoServiceProtocol
     @MainActor let hapticService: HapticServiceProtocol
     let settingsService: SettingsServiceProtocol
@@ -70,6 +75,8 @@ final class Dependencies: ObservableObject, @unchecked Sendable {
             } catch {
                 Log.warning(.app, "Failed to wipe Keychain")
             }
+            try? KeychainVaultKeyStore().deleteAll()
+            KeychainLockAttemptStore().save(LockAttemptState())
 
             // Mark as launched
             UserDefaults.standard.set(true, forKey: hasLaunchedKey)
@@ -105,9 +112,13 @@ final class Dependencies: ObservableObject, @unchecked Sendable {
         let location = locationService ?? LocationService()
         let push = pushNotificationService ?? PushNotificationService(keychainService: keychain)
 
+        // Pads and conversations are sealed with the vault key
+        let vault = PasscodeVault()
+        let vaulted = VaultedKeychainService(base: keychain, vault: vault)
+
         // Create repositories
-        let convRepo = conversationRepository ?? KeychainConversationRepository(keychainService: keychain)
-        let padMgr = padManager ?? PadManager(keychainService: keychain)
+        let convRepo = conversationRepository ?? KeychainConversationRepository(keychainService: vaulted)
+        let padMgr = padManager ?? PadManager(keychainService: vaulted)
 
         // Create message storage factory (handles both in-memory and persistent)
         let factory = messageRepositoryFactory ?? MessageRepositoryFactory(modelContainer: modelContainer)
@@ -115,10 +126,24 @@ final class Dependencies: ObservableObject, @unchecked Sendable {
         // Create message storage service (high-level API with repository selection logic)
         let storageService = MessageStorageService(
             factory: factory,
-            settingsProvider: { settings.isBiometricLockEnabled }
+            settingsProvider: { vault.isConfigured }
         )
 
+        // Too many wrong codes: the vault key is gone, delete what it sealed
+        vault.onErase = {
+            do {
+                try keychain.deleteAll()
+            } catch {
+                Log.error(.security, "Failed to delete records after erase: \(error)")
+            }
+            Task { @MainActor in
+                await storageService.clearAllStorages()
+            }
+        }
+
         self.keychainService = keychain
+        self.vault = vault
+        self.vaultedKeychain = vaulted
         self.conversationRepository = convRepo
         self.padManager = padMgr
         self.messageRepositoryFactory = factory

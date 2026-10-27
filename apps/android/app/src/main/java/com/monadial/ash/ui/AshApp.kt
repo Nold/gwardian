@@ -1,6 +1,7 @@
 package com.monadial.ash.ui
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -9,17 +10,17 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.monadial.ash.core.services.applock.LockPhase
 import com.monadial.ash.ui.screens.CeremonyScreen
 import com.monadial.ash.ui.screens.ConversationInfoScreen
 import com.monadial.ash.ui.screens.ConversationsScreen
 import com.monadial.ash.ui.screens.LockScreen
 import com.monadial.ash.ui.screens.MessagingScreen
+import com.monadial.ash.ui.screens.PasscodeSetupScreen
 import com.monadial.ash.ui.screens.SettingsScreen
-import com.monadial.ash.ui.viewmodels.AppViewModel
+import com.monadial.ash.ui.viewmodels.LockViewModel
 
 sealed class Screen(val route: String) {
-    data object Lock : Screen("lock")
-
     data object Conversations : Screen("conversations")
 
     data object Messaging : Screen("messaging/{conversationId}") {
@@ -35,34 +36,34 @@ sealed class Screen(val route: String) {
     data object Settings : Screen("settings")
 }
 
+/** The app code gates everything (docs/app-lock.md). */
 @Composable
-fun AshApp(viewModel: AppViewModel = hiltViewModel()) {
-    val isLocked by viewModel.isLocked.collectAsState()
-    val isLoading by viewModel.isLoading.collectAsState()
+fun AshApp(lockViewModel: LockViewModel = hiltViewModel()) {
+    val lockState by lockViewModel.state.collectAsState()
 
+    when (lockState.phase) {
+        LockPhase.SETUP -> PasscodeSetupScreen(lockViewModel)
+        LockPhase.LOCKED -> LockScreen(lockViewModel)
+        LockPhase.UNLOCKED -> UnlockedApp()
+    }
+}
+
+@Composable
+private fun UnlockedApp() {
     val navController = rememberNavController()
 
-    val startDestination =
-        when {
-            isLoading -> Screen.Lock.route
-            isLocked -> Screen.Lock.route
-            else -> Screen.Conversations.route
+    // Leaving this branch means the app locked: pop every screen so their
+    // view models, and what they read from the vault, are cleared
+    DisposableEffect(navController) {
+        onDispose {
+            runCatching { navController.popBackStack(navController.graph.id, inclusive = true) }
         }
+    }
 
     NavHost(
         navController = navController,
-        startDestination = startDestination
+        startDestination = Screen.Conversations.route
     ) {
-        composable(Screen.Lock.route) {
-            LockScreen(
-                onUnlocked = {
-                    navController.navigate(Screen.Conversations.route) {
-                        popUpTo(Screen.Lock.route) { inclusive = true }
-                    }
-                }
-            )
-        }
-
         composable(Screen.Conversations.route) {
             ConversationsScreen(
                 onConversationClick = { conversationId ->
