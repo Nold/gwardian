@@ -47,7 +47,7 @@ conversation that allows persistence: it lives in memory only.
 
 ## Platforms
 
-| | Two-person | Group |
-|---|---|---|
-| iOS | Yes | Yes |
-| Android | Not yet: Android two-person messages are not yet sent as authenticated frames, which carry the message type | Yes |
+Both apps, two-person conversations and groups. Android two-person messages
+use the same authenticated frames as iOS (`core::message::MessageFrame`):
+the pad range of a message is a 64-byte authentication key followed by the
+encryption key, and the frame carries the message type.

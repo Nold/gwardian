@@ -2,6 +2,7 @@ package com.monadial.ash.data.services
 
 import com.monadial.ash.core.services.AshCoreService
 import com.monadial.ash.domain.services.CryptoService
+import com.monadial.ash.domain.services.DecryptedFrame
 import uniffi.ash.AuthTokens
 import uniffi.ash.CeremonyMetadata
 import uniffi.ash.FountainFrameGenerator
@@ -54,6 +55,27 @@ class CryptoServiceImpl @Inject constructor(
     override fun deriveBurnToken(padBytes: ByteArray): String {
         return ashCoreService.deriveBurnToken(padBytes)
     }
+
+    override fun encryptAuthenticated(
+        authKey: ByteArray,
+        encryptionKey: ByteArray,
+        plaintext: ByteArray,
+        msgType: Int
+    ): ByteArray = uniffi.ash.encryptAuthenticated(
+        authKey.toUBytes(),
+        encryptionKey.toUBytes(),
+        plaintext.toUBytes(),
+        msgType.toUByte()
+    ).toBytes()
+
+    override fun decryptAuthenticated(authKey: ByteArray, encryptionKey: ByteArray, frame: ByteArray): DecryptedFrame {
+        val result = uniffi.ash.decryptAuthenticated(authKey.toUBytes(), encryptionKey.toUBytes(), frame.toUBytes())
+        return DecryptedFrame(msgType = result.msgType.toInt(), plaintext = result.plaintext.toBytes())
+    }
+
+    private fun ByteArray.toUBytes(): List<UByte> = map { it.toUByte() }
+
+    private fun List<UByte>.toBytes(): ByteArray = ByteArray(size) { this[it].toByte() }
 
     override fun encrypt(key: ByteArray, plaintext: ByteArray): ByteArray {
         return ashCoreService.encrypt(key, plaintext)

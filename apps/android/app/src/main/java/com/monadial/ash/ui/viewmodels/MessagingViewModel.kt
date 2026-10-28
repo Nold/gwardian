@@ -10,10 +10,12 @@ import com.monadial.ash.domain.services.LocationService
 import com.monadial.ash.core.services.SSEEvent
 import com.monadial.ash.domain.entities.Conversation
 import com.monadial.ash.domain.entities.DeliveryStatus
+import com.monadial.ash.domain.entities.DisappearingMessages
 import com.monadial.ash.domain.entities.Message
 import com.monadial.ash.domain.entities.MessageContent
 import com.monadial.ash.domain.entities.MessageDirection
 import com.monadial.ash.domain.repositories.ConversationRepository
+import com.monadial.ash.domain.repositories.PadRepository
 import com.monadial.ash.domain.services.RealtimeService
 import com.monadial.ash.domain.services.RelayService
 import com.monadial.ash.domain.usecases.conversation.CheckBurnStatusUseCase
@@ -21,14 +23,19 @@ import com.monadial.ash.domain.usecases.conversation.RegisterConversationUseCase
 import com.monadial.ash.domain.usecases.messaging.ReceivedMessageData
 import com.monadial.ash.domain.usecases.messaging.ReceiveMessageResult
 import com.monadial.ash.domain.usecases.messaging.ReceiveMessageUseCase
+import com.monadial.ash.domain.usecases.messaging.EncryptedFrame
 import com.monadial.ash.domain.usecases.messaging.SendMessageUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 private const val TAG = "MessagingViewModel"
 
@@ -45,6 +52,7 @@ private const val TAG = "MessagingViewModel"
 class MessagingViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val conversationRepository: ConversationRepository,
+    private val padRepository: PadRepository,
     private val relayService: RelayService,
     private val realtimeService: RealtimeService,
     private val locationService: LocationService,
@@ -80,9 +88,24 @@ class MessagingViewModel @Inject constructor(
     private val _peerBurned = MutableStateFlow(false)
     val peerBurned: StateFlow<Boolean> = _peerBurned.asStateFlow()
 
+    /** Lifetime of the next text message, chosen by its author */
+    private val _lifetime = MutableStateFlow(DisappearingMessages.OFF)
+    val lifetime: StateFlow<DisappearingMessages> = _lifetime.asStateFlow()
+
+    /** Messages whose delete-for-everyone request failed: offered again */
+    private val _deleteFailedIds = MutableStateFlow<Set<String>>(emptySet())
+    val deleteFailedIds: StateFlow<Set<String>> = _deleteFailedIds.asStateFlow()
+
     private var sseJob: Job? = null
     private var pollingJob: Job? = null
     private var hasAttemptedRegistration: Boolean = false
+
+    /** Serializes pad use: sends and receives each read and publish the latest conversation */
+    private val stateLock = Mutex()
+
+    /** Frames whose sending failed, resent as they are on retry */
+    private val pendingFrames = mutableMapOf<String, EncryptedFrame>()
+    private val pendingDeletes = mutableMapOf<String, EncryptedFrame>()
 
     // Track sent messages to filter out own message echoes from SSE
     private val sentSequences = mutableSetOf<Long>()
@@ -93,6 +116,18 @@ class MessagingViewModel @Inject constructor(
 
     init {
         loadConversation()
+        // Any message can carry its own lifetime, so expiry always runs
+        viewModelScope.launch {
+            while (isActive) {
+                delay(1_000)
+                val now = System.currentTimeMillis()
+                removeMessages { (it.expiresAt ?: Long.MAX_VALUE) <= now }
+            }
+        }
+    }
+
+    fun setLifetime(lifetime: DisappearingMessages) {
+        _lifetime.value = lifetime
     }
 
     private fun loadConversation() {
@@ -103,6 +138,7 @@ class MessagingViewModel @Inject constructor(
                     is AppResult.Success -> {
                         val conv = result.data
                         _conversation.value = conv
+                        _lifetime.value = conv.disappearingMessages
 
                         if (conv.peerBurnedAt != null) {
                             _peerBurned.value = true
@@ -179,34 +215,7 @@ class MessagingViewModel @Inject constructor(
     }
 
     private suspend fun handleSSEMessage(event: SSEEvent.MessageReceived) {
-        Log.d(TAG, "[$logId] SSE raw: ${event.ciphertext.size} bytes, seq=${event.sequence}, blobId=${event.id.take(8)}")
-
-        // Filter own messages
-        if (sentBlobIds.contains(event.id)) {
-            Log.d(TAG, "[$logId] Skipping own message (blobId match)")
-            return
-        }
-        if (event.sequence != null && sentSequences.contains(event.sequence)) {
-            Log.d(TAG, "[$logId] Skipping own message (sequence match: ${event.sequence})")
-            sentBlobIds.add(event.id)
-            return
-        }
-        // Filter duplicates
-        if (processedBlobIds.contains(event.id)) {
-            Log.d(TAG, "[$logId] Skipping duplicate message")
-            return
-        }
-
-        val conv = _conversation.value ?: return
-        if (_messages.value.any { it.blobId == event.id }) {
-            Log.d(TAG, "[$logId] Skipping duplicate (already in messages list)")
-            return
-        }
-
-        Log.d(TAG, "[$logId] SSE processing: ${event.ciphertext.size} bytes, seq=${event.sequence}")
-
-        processReceivedMessage(
-            conv,
+        handleIncoming(
             ReceivedMessageData(
                 id = event.id,
                 ciphertext = event.ciphertext,
@@ -214,7 +223,6 @@ class MessagingViewModel @Inject constructor(
                 receivedAt = event.receivedAt
             )
         )
-        processedBlobIds.add(event.id)
     }
 
     private fun startPollingMessages() {
@@ -230,8 +238,7 @@ class MessagingViewModel @Inject constructor(
             ).collect { result ->
                 if (result.success) {
                     result.messages.forEach { received ->
-                        processReceivedMessage(
-                            conv,
+                        handleIncoming(
                             ReceivedMessageData(
                                 id = received.id,
                                 ciphertext = received.ciphertext,
@@ -245,20 +252,47 @@ class MessagingViewModel @Inject constructor(
         }
     }
 
-    private suspend fun processReceivedMessage(conv: Conversation, received: ReceivedMessageData) {
-        when (val result = receiveMessageUseCase(conv, received)) {
-            is ReceiveMessageResult.Success -> {
-                _messages.value = _messages.value + result.message
-                _conversation.value = result.updatedConversation
-                sendAck(received.id)
-            }
-            is ReceiveMessageResult.Skipped -> {
-                Log.d(TAG, "[$logId] Message skipped: ${result.reason}")
-            }
-            is ReceiveMessageResult.Error -> {
-                Log.e(TAG, "[$logId] Message processing failed: ${result.error.message}")
+    /**
+     * One path for SSE and polling. The relay returns this phone's own frames
+     * too, and they would decrypt like the peer's (same pad): they are skipped
+     * by blob ID and sequence, and the use case checks the latest
+     * conversation, read under the lock, never a copy taken earlier.
+     */
+    private suspend fun handleIncoming(received: ReceivedMessageData) {
+        if (received.id in sentBlobIds || received.id in processedBlobIds) return
+        if (received.sequence != null && received.sequence in sentSequences) {
+            sentBlobIds.add(received.id)
+            return
+        }
+        if (_messages.value.any { it.blobId == received.id }) return
+
+        stateLock.withLock {
+            val conv = _conversation.value ?: return
+            when (val result = receiveMessageUseCase(conv, received)) {
+                is ReceiveMessageResult.Success -> {
+                    _conversation.value = result.updatedConversation
+                    _messages.value = _messages.value + result.message
+                    sendAck(received.id)
+                }
+                is ReceiveMessageResult.DeleteRequest -> {
+                    // Only the peer's own messages: ours are outgoing
+                    _conversation.value = result.updatedConversation
+                    removeMessages { !it.isOutgoing && it.sequence == result.sequence }
+                    sendAck(received.id)
+                }
+                is ReceiveMessageResult.Ignored -> {
+                    _conversation.value = result.updatedConversation
+                    sendAck(received.id)
+                }
+                is ReceiveMessageResult.Skipped -> {
+                    Log.d(TAG, "[$logId] Message skipped: ${result.reason}")
+                }
+                is ReceiveMessageResult.Error -> {
+                    Log.e(TAG, "[$logId] Message processing failed: ${result.error.message}")
+                }
             }
         }
+        processedBlobIds.add(received.id)
     }
 
     private fun handleDeliveryConfirmation(messageId: String) {
@@ -338,57 +372,29 @@ class MessagingViewModel @Inject constructor(
     }
 
     private fun sendMessageContent(content: MessageContent) {
-        val conv = _conversation.value ?: return
-
         viewModelScope.launch {
             _isSending.value = true
             try {
-                // Create optimistic message for UI
-                val optimisticMessage = Message(
-                    conversationId = conversationId,
-                    content = content,
-                    direction = MessageDirection.SENT,
-                    status = DeliveryStatus.SENDING,
-                    sequence = 0L, // Will be updated
-                    serverExpiresAt = System.currentTimeMillis() + (conv.messageRetention.seconds * 1000L)
-                )
-                _messages.value = _messages.value + optimisticMessage
-
-                when (val result = sendMessageUseCase(conv, content)) {
-                    is AppResult.Success -> {
-                        val sendResult = result.data
-                        // Track for SSE filtering
-                        sentSequences.add(sendResult.sequence)
-                        sentBlobIds.add(sendResult.blobId)
-
-                        // Update optimistic message with real data
-                        _messages.value = _messages.value.map { msg ->
-                            if (msg.id == optimisticMessage.id) {
-                                sendResult.message
-                            } else {
-                                msg
-                            }
+                val lifetimeSeconds = if (content is MessageContent.Text) _lifetime.value.seconds else null
+                // Pad consumption under the lock, published at once: a frame
+                // echoed back by the relay is recognized as ours
+                val prepared = stateLock.withLock {
+                    val conv = _conversation.value ?: return@launch
+                    when (val result = sendMessageUseCase.prepare(conv, content, lifetimeSeconds)) {
+                        is AppResult.Error -> {
+                            _error.value = result.error.message
+                            Log.e(TAG, "[$logId] Send failed: ${result.error.message}")
+                            return@launch
                         }
-
-                        // Update conversation state
-                        val updatedConv = conv.afterSending(MessageContent.toBytes(content).size.toLong())
-                        _conversation.value = updatedConv
-
-                        Log.i(TAG, "[$logId] Message sent: blobId=${sendResult.blobId.take(8)}")
-                    }
-                    is AppResult.Error -> {
-                        // Mark as failed
-                        _messages.value = _messages.value.map { msg ->
-                            if (msg.id == optimisticMessage.id) {
-                                msg.withDeliveryStatus(DeliveryStatus.FAILED(result.error.message))
-                            } else {
-                                msg
-                            }
+                        is AppResult.Success -> result.data.also {
+                            _conversation.value = it.frame.updatedConversation
+                            sentSequences.add(it.frame.sequence)
+                            pendingFrames[it.message.id] = it.frame
+                            _messages.value = _messages.value + it.message
                         }
-                        _error.value = result.error.message
-                        Log.e(TAG, "[$logId] Send failed: ${result.error.message}")
                     }
                 }
+                submit(prepared.message.id, prepared.frame)
             } catch (e: Exception) {
                 _error.value = "Failed to send message: ${e.message}"
                 Log.e(TAG, "[$logId] Send exception: ${e.message}", e)
@@ -398,17 +404,106 @@ class MessagingViewModel @Inject constructor(
         }
     }
 
+    /** Send a prepared frame; on failure the message offers a retry with the same frame. */
+    private suspend fun submit(messageId: String, frame: EncryptedFrame) {
+        val conv = _conversation.value ?: return
+        when (val result = sendMessageUseCase.submit(conv, frame)) {
+            is AppResult.Success -> {
+                sentBlobIds.add(result.data)
+                pendingFrames.remove(messageId)
+                updateMessage(messageId) { it.copy(status = DeliveryStatus.SENT, blobId = result.data) }
+                Log.i(TAG, "[$logId] Message sent: blobId=${result.data.take(8)}")
+            }
+            is AppResult.Error -> {
+                updateMessage(messageId) { it.withDeliveryStatus(DeliveryStatus.FAILED(result.error.message)) }
+                _error.value = result.error.message
+                Log.e(TAG, "[$logId] Send failed: ${result.error.message}")
+            }
+        }
+    }
+
+    private fun updateMessage(id: String, change: (Message) -> Message) {
+        _messages.value = _messages.value.map { if (it.id == id) change(it) else it }
+    }
+
+    // Deletion
+
+    /** Remove the message from this phone only, and wipe its pad bytes. */
+    fun deleteForMe(message: Message) {
+        removeMessages { it.id == message.id }
+    }
+
+    /** Only the author can ask the other phone to delete a message; a failed request is offered again. */
+    fun canDeleteForEveryone(message: Message): Boolean =
+        message.isOutgoing && message.sequence != null &&
+            (message.status == DeliveryStatus.SENT || message.status == DeliveryStatus.DELIVERED)
+
+    /**
+     * A request: a modified app or an earlier screenshot can keep the message.
+     * The message stays until the relay accepts the request; a retry sends the
+     * same frame again.
+     */
+    fun deleteForEveryone(message: Message) {
+        val sequence = message.sequence ?: return
+        if (!canDeleteForEveryone(message)) return
+        viewModelScope.launch {
+            val frame = pendingDeletes[message.id] ?: stateLock.withLock {
+                val conv = _conversation.value ?: return@launch
+                when (val result = sendMessageUseCase.prepareDelete(conv, sequence)) {
+                    is AppResult.Error -> {
+                        _error.value = result.error.message
+                        return@launch
+                    }
+                    is AppResult.Success -> result.data.also {
+                        _conversation.value = it.updatedConversation
+                        sentSequences.add(it.sequence)
+                        pendingDeletes[message.id] = it
+                    }
+                }
+            }
+            val conv = _conversation.value ?: return@launch
+            when (val result = sendMessageUseCase.submit(conv, frame)) {
+                is AppResult.Success -> {
+                    sentBlobIds.add(result.data)
+                    pendingDeletes.remove(message.id)
+                    _deleteFailedIds.value = _deleteFailedIds.value - message.id
+                    deleteForMe(message)
+                }
+                is AppResult.Error -> {
+                    _deleteFailedIds.value = _deleteFailedIds.value + message.id
+                    _error.value = result.error.message
+                }
+            }
+        }
+    }
+
+    private fun removeMessages(predicate: (Message) -> Boolean) {
+        val removed = _messages.value.filter(predicate)
+        if (removed.isEmpty()) return
+        _messages.value = _messages.value.filterNot(predicate)
+        // Zero exactly the bytes these messages used, so a later pad
+        // compromise cannot decrypt them; wiping more could zero the key of a
+        // message not decrypted yet
+        viewModelScope.launch {
+            removed.forEach { message ->
+                val sequence = message.sequence ?: return@forEach
+                val length = message.padLength ?: return@forEach
+                padRepository.zeroPadBytes(conversationId, sequence, length.toInt())
+            }
+        }
+    }
+
     fun clearError() {
         _error.value = null
     }
 
+    /** Send the same frame again: same keys, same lifetime, no pad reused. */
     fun retryMessage(messageId: String) {
         val message = _messages.value.find { it.id == messageId } ?: return
         if (!message.status.isFailed) return
-
-        // Remove failed message and re-send
-        _messages.value = _messages.value.filter { it.id != messageId }
-        sendMessageContent(message.content)
+        val frame = pendingFrames[messageId] ?: return
+        updateMessage(messageId) { it.withDeliveryStatus(DeliveryStatus.SENDING) }
+        viewModelScope.launch { submit(messageId, frame) }
     }
 
     val padUsagePercentage: Float

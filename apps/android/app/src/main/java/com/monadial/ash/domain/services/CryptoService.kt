@@ -63,6 +63,18 @@ interface CryptoService {
      */
     fun deriveBurnToken(padBytes: ByteArray): String
 
+    // === Authenticated Messages (same frames as iOS) ===
+
+    /**
+     * Encrypt [plaintext] into an authenticated frame
+     * `[version][type][length][ciphertext][tag]`. [authKey] is the first
+     * [AUTH_KEY_BYTES] of the consumed pad bytes, [encryptionKey] the rest.
+     */
+    fun encryptAuthenticated(authKey: ByteArray, encryptionKey: ByteArray, plaintext: ByteArray, msgType: Int): ByteArray
+
+    /** Verify and decrypt an authenticated frame; throws if it was altered. */
+    fun decryptAuthenticated(authKey: ByteArray, encryptionKey: ByteArray, frame: ByteArray): DecryptedFrame
+
     // === OTP Encryption ===
 
     /**
@@ -118,3 +130,20 @@ interface CryptoService {
      */
     fun addFrameBytes(receiver: FountainFrameReceiver, frameBytes: ByteArray): Boolean
 }
+
+/** Bytes of the authentication key at the start of a message's pad range. */
+const val AUTH_KEY_BYTES = 64
+
+/** Frame bytes around the ciphertext: 4-byte header and 32-byte tag. */
+const val FRAME_OVERHEAD_BYTES = 36
+
+/** Wire message types (core MessageType), shared with iOS. */
+object MessageTypes {
+    const val TEXT = 0x01
+    const val LOCATION = 0x02
+    const val DELETE = 0x03
+    const val EXPIRING_TEXT = 0x04
+}
+
+/** A verified, decrypted frame. */
+class DecryptedFrame(val msgType: Int, val plaintext: ByteArray)

@@ -20,7 +20,9 @@ data class Message(
     val expiresAt: Long? = null,
     /** Server TTL (for sent messages awaiting delivery) */
     val serverExpiresAt: Long? = null,
-    val isContentWiped: Boolean = false
+    val isContentWiped: Boolean = false,
+    /** Pad bytes this message used from [sequence], to wipe exactly those once it is gone */
+    val padLength: Long? = null
 ) {
     // Computed properties
     val isExpired: Boolean
@@ -128,7 +130,9 @@ sealed class MessageContent {
         override val byteCount: Int
             get() = toEncodedString().toByteArray(Charsets.UTF_8).size
 
-        fun toEncodedString(): String = "LOC:%.6f,%.6f".format(latitude, longitude)
+        // Locale.ROOT: a French phone would otherwise write "48,856600", which
+        // no phone can read back
+        fun toEncodedString(): String = String.format(java.util.Locale.ROOT, "LOC:%.6f,%.6f", latitude, longitude)
 
         companion object {
             fun fromEncodedString(encoded: String): Location? {
