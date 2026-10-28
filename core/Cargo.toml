@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 description = "Cryptographic core for ASH secure messaging"
 license = "MIT"
-repository = "https://github.com/monadial/ash"
+repository = "https://github.com/Nold/gwardian"
 
 # Zero external dependencies - maximum security, minimal attack surface
 [dependencies]
