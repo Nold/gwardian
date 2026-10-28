@@ -77,7 +77,7 @@ final class GroupMessagingViewModel {
     func onAppear() async {
         if pads == nil {
             do {
-                pads = try await dependencies.groupRepository.loadPads(for: group)
+                pads = try dependencies.groupRepository.loadPads(for: group)
                 updateRemaining()
                 isLoaded = true
             } catch {
@@ -118,7 +118,7 @@ final class GroupMessagingViewModel {
             return
         }
         // The keys are burned: persist before anything else can fail
-        await savePads()
+        savePads()
         draft = ""
         dependencies.hapticService.light()
 
@@ -235,7 +235,7 @@ final class GroupMessagingViewModel {
         }
 
         if decrypted {
-            await savePads()
+            savePads()
             dependencies.hapticService.light()
             refreshMessages()
         }
@@ -304,10 +304,10 @@ final class GroupMessagingViewModel {
 
     // MARK: - Helpers
 
-    private func savePads() async {
+    private func savePads() {
         guard let pads else { return }
         do {
-            try await dependencies.groupRepository.savePads(pads.exportState(), for: group.id)
+            try dependencies.groupRepository.savePads(pads.exportState(), for: group.id)
         } catch {
             Log.error(.storage, "[\(logId)] Failed to save group pads: \(error)")
         }
