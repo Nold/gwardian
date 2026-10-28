@@ -31,13 +31,22 @@ data class SendMessageResult(
     val updatedConversation: Conversation
 )
 
-/** A frame encrypted and recorded, ready for the relay. */
-private data class EncryptedFrame(
+/**
+ * A frame encrypted and recorded, ready for the relay. Its pad bytes are
+ * spent: if sending fails, send this same frame again, which reuses no key.
+ */
+class EncryptedFrame(
     val ciphertext: ByteArray,
     val sequence: Long,
     val padLength: Long,
     val updatedConversation: Conversation
 )
+
+/** A message encrypted and recorded, not sent yet. */
+class PreparedMessage(val message: Message, val frame: EncryptedFrame)
+
+/** Largest payload a frame's 16-bit length field can carry. */
+private const val MAX_PAYLOAD_BYTES = 0xFFFF
 
 /**
  * Use case for sending encrypted messages, as authenticated frames shared
@@ -67,58 +76,81 @@ class SendMessageUseCase @Inject constructor(
         content: MessageContent,
         lifetimeSeconds: Int? = null
     ): AppResult<SendMessageResult> {
-        val (msgType, payload) = when {
-            content is MessageContent.Text && lifetimeSeconds != null ->
-                MessageTypes.EXPIRING_TEXT to encodeExpiringText(lifetimeSeconds.toUInt(), content.text)
-                    .map { it.toByte() }.toByteArray()
-            content is MessageContent.Location -> MessageTypes.LOCATION to MessageContent.toBytes(content)
-            else -> MessageTypes.TEXT to MessageContent.toBytes(content)
+        val prepared = when (val result = prepare(conversation, content, lifetimeSeconds)) {
+            is AppResult.Error -> return result
+            is AppResult.Success -> result.data
+        }
+        val blobId = when (val result = submit(conversation, prepared.frame)) {
+            is AppResult.Error -> return result
+            is AppResult.Success -> result.data
+        }
+        val message = prepared.message.copy(status = DeliveryStatus.SENT, blobId = blobId)
+        return AppResult.Success(
+            SendMessageResult(message, blobId, prepared.frame.sequence, prepared.frame.updatedConversation)
+        )
+    }
+
+    /**
+     * Consume the pad and encrypt, without sending. The caller publishes
+     * `frame.updatedConversation` before anything else uses the conversation,
+     * then calls [submit].
+     *
+     * @param lifetimeSeconds text only: seconds the message stays on the other
+     * phone once shown, chosen by its author; null means it does not disappear
+     */
+    suspend fun prepare(
+        conversation: Conversation,
+        content: MessageContent,
+        lifetimeSeconds: Int? = null
+    ): AppResult<PreparedMessage> {
+        val (msgType, payload) = try {
+            when {
+                content is MessageContent.Text && lifetimeSeconds != null ->
+                    MessageTypes.EXPIRING_TEXT to encodeExpiringText(lifetimeSeconds.toUInt(), content.text)
+                        .map { it.toByte() }.toByteArray()
+                content is MessageContent.Location -> MessageTypes.LOCATION to MessageContent.toBytes(content)
+                else -> MessageTypes.TEXT to MessageContent.toBytes(content)
+            }
+        } catch (e: Exception) {
+            return AppResult.Error(AppError.Validation("Invalid message: ${e.message}"))
         }
 
         val frame = when (val result = encrypt(conversation, msgType, payload)) {
             is AppResult.Error -> return result
             is AppResult.Success -> result.data
         }
-        val blobId = when (val result = submit(conversation, frame)) {
-            is AppResult.Error -> return result
-            is AppResult.Success -> result.data
-        }
-
         val now = System.currentTimeMillis()
         val message = Message(
             conversationId = conversation.id,
             content = content,
             direction = MessageDirection.SENT,
-            status = DeliveryStatus.SENT,
+            status = DeliveryStatus.SENDING,
             sequence = frame.sequence,
-            blobId = blobId,
             // The author's chosen lifetime applies on this phone too
             expiresAt = lifetimeSeconds?.let { now + it * 1_000L },
             serverExpiresAt = now + (conversation.messageRetention.seconds * 1000L),
             padLength = frame.padLength
         )
-        return AppResult.Success(SendMessageResult(message, blobId, frame.sequence, frame.updatedConversation))
+        return AppResult.Success(PreparedMessage(message, frame))
     }
 
     /**
-     * Ask the other phone to delete one of this phone's messages, by its
-     * sequence. A request: a modified app or an earlier screenshot can keep it.
+     * Encrypt a request asking the other phone to delete one of this phone's
+     * messages, by its sequence. A request: a modified app or an earlier
+     * screenshot can keep it. Send it with [submit].
      */
-    suspend fun deleteForEveryone(conversation: Conversation, sequence: Long): AppResult<Conversation> {
+    suspend fun prepareDelete(conversation: Conversation, sequence: Long): AppResult<EncryptedFrame> {
         val payload = encodeDeleteRequest(sequence.toULong()).map { it.toByte() }.toByteArray()
-        val frame = when (val result = encrypt(conversation, MessageTypes.DELETE, payload)) {
-            is AppResult.Error -> return result
-            is AppResult.Success -> result.data
-        }
-        return when (val result = submit(conversation, frame)) {
-            is AppResult.Error -> result
-            is AppResult.Success -> AppResult.Success(frame.updatedConversation)
-        }
+        return encrypt(conversation, MessageTypes.DELETE, payload)
     }
 
     /** Consume the pad range of [payload], save the conversation, then encrypt. */
     private suspend fun encrypt(conversation: Conversation, msgType: Int, payload: ByteArray): AppResult<EncryptedFrame> {
         val logId = conversation.id.take(8)
+        // Checked before consuming: the frame's length field is 16 bits
+        if (payload.size > MAX_PAYLOAD_BYTES) {
+            return AppResult.Error(AppError.Validation("Message too large"))
+        }
         val padLength = AUTH_KEY_BYTES + payload.size
 
         // 1. Check if we can send
@@ -151,6 +183,10 @@ class SendMessageUseCase @Inject constructor(
             is AppResult.Error -> return result
             is AppResult.Success -> result.data
         }
+        if (keyBytes.size != padLength) {
+            Log.e(TAG, "[$logId] Pad returned ${keyBytes.size} bytes instead of $padLength")
+            return AppResult.Error(AppError.Crypto.EncryptionFailed("Unexpected key length"))
+        }
 
         val updatedConv = conversation.afterSending(padLength.toLong())
         if (conversationRepository.saveConversation(updatedConv) is AppResult.Error) {
@@ -160,8 +196,8 @@ class SendMessageUseCase @Inject constructor(
         // 4. Encrypt and authenticate
         val ciphertext = try {
             cryptoService.encryptAuthenticated(
-                authKey = keyBytes.copyOfRange(0, minOf(AUTH_KEY_BYTES, keyBytes.size)),
-                encryptionKey = keyBytes.copyOfRange(minOf(AUTH_KEY_BYTES, keyBytes.size), keyBytes.size),
+                authKey = keyBytes.copyOfRange(0, AUTH_KEY_BYTES),
+                encryptionKey = keyBytes.copyOfRange(AUTH_KEY_BYTES, keyBytes.size),
                 plaintext = payload,
                 msgType = msgType
             )
@@ -173,7 +209,8 @@ class SendMessageUseCase @Inject constructor(
         return AppResult.Success(EncryptedFrame(ciphertext, sequence, padLength.toLong(), updatedConv))
     }
 
-    private suspend fun submit(conversation: Conversation, frame: EncryptedFrame): AppResult<String> {
+    /** Send a prepared frame; on failure, the same frame can be sent again. */
+    suspend fun submit(conversation: Conversation, frame: EncryptedFrame): AppResult<String> {
         val logId = conversation.id.take(8)
         val result = relayService.submitMessage(
             conversationId = conversation.id,

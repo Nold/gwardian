@@ -60,9 +60,10 @@ class SendMessageUseCaseTest {
 
             coEvery { padRepository.canSend(any(), any(), any()) } returns AppResult.Success(true)
             coEvery { padRepository.nextSendOffset(any(), any()) } returns AppResult.Success(100L)
-            coEvery { padRepository.consumeForSending(any(), any(), any()) } returns AppResult.Success(
-                ByteArray(13) { 0xFF.toByte() }
-            )
+            coEvery { padRepository.consumeForSending(any(), any(), any()) } coAnswers {
+                // Exactly the pad range asked for: auth key + encryption key
+                AppResult.Success(ByteArray(secondArg<Int>()))
+            }
             every { cryptoService.encryptAuthenticated(any(), any(), any(), any()) } returns ByteArray(13) { 0xAA.toByte() }
             coEvery { conversationRepository.saveConversation(any()) } returns AppResult.Success(Unit)
             coEvery { relayService.submitMessage(any(), any(), any(), any(), any(), any(), any(), any(), any()) } returns
@@ -102,9 +103,10 @@ class SendMessageUseCaseTest {
                     isExhausted = false
                 )
             )
-            coEvery { padRepository.consumeForSending(any(), any(), any()) } returns AppResult.Success(
-                ByteArray(16) { 0xFF.toByte() }
-            )
+            coEvery { padRepository.consumeForSending(any(), any(), any()) } coAnswers {
+                // Exactly the pad range asked for: auth key + encryption key
+                AppResult.Success(ByteArray(secondArg<Int>()))
+            }
             every { cryptoService.encryptAuthenticated(any(), any(), any(), any()) } returns ByteArray(16) { 0xBB.toByte() }
             coEvery { conversationRepository.saveConversation(any()) } returns AppResult.Success(Unit)
             coEvery { relayService.submitMessage(any(), any(), any(), any(), any(), any(), any(), any(), any()) } returns
@@ -163,7 +165,10 @@ class SendMessageUseCaseTest {
 
             coEvery { padRepository.canSend(any(), any(), any()) } returns AppResult.Success(true)
             coEvery { padRepository.nextSendOffset(any(), any()) } returns AppResult.Success(0L)
-            coEvery { padRepository.consumeForSending(any(), any(), any()) } returns AppResult.Success(ByteArray(12))
+            coEvery { padRepository.consumeForSending(any(), any(), any()) } coAnswers {
+                // Exactly the pad range asked for: auth key + encryption key
+                AppResult.Success(ByteArray(secondArg<Int>()))
+            }
             every { cryptoService.encryptAuthenticated(any(), any(), any(), any()) } returns ByteArray(12)
             coEvery { conversationRepository.saveConversation(any()) } returns AppResult.Success(Unit)
             coEvery { relayService.submitMessage(any(), any(), any(), any(), any(), any(), any(), any(), any()) } returns
@@ -187,7 +192,10 @@ class SendMessageUseCaseTest {
 
             coEvery { padRepository.canSend(any(), any(), any()) } returns AppResult.Success(true)
             coEvery { padRepository.nextSendOffset(any(), any()) } returns AppResult.Success(0L)
-            coEvery { padRepository.consumeForSending(any(), any(), any()) } returns AppResult.Success(ByteArray(12))
+            coEvery { padRepository.consumeForSending(any(), any(), any()) } coAnswers {
+                // Exactly the pad range asked for: auth key + encryption key
+                AppResult.Success(ByteArray(secondArg<Int>()))
+            }
             every { cryptoService.encryptAuthenticated(any(), any(), any(), any()) } returns ByteArray(12)
             coEvery { conversationRepository.saveConversation(any()) } returns AppResult.Success(Unit)
             coEvery { relayService.submitMessage(any(), any(), any(), any(), any(), any(), any(), any(), any()) } returns
@@ -217,8 +225,10 @@ class SendMessageUseCaseTest {
 
             coEvery { padRepository.canSend(any(), any(), any()) } returns AppResult.Success(true)
             coEvery { padRepository.nextSendOffset(any(), any()) } returns AppResult.Success(0L)
-            coEvery { padRepository.consumeForSending(any(), any(), any()) } returns
-                AppResult.Success(ByteArray(24) { 0xFF.toByte() })
+            coEvery { padRepository.consumeForSending(any(), any(), any()) } coAnswers {
+                // Exactly the pad range asked for: auth key + encryption key
+                AppResult.Success(ByteArray(secondArg<Int>()))
+            }
             every { cryptoService.encryptAuthenticated(any(), any(), any(), any()) } returns ByteArray(24) { 0xCC.toByte() }
             coEvery { conversationRepository.saveConversation(any()) } returns AppResult.Success(Unit)
             coEvery { relayService.submitMessage(any(), any(), any(), any(), any(), any(), any(), any(), any()) } returns
