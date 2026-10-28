@@ -335,6 +335,21 @@ private struct MessagingContent: View {
     @FocusState private var isInputFocused: Bool
     @State private var selectedMessageForInfo: Message?
 
+    /// Offered to the author on a sent message, and again after a failed request.
+    private func deleteForEveryoneAction(for message: Message) -> (() -> Void)? {
+        if viewModel.canDeleteForEveryone(message) {
+            return {
+                Task { await viewModel.deleteForEveryone(message) }
+            }
+        }
+        if viewModel.deleteFailedIds.contains(message.id) {
+            return {
+                Task { await viewModel.retryDeleteForEveryone(message) }
+            }
+        }
+        return nil
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             // Peer burned warning
@@ -370,11 +385,7 @@ private struct MessagingContent: View {
                                         selectedMessageForInfo = message
                                     },
                                     onDeleteForMe: { viewModel.deleteForMe(message) },
-                                    onDeleteForEveryone: viewModel.canDeleteForEveryone(message)
-                                        ? { Task { await viewModel.deleteForEveryone(message) } }
-                                        : viewModel.deleteFailedIds.contains(message.id)
-                                            ? { Task { await viewModel.retryDeleteForEveryone(message) } }
-                                            : nil
+                                    onDeleteForEveryone: deleteForEveryoneAction(for: message)
                                 )
                                 .id(message.id)
                             }
