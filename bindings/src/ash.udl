@@ -38,6 +38,17 @@ namespace ash {
     [Throws=AshError]
     CeremonyPayload decode_ceremony_payload(sequence<u8> payload);
 
+    /// What a member shows on their turn in the group ceremony; transferred
+    /// in place of the pad bytes.
+    [Throws=AshError]
+    sequence<u8> encode_member_card(GroupMemberCard card);
+
+    [Throws=AshError]
+    GroupMemberCard decode_member_card(sequence<u8> bytes);
+
+    /// Largest group (members are numbered 0 to 7).
+    u8 get_max_group_members();
+
     // === Authenticated Message Operations ===
 
     /// Authentication overhead per message (64 bytes for Wegman-Carter MAC)
@@ -288,6 +299,8 @@ enum AshError {
     "FrameAuthenticationFailed",
     /// QR frames are protected by six words the receiver did not enter
     "PassphraseRequired",
+    /// Group member card is malformed
+    "InvalidMemberCard",
 };
 
 /// Ceremony metadata transferred via QR frame 0
@@ -342,6 +355,14 @@ dictionary DecryptedMessage {
     u8 msg_type;
     /// Authentication tag (32 bytes) - can be shown in UI
     sequence<u8> tag;
+};
+
+/// A member's place, name and sending pad in a group ceremony
+dictionary GroupMemberCard {
+    u8 member;
+    u8 members;
+    string name;
+    sequence<u8> pad;
 };
 
 /// Pad and ceremony metadata received over Bluetooth or the relay
@@ -589,6 +610,11 @@ interface PadGroup {
     sequence<u8> check_integrity();
 
     boolean can_send(u32 plaintext_length);
+    /// Relay tokens from member 0's pad, whose bytes are then consumed so
+    /// they never serve as message keys. Call once when the group is formed.
+    [Throws=AshError]
+    AuthTokens take_relay_tokens();
+
     /// Encrypt with this device's pad; returns the encoded group frame
     [Throws=AshError]
     sequence<u8> encrypt(u8 msg_type, sequence<u8> plaintext);

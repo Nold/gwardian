@@ -1659,6 +1659,12 @@ public protocol PadGroupProtocol : AnyObject {
      */
     func securityLevel()  -> SecurityLevel
     
+    /**
+     * Relay tokens from member 0's pad, whose bytes are then consumed so
+     * they never serve as message keys. Call once when the group is formed.
+     */
+    func takeRelayTokens() throws  -> AuthTokens
+    
 }
 
 /**
@@ -1876,6 +1882,17 @@ open func replacePadAllowDowngrade(member: UInt8, padBytes: [UInt8], level: Secu
 open func securityLevel() -> SecurityLevel {
     return try!  FfiConverterTypeSecurityLevel.lift(try! rustCall() {
     uniffi_ash_bindings_fn_method_padgroup_security_level(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+    /**
+     * Relay tokens from member 0's pad, whose bytes are then consumed so
+     * they never serve as message keys. Call once when the group is formed.
+     */
+open func takeRelayTokens()throws  -> AuthTokens {
+    return try  FfiConverterTypeAuthTokens.lift(try rustCallWithError(FfiConverterTypeAshError.lift) {
+    uniffi_ash_bindings_fn_method_padgroup_take_relay_tokens(self.uniffiClonePointer(),$0
     )
 })
 }
@@ -2830,6 +2847,91 @@ public nonisolated func FfiConverterTypeFountainCeremonyResult_lower(_ value: Fo
 
 
 /**
+ * A member's place, name and sending pad in a group ceremony
+ */
+public struct GroupMemberCard {
+    public let member: UInt8
+    public let members: UInt8
+    public let name: String
+    public let pad: [UInt8]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(member: UInt8, members: UInt8, name: String, pad: [UInt8]) {
+        self.member = member
+        self.members = members
+        self.name = name
+        self.pad = pad
+    }
+}
+
+
+
+extension GroupMemberCard: Equatable, Hashable {
+    public static func ==(lhs: GroupMemberCard, rhs: GroupMemberCard) -> Bool {
+        if lhs.member != rhs.member {
+            return false
+        }
+        if lhs.members != rhs.members {
+            return false
+        }
+        if lhs.name != rhs.name {
+            return false
+        }
+        if lhs.pad != rhs.pad {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(member)
+        hasher.combine(members)
+        hasher.combine(name)
+        hasher.combine(pad)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeGroupMemberCard: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> GroupMemberCard {
+        return
+            try GroupMemberCard(
+                member: FfiConverterUInt8.read(from: &buf), 
+                members: FfiConverterUInt8.read(from: &buf), 
+                name: FfiConverterString.read(from: &buf), 
+                pad: FfiConverterSequenceUInt8.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: GroupMemberCard, into buf: inout [UInt8]) {
+        FfiConverterUInt8.write(value.member, into: &buf)
+        FfiConverterUInt8.write(value.members, into: &buf)
+        FfiConverterString.write(value.name, into: &buf)
+        FfiConverterSequenceUInt8.write(value.pad, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public nonisolated func FfiConverterTypeGroupMemberCard_lift(_ buf: RustBuffer) throws -> GroupMemberCard {
+    return try FfiConverterTypeGroupMemberCard.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public nonisolated func FfiConverterTypeGroupMemberCard_lower(_ value: GroupMemberCard) -> RustBuffer {
+    return FfiConverterTypeGroupMemberCard.lower(value)
+}
+
+
+/**
  * A verified, decrypted group message.
  */
 public struct GroupMessage {
@@ -3367,6 +3469,11 @@ public enum AshError {
      */
     case PassphraseRequired(message: String)
     
+    /**
+     * Group member card is malformed
+     */
+    case InvalidMemberCard(message: String)
+    
 }
 
 
@@ -3495,6 +3602,10 @@ public struct FfiConverterTypeAshError: FfiConverterRustBuffer {
             message: try FfiConverterString.read(from: &buf)
         )
         
+        case 29: return .InvalidMemberCard(
+            message: try FfiConverterString.read(from: &buf)
+        )
+        
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -3562,6 +3673,8 @@ public struct FfiConverterTypeAshError: FfiConverterRustBuffer {
             writeInt(&buf, Int32(27))
         case .PassphraseRequired(_ /* message is ignored*/):
             writeInt(&buf, Int32(28))
+        case .InvalidMemberCard(_ /* message is ignored*/):
+            writeInt(&buf, Int32(29))
 
         
         }
@@ -4422,6 +4535,13 @@ public nonisolated func decodeCeremonyPayload(payload: [UInt8])throws  -> Ceremo
     )
 })
 }
+public nonisolated func decodeMemberCard(bytes: [UInt8])throws  -> GroupMemberCard {
+    return try  FfiConverterTypeGroupMemberCard.lift(try rustCallWithError(FfiConverterTypeAshError.lift) {
+    uniffi_ash_bindings_fn_func_decode_member_card(
+        FfiConverterSequenceUInt8.lower(bytes),$0
+    )
+})
+}
 /**
  * Decrypt ciphertext using OTP (XOR with key)
  * WARNING: No authentication - use decrypt_authenticated for new code
@@ -4512,6 +4632,17 @@ public nonisolated func encodeCeremonyPayload(metadata: CeremonyMetadata, padByt
 })
 }
 /**
+ * What a member shows on their turn in the group ceremony; transferred
+ * in place of the pad bytes.
+ */
+public nonisolated func encodeMemberCard(card: GroupMemberCard)throws  -> [UInt8] {
+    return try  FfiConverterSequenceUInt8.lift(try rustCallWithError(FfiConverterTypeAshError.lift) {
+    uniffi_ash_bindings_fn_func_encode_member_card(
+        FfiConverterTypeGroupMemberCard.lower(card),$0
+    )
+})
+}
+/**
  * Encrypt plaintext using OTP (XOR with key)
  * WARNING: No authentication - use encrypt_authenticated for new code
  */
@@ -4597,6 +4728,15 @@ public nonisolated func getAuthOverhead() -> UInt32 {
 public nonisolated func getDefaultBlockSize() -> UInt32 {
     return try!  FfiConverterUInt32.lift(try! rustCall() {
     uniffi_ash_bindings_fn_func_get_default_block_size($0
+    )
+})
+}
+/**
+ * Largest group (members are numbered 0 to 7).
+ */
+public nonisolated func getMaxGroupMembers() -> UInt8 {
+    return try!  FfiConverterUInt8.lift(try! rustCall() {
+    uniffi_ash_bindings_fn_func_get_max_group_members($0
     )
 })
 }
@@ -4719,6 +4859,9 @@ nonisolated(unsafe) private var initializationResult: InitializationResult = {
     if (uniffi_ash_bindings_checksum_func_decode_ceremony_payload() != 16593) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_ash_bindings_checksum_func_decode_member_card() != 63108) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_ash_bindings_checksum_func_decrypt() != 24750) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -4740,6 +4883,9 @@ nonisolated(unsafe) private var initializationResult: InitializationResult = {
     if (uniffi_ash_bindings_checksum_func_encode_ceremony_payload() != 25007) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_ash_bindings_checksum_func_encode_member_card() != 62075) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_ash_bindings_checksum_func_encrypt() != 28557) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -4759,6 +4905,9 @@ nonisolated(unsafe) private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_ash_bindings_checksum_func_get_default_block_size() != 39613) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ash_bindings_checksum_func_get_max_group_members() != 64771) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_ash_bindings_checksum_func_get_metadata_overhead() != 5769) {
@@ -4915,6 +5064,9 @@ nonisolated(unsafe) private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_ash_bindings_checksum_method_padgroup_security_level() != 22861) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ash_bindings_checksum_method_padgroup_take_relay_tokens() != 33450) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_ash_bindings_checksum_method_padtransferreceiver_offer() != 20354) {

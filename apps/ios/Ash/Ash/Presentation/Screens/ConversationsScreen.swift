@@ -11,10 +11,11 @@ struct ConversationsScreen: View {
     @Bindable var viewModel: AppViewModel
     @State private var conversationToBurn: Conversation?
     @State private var conversationForInfo: Conversation?
+    @State private var groupForInfo: GroupConversation?
 
     var body: some View {
         Group {
-            if viewModel.conversations.isEmpty {
+            if viewModel.conversations.isEmpty && viewModel.groups.isEmpty {
                 emptyState
             } else {
                 conversationsList
@@ -34,13 +35,17 @@ struct ConversationsScreen: View {
             }
 
             ToolbarItem(placement: .topBarTrailing) {
-                Button {
-                    viewModel.startNewConversation()
-                } label: {
+                newMenu {
                     Image(systemName: "plus.circle.fill")
                         .font(.title3)
                 }
                 .tint(Color.ashAccent)
+            }
+        }
+        .sheet(item: $groupForInfo) { group in
+            GroupInfoScreen(group: group) {
+                groupForInfo = nil
+                Task { await viewModel.deleteGroup(group) }
             }
         }
         .sheet(item: $conversationToBurn) { conversation in
@@ -119,9 +124,38 @@ struct ConversationsScreen: View {
             }
             .padding(.top, 8)
 
+            newMenu {
+                Text("New Group")
+                    .font(.subheadline.weight(.semibold))
+            }
+            .tint(Color.ashAccent)
+
             Spacer()
         }
         .frame(maxWidth: .infinity)
+    }
+
+    /// Two-person conversation, or a group to create or join
+    private func newMenu<Label: View>(@ViewBuilder label: () -> Label) -> some View {
+        Menu {
+            Button {
+                viewModel.startNewConversation()
+            } label: {
+                SwiftUI.Label("New Conversation", systemImage: "person.2")
+            }
+            Button {
+                viewModel.startNewGroup(role: .creator)
+            } label: {
+                SwiftUI.Label("New Group", systemImage: "person.3")
+            }
+            Button {
+                viewModel.startNewGroup(role: .joiner)
+            } label: {
+                SwiftUI.Label("Join a Group", systemImage: "qrcode.viewfinder")
+            }
+        } label: {
+            label()
+        }
     }
 
     // MARK: - List
@@ -129,6 +163,9 @@ struct ConversationsScreen: View {
     private var conversationsList: some View {
         ScrollView {
             LazyVStack(spacing: 12) {
+                ForEach(viewModel.groups) { group in
+                    GroupCard(group: group) { groupForInfo = group }
+                }
                 ForEach(viewModel.conversations) { conversation in
                     ConversationCard(
                         conversation: conversation,
@@ -328,6 +365,40 @@ private struct ConversationCard: View {
             }
             .tint(Color.ashDanger)
         }
+    }
+}
+
+// MARK: - Group Card
+
+private struct GroupCard: View {
+    let group: GroupConversation
+    let onTap: () -> Void
+
+    var body: some View {
+        Button(action: onTap) {
+            HStack(spacing: 12) {
+                Image(systemName: "person.3.fill")
+                    .font(.subheadline)
+                    .foregroundStyle(group.accentColor.color)
+                    .frame(width: 28)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(group.displayName)
+                        .font(.body.weight(.semibold))
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                    Text("\(group.members.count) members")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+            }
+            .padding(14)
+            .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 14))
+        }
+        .buttonStyle(.plain)
     }
 }
 

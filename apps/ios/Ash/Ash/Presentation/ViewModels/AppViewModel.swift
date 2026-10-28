@@ -18,6 +18,9 @@ final class AppViewModel {
     // MARK: - State
 
     private(set) var conversations: [Conversation] = []
+    private(set) var groups: [GroupConversation] = []
+    /// Group ceremony in progress, shown as a sheet
+    var groupCeremonyViewModel: GroupCeremonyViewModel?
     var selectedConversation: Conversation?
     var isShowingCeremony = false
     var isShowingSettings = false
@@ -103,6 +106,11 @@ final class AppViewModel {
             // Handle error - in production, show error state
             conversations = []
         }
+        do {
+            groups = try await dependencies.groupRepository.getAll()
+        } catch {
+            groups = []
+        }
     }
 
     func selectConversation(_ conversation: Conversation) {
@@ -114,6 +122,32 @@ final class AppViewModel {
         dependencies.hapticService.medium()
         ceremonyViewModel.reset()
         isShowingCeremony = true
+    }
+
+    func startNewGroup(role: GroupCeremonyViewModel.Role) {
+        dependencies.hapticService.medium()
+        groupCeremonyViewModel = GroupCeremonyViewModel(dependencies: dependencies, role: role)
+    }
+
+    func handleGroupCeremonyCompleted(_ group: GroupConversation) {
+        groupCeremonyViewModel = nil
+        withAnimation {
+            groups.removeAll { $0.id == group.id }
+            groups.insert(group, at: 0)
+        }
+    }
+
+    /// Delete the group and its pads from this phone.
+    func deleteGroup(_ group: GroupConversation) async {
+        dependencies.hapticService.heavy()
+        do {
+            try await dependencies.groupRepository.delete(group.id)
+        } catch {
+            Log.error(.storage, "Group deletion failed for \(group.id.prefix(8)): \(error)")
+        }
+        withAnimation {
+            groups.removeAll { $0.id == group.id }
+        }
     }
 
     func showSettings() {
@@ -207,6 +241,10 @@ final class AppViewModel {
             try await dependencies.burnConversationUseCase.executeAll()
             conversations = []
             selectedConversation = nil
+            for group in groups {
+                try? await dependencies.groupRepository.delete(group.id)
+            }
+            groups = []
         } catch {
             // Handle error
         }

@@ -111,13 +111,17 @@ class RelayServiceImpl @Inject constructor(
         conversationId: String,
         authTokenHash: String,
         burnTokenHash: String,
-        relayUrl: String?
+        relayUrl: String?,
+        ttlSeconds: Long?,
+        members: Int
     ): AppResult<Unit> {
         return coreRelayService.registerConversation(
             conversationId = conversationId,
             authTokenHash = authTokenHash,
             burnTokenHash = burnTokenHash,
-            relayUrl = relayUrl
+            relayUrl = relayUrl,
+            ttlSeconds = ttlSeconds,
+            members = members
         ).fold(
             onSuccess = { AppResult.Success(Unit) },
             onFailure = { AppResult.Error(AppError.Relay.RegistrationFailed) }

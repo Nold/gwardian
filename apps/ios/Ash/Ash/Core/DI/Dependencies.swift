@@ -17,6 +17,8 @@ final class Dependencies: ObservableObject, @unchecked Sendable {
     // MARK: - Repositories
 
     let conversationRepository: ConversationRepository
+    /// Group conversations and their pads, sealed like conversations
+    let groupRepository: GroupRepository
 
     // MARK: - Message Storage (decoupled via factory pattern)
 
@@ -145,6 +147,7 @@ final class Dependencies: ObservableObject, @unchecked Sendable {
         self.vault = vault
         self.vaultedKeychain = vaulted
         self.conversationRepository = convRepo
+        self.groupRepository = KeychainGroupRepository(keychain: vaulted)
         self.padManager = padMgr
         self.messageRepositoryFactory = factory
         self.messageStorageService = storageService

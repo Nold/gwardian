@@ -213,6 +213,12 @@ pub enum Error {
         /// Level the operation would lead to.
         to: SecurityLevel,
     },
+
+    /// A group member card is malformed.
+    InvalidMemberCard {
+        /// What is wrong.
+        reason: &'static str,
+    },
 }
 
 impl fmt::Display for Error {
@@ -329,6 +335,7 @@ impl fmt::Display for Error {
                     member, from, to
                 )
             }
+            Error::InvalidMemberCard { reason } => write!(f, "invalid member card: {}", reason),
         }
     }
 }

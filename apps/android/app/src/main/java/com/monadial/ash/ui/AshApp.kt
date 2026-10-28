@@ -14,10 +14,12 @@ import com.monadial.ash.core.services.applock.LockPhase
 import com.monadial.ash.ui.screens.CeremonyScreen
 import com.monadial.ash.ui.screens.ConversationInfoScreen
 import com.monadial.ash.ui.screens.ConversationsScreen
+import com.monadial.ash.ui.screens.GroupCeremonyScreen
 import com.monadial.ash.ui.screens.LockScreen
 import com.monadial.ash.ui.screens.MessagingScreen
 import com.monadial.ash.ui.screens.PasscodeSetupScreen
 import com.monadial.ash.ui.screens.SettingsScreen
+import com.monadial.ash.ui.viewmodels.GroupRole
 import com.monadial.ash.ui.viewmodels.LockViewModel
 
 sealed class Screen(val route: String) {
@@ -32,6 +34,10 @@ sealed class Screen(val route: String) {
     }
 
     data object Ceremony : Screen("ceremony")
+
+    data object GroupCeremony : Screen("group-ceremony/{role}") {
+        fun createRoute(role: GroupRole) = "group-ceremony/${role.name}"
+    }
 
     data object Settings : Screen("settings")
 }
@@ -71,6 +77,12 @@ private fun UnlockedApp() {
                 },
                 onNewConversation = {
                     navController.navigate(Screen.Ceremony.route)
+                },
+                onNewGroup = {
+                    navController.navigate(Screen.GroupCeremony.createRoute(GroupRole.CREATOR))
+                },
+                onJoinGroup = {
+                    navController.navigate(Screen.GroupCeremony.createRoute(GroupRole.JOINER))
                 },
                 onSettingsClick = {
                     navController.navigate(Screen.Settings.route)
@@ -113,6 +125,17 @@ private fun UnlockedApp() {
                         popUpTo(Screen.Conversations.route)
                     }
                 },
+                onCancel = { navController.popBackStack() }
+            )
+        }
+
+        composable(
+            route = Screen.GroupCeremony.route,
+            arguments = listOf(navArgument("role") { type = NavType.StringType })
+        ) {
+            // The view model reads the role from the navigation argument
+            GroupCeremonyScreen(
+                onComplete = { navController.popBackStack() },
                 onCancel = { navController.popBackStack() }
             )
         }

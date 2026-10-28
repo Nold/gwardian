@@ -239,6 +239,18 @@ struct RootView: View {
                 }
             )
         }
+        .sheet(isPresented: Binding(
+            get: { viewModel.groupCeremonyViewModel != nil },
+            set: { if !$0 { viewModel.groupCeremonyViewModel = nil } }
+        )) {
+            if let groupViewModel = viewModel.groupCeremonyViewModel {
+                GroupCeremonyScreen(
+                    viewModel: groupViewModel,
+                    onComplete: { viewModel.handleGroupCeremonyCompleted($0) },
+                    onCancel: { viewModel.groupCeremonyViewModel = nil }
+                )
+            }
+        }
         .sheet(isPresented: $viewModel.isShowingSettings) {
             SettingsScreen(
                 lockViewModel: lockViewModel,

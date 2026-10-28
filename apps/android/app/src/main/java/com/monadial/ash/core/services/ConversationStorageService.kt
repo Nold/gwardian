@@ -225,6 +225,30 @@ class ConversationStorageService @Inject constructor(
         sealed
     }
 
+    // === Sealed Records (groups) ===
+
+    /** Store a record sealed with the vault key, like conversations. */
+    suspend fun putSealed(key: String, value: String) {
+        withContext(Dispatchers.IO) {
+            encryptedPrefs.edit(commit = true) { putString(key, vault.sealString(value)) }
+        }
+    }
+
+    suspend fun getSealed(key: String): String? = withContext(Dispatchers.IO) { readRecord(key) }
+
+    /** Open every record whose key starts with `prefix`, skipping unreadable ones. */
+    suspend fun getAllSealed(prefix: String): List<String> = withContext(Dispatchers.IO) {
+        encryptedPrefs.all.mapNotNull { (key, value) ->
+            if (key.startsWith(prefix) && value is String) runCatching { readRecord(key, value) }.getOrNull() else null
+        }
+    }
+
+    suspend fun removeSealed(vararg keys: String) {
+        withContext(Dispatchers.IO) {
+            encryptedPrefs.edit(commit = true) { keys.forEach { remove(it) } }
+        }
+    }
+
     /** Delete every pad and conversation, after the vault was erased. */
     fun wipeAll() {
         encryptedPrefs.edit(commit = true) { clear() }

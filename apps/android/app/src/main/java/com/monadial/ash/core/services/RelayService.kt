@@ -50,7 +50,11 @@ data class AckMessageResponse(val acknowledged: Int)
 data class RegisterConversationRequest(
     @SerialName("conversation_id") val conversationId: String,
     @SerialName("auth_token_hash") val authTokenHash: String,
-    @SerialName("burn_token_hash") val burnTokenHash: String
+    @SerialName("burn_token_hash") val burnTokenHash: String,
+    /** Retention chosen at the ceremony; omitted keeps the relay default */
+    @SerialName("ttl_seconds") val ttlSeconds: Long? = null,
+    /** 2 for a conversation, up to 8 for a group */
+    val members: Int = 2
 )
 
 @Serializable
@@ -325,7 +329,9 @@ class RelayService @Inject constructor(
         conversationId: String,
         authTokenHash: String,
         burnTokenHash: String,
-        relayUrl: String? = null
+        relayUrl: String? = null,
+        ttlSeconds: Long? = null,
+        members: Int = 2
     ): Result<Unit> {
         val id = logId(conversationId)
         return try {
@@ -337,7 +343,9 @@ class RelayService @Inject constructor(
                 RegisterConversationRequest(
                     conversationId = conversationId,
                     authTokenHash = authTokenHash,
-                    burnTokenHash = burnTokenHash
+                    burnTokenHash = burnTokenHash,
+                    ttlSeconds = ttlSeconds,
+                    members = members
                 )
 
             val response: HttpResponse =

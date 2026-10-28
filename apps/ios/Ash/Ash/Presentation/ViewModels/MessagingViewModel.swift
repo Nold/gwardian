@@ -90,7 +90,9 @@ final class MessagingViewModel {
             try await relay.registerConversation(
                 conversationId: conversation.id,
                 authTokenHash: authTokenHash,
-                burnTokenHash: burnTokenHash
+                burnTokenHash: burnTokenHash,
+                ttlSeconds: conversation.messageRetention.seconds,
+                members: 2
             )
             Log.info(.relay, "[\(logId)] Re-registration successful")
             return true
