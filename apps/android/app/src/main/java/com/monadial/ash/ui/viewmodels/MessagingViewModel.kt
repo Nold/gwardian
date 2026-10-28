@@ -10,10 +10,12 @@ import com.monadial.ash.domain.services.LocationService
 import com.monadial.ash.core.services.SSEEvent
 import com.monadial.ash.domain.entities.Conversation
 import com.monadial.ash.domain.entities.DeliveryStatus
+import com.monadial.ash.domain.entities.DisappearingMessages
 import com.monadial.ash.domain.entities.Message
 import com.monadial.ash.domain.entities.MessageContent
 import com.monadial.ash.domain.entities.MessageDirection
 import com.monadial.ash.domain.repositories.ConversationRepository
+import com.monadial.ash.domain.repositories.PadRepository
 import com.monadial.ash.domain.services.RealtimeService
 import com.monadial.ash.domain.services.RelayService
 import com.monadial.ash.domain.usecases.conversation.CheckBurnStatusUseCase
@@ -25,9 +27,11 @@ import com.monadial.ash.domain.usecases.messaging.SendMessageUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 private const val TAG = "MessagingViewModel"
@@ -45,6 +49,7 @@ private const val TAG = "MessagingViewModel"
 class MessagingViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val conversationRepository: ConversationRepository,
+    private val padRepository: PadRepository,
     private val relayService: RelayService,
     private val realtimeService: RealtimeService,
     private val locationService: LocationService,
@@ -80,6 +85,14 @@ class MessagingViewModel @Inject constructor(
     private val _peerBurned = MutableStateFlow(false)
     val peerBurned: StateFlow<Boolean> = _peerBurned.asStateFlow()
 
+    /** Lifetime of the next text message, chosen by its author */
+    private val _lifetime = MutableStateFlow(DisappearingMessages.OFF)
+    val lifetime: StateFlow<DisappearingMessages> = _lifetime.asStateFlow()
+
+    /** Messages whose delete-for-everyone request failed: offered again */
+    private val _deleteFailedIds = MutableStateFlow<Set<String>>(emptySet())
+    val deleteFailedIds: StateFlow<Set<String>> = _deleteFailedIds.asStateFlow()
+
     private var sseJob: Job? = null
     private var pollingJob: Job? = null
     private var hasAttemptedRegistration: Boolean = false
@@ -93,6 +106,18 @@ class MessagingViewModel @Inject constructor(
 
     init {
         loadConversation()
+        // Any message can carry its own lifetime, so expiry always runs
+        viewModelScope.launch {
+            while (isActive) {
+                delay(1_000)
+                val now = System.currentTimeMillis()
+                removeMessages { (it.expiresAt ?: Long.MAX_VALUE) <= now }
+            }
+        }
+    }
+
+    fun setLifetime(lifetime: DisappearingMessages) {
+        _lifetime.value = lifetime
     }
 
     private fun loadConversation() {
@@ -103,6 +128,7 @@ class MessagingViewModel @Inject constructor(
                     is AppResult.Success -> {
                         val conv = result.data
                         _conversation.value = conv
+                        _lifetime.value = conv.disappearingMessages
 
                         if (conv.peerBurnedAt != null) {
                             _peerBurned.value = true
@@ -252,6 +278,16 @@ class MessagingViewModel @Inject constructor(
                 _conversation.value = result.updatedConversation
                 sendAck(received.id)
             }
+            is ReceiveMessageResult.DeleteRequest -> {
+                // Only the peer's own messages: ours are outgoing
+                _conversation.value = result.updatedConversation
+                removeMessages { !it.isOutgoing && it.sequence == result.sequence }
+                sendAck(received.id)
+            }
+            is ReceiveMessageResult.Ignored -> {
+                _conversation.value = result.updatedConversation
+                sendAck(received.id)
+            }
             is ReceiveMessageResult.Skipped -> {
                 Log.d(TAG, "[$logId] Message skipped: ${result.reason}")
             }
@@ -354,7 +390,8 @@ class MessagingViewModel @Inject constructor(
                 )
                 _messages.value = _messages.value + optimisticMessage
 
-                when (val result = sendMessageUseCase(conv, content)) {
+                val lifetimeSeconds = if (content is MessageContent.Text) _lifetime.value.seconds else null
+                when (val result = sendMessageUseCase(conv, content, lifetimeSeconds)) {
                     is AppResult.Success -> {
                         val sendResult = result.data
                         // Track for SSE filtering
@@ -371,8 +408,7 @@ class MessagingViewModel @Inject constructor(
                         }
 
                         // Update conversation state
-                        val updatedConv = conv.afterSending(MessageContent.toBytes(content).size.toLong())
-                        _conversation.value = updatedConv
+                        _conversation.value = sendResult.updatedConversation
 
                         Log.i(TAG, "[$logId] Message sent: blobId=${sendResult.blobId.take(8)}")
                     }
@@ -394,6 +430,58 @@ class MessagingViewModel @Inject constructor(
                 Log.e(TAG, "[$logId] Send exception: ${e.message}", e)
             } finally {
                 _isSending.value = false
+            }
+        }
+    }
+
+    // Deletion
+
+    /** Remove the message from this phone only, and wipe its pad bytes. */
+    fun deleteForMe(message: Message) {
+        removeMessages { it.id == message.id }
+    }
+
+    /** Only the author can ask the other phone to delete a message; a failed request can be retried. */
+    fun canDeleteForEveryone(message: Message): Boolean =
+        message.isOutgoing && message.sequence != null &&
+            (message.status == DeliveryStatus.SENT || message.status == DeliveryStatus.DELIVERED)
+
+    /**
+     * A request: a modified app or an earlier screenshot can keep the message.
+     * The message stays until the relay accepts the request.
+     */
+    fun deleteForEveryone(message: Message) {
+        val sequence = message.sequence ?: return
+        if (!canDeleteForEveryone(message)) return
+        viewModelScope.launch {
+            val conv = _conversation.value ?: return@launch
+            when (val result = sendMessageUseCase.deleteForEveryone(conv, sequence)) {
+                is AppResult.Success -> {
+                    _conversation.value = result.data
+                    _deleteFailedIds.value = _deleteFailedIds.value - message.id
+                    deleteForMe(message)
+                }
+                is AppResult.Error -> {
+                    // A new attempt uses new pad bytes: nothing is reused
+                    _deleteFailedIds.value = _deleteFailedIds.value + message.id
+                    _error.value = result.error.message
+                }
+            }
+        }
+    }
+
+    private fun removeMessages(predicate: (Message) -> Boolean) {
+        val removed = _messages.value.filter(predicate)
+        if (removed.isEmpty()) return
+        _messages.value = _messages.value.filterNot(predicate)
+        // Zero exactly the bytes these messages used, so a later pad
+        // compromise cannot decrypt them; wiping more could zero the key of a
+        // message not decrypted yet
+        viewModelScope.launch {
+            removed.forEach { message ->
+                val sequence = message.sequence ?: return@forEach
+                val length = message.padLength ?: return@forEach
+                padRepository.zeroPadBytes(conversationId, sequence, length.toInt())
             }
         }
     }

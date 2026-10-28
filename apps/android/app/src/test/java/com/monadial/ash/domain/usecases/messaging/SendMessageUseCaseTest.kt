@@ -19,6 +19,7 @@ import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
+import org.junit.jupiter.api.Assumptions.assumeTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
@@ -62,7 +63,7 @@ class SendMessageUseCaseTest {
             coEvery { padRepository.consumeForSending(any(), any(), any()) } returns AppResult.Success(
                 ByteArray(13) { 0xFF.toByte() }
             )
-            every { cryptoService.encrypt(any(), any()) } returns ByteArray(13) { 0xAA.toByte() }
+            every { cryptoService.encryptAuthenticated(any(), any(), any(), any()) } returns ByteArray(13) { 0xAA.toByte() }
             coEvery { conversationRepository.saveConversation(any()) } returns AppResult.Success(Unit)
             coEvery { relayService.submitMessage(any(), any(), any(), any(), any(), any(), any(), any(), any()) } returns
                 AppResult.Success(SendResult(success = true, blobId = expectedBlobId))
@@ -104,7 +105,7 @@ class SendMessageUseCaseTest {
             coEvery { padRepository.consumeForSending(any(), any(), any()) } returns AppResult.Success(
                 ByteArray(16) { 0xFF.toByte() }
             )
-            every { cryptoService.encrypt(any(), any()) } returns ByteArray(16) { 0xBB.toByte() }
+            every { cryptoService.encryptAuthenticated(any(), any(), any(), any()) } returns ByteArray(16) { 0xBB.toByte() }
             coEvery { conversationRepository.saveConversation(any()) } returns AppResult.Success(Unit)
             coEvery { relayService.submitMessage(any(), any(), any(), any(), any(), any(), any(), any(), any()) } returns
                 AppResult.Success(SendResult(success = true, blobId = expectedBlobId))
@@ -163,7 +164,7 @@ class SendMessageUseCaseTest {
             coEvery { padRepository.canSend(any(), any(), any()) } returns AppResult.Success(true)
             coEvery { padRepository.nextSendOffset(any(), any()) } returns AppResult.Success(0L)
             coEvery { padRepository.consumeForSending(any(), any(), any()) } returns AppResult.Success(ByteArray(12))
-            every { cryptoService.encrypt(any(), any()) } returns ByteArray(12)
+            every { cryptoService.encryptAuthenticated(any(), any(), any(), any()) } returns ByteArray(12)
             coEvery { conversationRepository.saveConversation(any()) } returns AppResult.Success(Unit)
             coEvery { relayService.submitMessage(any(), any(), any(), any(), any(), any(), any(), any(), any()) } returns
                 AppResult.Error(AppError.Network.ConnectionFailed("Network error"))
@@ -187,7 +188,7 @@ class SendMessageUseCaseTest {
             coEvery { padRepository.canSend(any(), any(), any()) } returns AppResult.Success(true)
             coEvery { padRepository.nextSendOffset(any(), any()) } returns AppResult.Success(0L)
             coEvery { padRepository.consumeForSending(any(), any(), any()) } returns AppResult.Success(ByteArray(12))
-            every { cryptoService.encrypt(any(), any()) } returns ByteArray(12)
+            every { cryptoService.encryptAuthenticated(any(), any(), any(), any()) } returns ByteArray(12)
             coEvery { conversationRepository.saveConversation(any()) } returns AppResult.Success(Unit)
             coEvery { relayService.submitMessage(any(), any(), any(), any(), any(), any(), any(), any(), any()) } returns
                 AppResult.Success(SendResult(success = true, blobId = null))
@@ -218,7 +219,7 @@ class SendMessageUseCaseTest {
             coEvery { padRepository.nextSendOffset(any(), any()) } returns AppResult.Success(0L)
             coEvery { padRepository.consumeForSending(any(), any(), any()) } returns
                 AppResult.Success(ByteArray(24) { 0xFF.toByte() })
-            every { cryptoService.encrypt(any(), any()) } returns ByteArray(24) { 0xCC.toByte() }
+            every { cryptoService.encryptAuthenticated(any(), any(), any(), any()) } returns ByteArray(24) { 0xCC.toByte() }
             coEvery { conversationRepository.saveConversation(any()) } returns AppResult.Success(Unit)
             coEvery { relayService.submitMessage(any(), any(), any(), any(), any(), any(), any(), any(), any()) } returns
                 AppResult.Success(SendResult(success = true, blobId = expectedBlobId))
@@ -244,13 +245,21 @@ class SendMessageUseCaseTest {
             // Given
             val conversation = TestFixtures.createConversation(role = ConversationRole.INITIATOR)
             val content = MessageContent.Text("Test")
-            val keyBytes = byteArrayOf(0x01, 0x02, 0x03, 0x04)
+            // 64-byte authentication key, then the 4-byte encryption key
+            val keyBytes = ByteArray(68) { it.toByte() }
             val ciphertext = byteArrayOf(0xAA.toByte(), 0xBB.toByte(), 0xCC.toByte(), 0xDD.toByte())
 
             coEvery { padRepository.canSend(any(), any(), any()) } returns AppResult.Success(true)
             coEvery { padRepository.nextSendOffset(any(), any()) } returns AppResult.Success(0L)
-            coEvery { padRepository.consumeForSending(any(), any(), any()) } returns AppResult.Success(keyBytes)
-            every { cryptoService.encrypt(keyBytes, any()) } returns ciphertext
+            coEvery { padRepository.consumeForSending(any(), 68, any()) } returns AppResult.Success(keyBytes)
+            every {
+                cryptoService.encryptAuthenticated(
+                    keyBytes.copyOfRange(0, 64),
+                    keyBytes.copyOfRange(64, 68),
+                    "Test".encodeToByteArray(),
+                    0x01
+                )
+            } returns ciphertext
             coEvery { conversationRepository.saveConversation(any()) } returns AppResult.Success(Unit)
             coEvery { relayService.submitMessage(any(), any(), ciphertext, any(), any(), any(), any(), any(), any()) } returns
                 AppResult.Success(SendResult(success = true, blobId = "blob-123"))
@@ -261,6 +270,27 @@ class SendMessageUseCaseTest {
             // Then
             assertThat(result.isSuccess).isTrue()
             coVerify { relayService.submitMessage(any(), any(), ciphertext, any(), any(), any(), any(), any(), any()) }
+            assertThat(result.getOrNull()!!.message.padLength).isEqualTo(68L)
+        }
+
+        @Test
+        @DisplayName("should send an expiring text with its lifetime")
+        fun expiringText() = runTest {
+            // The lifetime prefix is encoded by the Rust core
+            assumeTrue(runCatching { uniffi.ash.getMaxGroupMembers() }.isSuccess, "host Rust bindings not built")
+            val conversation = TestFixtures.createConversation(role = ConversationRole.INITIATOR)
+            coEvery { padRepository.canSend(any(), any(), any()) } returns AppResult.Success(true)
+            coEvery { padRepository.nextSendOffset(any(), any()) } returns AppResult.Success(0L)
+            // 64 + 4 bytes of lifetime + 2 bytes of text
+            coEvery { padRepository.consumeForSending(any(), 70, any()) } returns AppResult.Success(ByteArray(70))
+            every { cryptoService.encryptAuthenticated(any(), any(), any(), 0x04) } returns byteArrayOf(1)
+            coEvery { relayService.submitMessage(any(), any(), any(), any(), any(), any(), any(), any(), any()) } returns
+                AppResult.Success(SendResult(success = true, blobId = "blob"))
+
+            val result = useCase(conversation, MessageContent.Text("hi"), lifetimeSeconds = 30)
+
+            assertThat(result.isSuccess).isTrue()
+            assertThat(result.getOrNull()!!.message.expiresAt).isNotNull()
         }
     }
 }
