@@ -21,6 +21,8 @@ final class Dependencies: ObservableObject, @unchecked Sendable {
     let groupRepository: GroupRepository
     /// Decrypted group messages, in memory only
     @MainActor let groupMessageStore: GroupMessageStore
+    /// The single in-memory copy of each group's pads
+    @MainActor let groupSessions: GroupSessions
 
     // MARK: - Message Storage (decoupled via factory pattern)
 
@@ -149,8 +151,10 @@ final class Dependencies: ObservableObject, @unchecked Sendable {
         self.vault = vault
         self.vaultedKeychain = vaulted
         self.conversationRepository = convRepo
-        self.groupRepository = KeychainGroupRepository(keychain: vaulted)
+        let groupRepo = KeychainGroupRepository(keychain: vaulted)
+        self.groupRepository = groupRepo
         self.groupMessageStore = GroupMessageStore()
+        self.groupSessions = GroupSessions(repository: groupRepo)
         self.padManager = padMgr
         self.messageRepositoryFactory = factory
         self.messageStorageService = storageService

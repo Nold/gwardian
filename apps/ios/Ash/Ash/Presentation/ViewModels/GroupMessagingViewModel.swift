@@ -29,17 +29,16 @@ final class GroupMessagingViewModel {
 
     // MARK: - Private
 
-    private var pads: PadGroup?
+    private var sessions: GroupSessions { dependencies.groupSessions }
     private var relay: RelayServiceProtocol?
     private var sseService: SSEService?
     private var sseTask: Task<Void, Never>?
     private var pollTimer: Timer?
     private var expiryTimer: Timer?
     private var isPolling = false
+    /// A wake-up arrived during a poll: poll once more when it ends
+    private var pollAgain = false
     private var hasReregistered = false
-    /// Encrypted frames not yet accepted by the relay, to retry as they are:
-    /// resending the same ciphertext reuses no key
-    private var pendingFrames: [UUID: [UInt8]] = [:]
 
     private var logId: String { String(group.id.prefix(8)) }
 
@@ -59,13 +58,12 @@ final class GroupMessagingViewModel {
 
     var canSend: Bool {
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard isLoaded, !text.isEmpty, let pads else { return false }
-        return pads.canSend(plaintextLength: UInt32(text.utf8.count))
+        guard isLoaded, !text.isEmpty else { return false }
+        return sessions.canSend(length: text.utf8.count, in: group)
     }
 
     var isPadExhausted: Bool {
-        guard isLoaded, let pads else { return false }
-        return !pads.canSend(plaintextLength: 1)
+        isLoaded && !sessions.canSend(length: 1, in: group)
     }
 
     func senderName(_ message: GroupChatMessage) -> String {
@@ -75,16 +73,14 @@ final class GroupMessagingViewModel {
     // MARK: - Lifecycle
 
     func onAppear() async {
-        if pads == nil {
-            do {
-                pads = try dependencies.groupRepository.loadPads(for: group)
-                updateRemaining()
-                isLoaded = true
-            } catch {
-                Log.error(.storage, "[\(logId)] Failed to load group pads: \(error)")
-                loadError = "The pads of this group cannot be read."
-                return
-            }
+        do {
+            try sessions.open(group)
+            isLoaded = true
+            remainingFraction = sessions.remainingFraction(in: group)
+        } catch {
+            Log.error(.storage, "[\(logId)] Failed to load group pads: \(error)")
+            loadError = "The pads of this group cannot be read."
+            return
         }
         refreshMessages()
         startExpiryTimer()
@@ -107,19 +103,19 @@ final class GroupMessagingViewModel {
 
     func send() async {
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard canSend, let pads else { return }
+        guard canSend else { return }
 
         let frame: [UInt8]
         do {
-            frame = try pads.encrypt(msgType: Self.textType, plaintext: Array(text.utf8))
+            // Saved before returning: nothing is sent with unrecorded keys
+            frame = try sessions.encrypt(text, msgType: Self.textType, in: group)
         } catch {
-            Log.error(.crypto, "[\(logId)] Group encryption failed: \(error)")
+            Log.error(.crypto, "[\(logId)] Group message not sent: \(error)")
             dependencies.hapticService.error()
             return
         }
-        // The keys are burned: persist before anything else can fail
-        savePads()
         draft = ""
+        remainingFraction = sessions.remainingFraction(in: group)
         dependencies.hapticService.light()
 
         let message = GroupChatMessage(
@@ -131,20 +127,20 @@ final class GroupMessagingViewModel {
             expiresAt: nil
         )
         dependencies.groupMessageStore.append(message, to: group.id)
+        sessions.setPending(frame, for: message.id, in: group.id)
         refreshMessages()
-        pendingFrames[message.id] = frame
         await submit(message.id)
     }
 
-    /// Send a failed message again, with the same ciphertext.
+    /// Send a failed message again, with the same ciphertext: no key reuse.
     func retry(_ message: GroupChatMessage) async {
-        guard message.status == .failed, pendingFrames[message.id] != nil else { return }
+        guard message.status == .failed, sessions.pendingFrame(message.id, in: group.id) != nil else { return }
         setStatus(.sending, for: message.id)
         await submit(message.id)
     }
 
     private func submit(_ id: UUID) async {
-        guard let frame = pendingFrames[id], let relay else {
+        guard let frame = sessions.pendingFrame(id, in: group.id), let relay else {
             setStatus(.failed, for: id)
             return
         }
@@ -159,7 +155,7 @@ final class GroupMessagingViewModel {
                 persistent: false,
                 sender: group.me
             )
-            pendingFrames[id] = nil
+            sessions.clearPending(id, in: group.id)
             setStatus(.sent, for: id)
         } catch RelayError.conversationNotFound where !hasReregistered {
             hasReregistered = true
@@ -180,75 +176,89 @@ final class GroupMessagingViewModel {
     /// Fetch what the other members sent, decrypt it, then acknowledge it so
     /// the relay can delete it once everyone has it.
     func poll() async {
-        guard let relay, let pads, !isPolling else { return }
+        guard let relay, isLoaded else { return }
+        guard !isPolling else {
+            pollAgain = true
+            return
+        }
         isPolling = true
         defer { isPolling = false }
 
-        let response: PollResponse
-        do {
-            response = try await relay.pollMessages(
-                conversationId: group.id,
-                authToken: group.authToken,
-                cursor: nil,
-                member: group.me
-            )
-        } catch RelayError.conversationNotFound where !hasReregistered {
-            hasReregistered = true
-            _ = await reregister()
-            return
-        } catch {
-            Log.debug(.poll, "[\(logId)] Group poll failed: \(error)")
-            return
-        }
-        guard !response.messages.isEmpty else { return }
-
-        var processed: [UUID] = []
-        var decrypted = false
-        for relayMessage in response.messages {
+        repeat {
+            pollAgain = false
+            let response: PollResponse
             do {
-                let message = try pads.decrypt(frame: [UInt8](relayMessage.ciphertext))
-                decrypted = true
-                processed.append(relayMessage.id)
+                response = try await relay.pollMessages(
+                    conversationId: group.id,
+                    authToken: group.authToken,
+                    cursor: nil,
+                    member: group.me
+                )
+            } catch RelayError.conversationNotFound where !hasReregistered {
+                hasReregistered = true
+                _ = await reregister()
+                return
+            } catch {
+                Log.debug(.poll, "[\(logId)] Group poll failed: \(error)")
+                return
+            }
+            guard !response.messages.isEmpty else { continue }
+            guard let toAck = receive(response.messages) else { return }
+            do {
+                _ = try await relay.ackMessages(
+                    conversationId: group.id,
+                    authToken: group.authToken,
+                    blobIds: toAck,
+                    member: group.me
+                )
+            } catch {
+                Log.debug(.relay, "[\(logId)] Group ack failed: \(error)")
+            }
+        } while pollAgain
+    }
+
+    /// Decrypt, save and show in one stretch with no suspension, so a lock or
+    /// a deletion cannot slip in between. Returns the messages to acknowledge,
+    /// or nil if the pads could not be saved (nothing is shown or acked then).
+    private func receive(_ relayMessages: [RelayMessage]) -> [UUID]? {
+        let outcomes: [GroupReadOutcome]
+        do {
+            outcomes = try sessions.read(relayMessages.map { [UInt8]($0.ciphertext) }, in: group)
+        } catch {
+            Log.warning(.storage, "[\(logId)] Group messages left on the relay: \(error)")
+            return nil
+        }
+        var toAck: [UUID] = []
+        var shown = false
+        let now = Date()
+        for (relayMessage, outcome) in zip(relayMessages, outcomes) {
+            switch outcome {
+            case .message(let message):
+                toAck.append(relayMessage.id)
                 guard message.sender != group.me, message.msgType == Self.textType else { continue }
-                let text = String(decoding: message.plaintext, as: UTF8.self)
-                let now = Date()
                 dependencies.groupMessageStore.append(
                     GroupChatMessage(
                         id: UUID(),
                         sender: message.sender,
-                        text: text,
+                        text: String(decoding: message.plaintext, as: UTF8.self),
                         date: relayMessage.receivedAt,
                         status: .received,
                         expiresAt: group.disappearingMessages.seconds.map { now.addingTimeInterval(TimeInterval($0)) }
                     ),
                     to: group.id
                 )
-            } catch AshError.PadRangeAlreadyUsed {
-                // Already read: acknowledge again so the relay can drop it
-                processed.append(relayMessage.id)
-            } catch {
-                // Unreadable (tampered or damaged): acknowledged so it does
-                // not come back on every poll
-                Log.warning(.crypto, "[\(logId)] Group message rejected: \(error)")
-                processed.append(relayMessage.id)
+                shown = true
+            case .duplicate, .rejected:
+                toAck.append(relayMessage.id)
+            case .keep:
+                Log.warning(.crypto, "[\(logId)] Group message kept on the relay: pad needs repair")
             }
         }
-
-        if decrypted {
-            savePads()
+        if shown {
             dependencies.hapticService.light()
             refreshMessages()
         }
-        do {
-            _ = try await relay.ackMessages(
-                conversationId: group.id,
-                authToken: group.authToken,
-                blobIds: processed,
-                member: group.me
-            )
-        } catch {
-            Log.debug(.relay, "[\(logId)] Group ack failed: \(error)")
-        }
+        return toAck
     }
 
     // MARK: - Connection
@@ -303,22 +313,6 @@ final class GroupMessagingViewModel {
     }
 
     // MARK: - Helpers
-
-    private func savePads() {
-        guard let pads else { return }
-        do {
-            try dependencies.groupRepository.savePads(pads.exportState(), for: group.id)
-        } catch {
-            Log.error(.storage, "[\(logId)] Failed to save group pads: \(error)")
-        }
-        updateRemaining()
-    }
-
-    private func updateRemaining() {
-        guard let own = pads?.exportState().first(where: { $0.member == group.me }), !own.pad.isEmpty else { return }
-        let used = own.used.reduce(UInt64(0)) { $0 + ($1.end - $1.start) }
-        remainingFraction = max(0, 1 - Double(used) / Double(own.pad.count))
-    }
 
     private func setStatus(_ status: GroupChatMessage.Status, for id: UUID) {
         dependencies.groupMessageStore.update(id, in: group.id) { $0.status = status }

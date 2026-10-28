@@ -16,7 +16,7 @@ protocol GroupRepository: Sendable {
     /// Sendable, so they stay on the caller's actor.
     func savePads(_ states: [MemberPadState], for groupId: String) throws
     func loadPads(for group: GroupConversation) throws -> PadGroup
-    func delete(_ groupId: String) async throws
+    func delete(_ groupId: String) throws
 }
 
 enum GroupRepositoryError: Error {
@@ -57,7 +57,7 @@ final class KeychainGroupRepository: GroupRepository, @unchecked Sendable {
         return try PadGroup.restore(me: group.me, states: states)
     }
 
-    func delete(_ groupId: String) async throws {
+    func delete(_ groupId: String) throws {
         try keychain.delete(for: groupPrefix + groupId)
         try keychain.delete(for: padsPrefix + groupId)
     }

@@ -84,7 +84,8 @@ private fun UnlockedApp() {
                     navController.navigate(Screen.Ceremony.route)
                 },
                 onGroupClick = { groupId ->
-                    navController.navigate(Screen.GroupMessaging.createRoute(groupId))
+                    // Single top: a double tap must not open the group twice
+                    navController.navigate(Screen.GroupMessaging.createRoute(groupId)) { launchSingleTop = true }
                 },
                 onNewGroup = {
                     navController.navigate(Screen.GroupCeremony.createRoute(GroupRole.CREATOR))

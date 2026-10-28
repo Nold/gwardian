@@ -152,7 +152,7 @@ final class AppViewModel {
         }
         dependencies.groupMessageStore.clear(group.id)
         do {
-            try await dependencies.groupRepository.delete(group.id)
+            try dependencies.groupSessions.delete(group.id)
         } catch {
             Log.error(.storage, "Group deletion failed for \(group.id.prefix(8)): \(error)")
         }
@@ -253,7 +253,7 @@ final class AppViewModel {
             conversations = []
             selectedConversation = nil
             for group in groups {
-                try? await dependencies.groupRepository.delete(group.id)
+                try? dependencies.groupSessions.delete(group.id)
             }
             dependencies.groupMessageStore.clearAll()
             selectedGroup = nil

@@ -86,7 +86,7 @@ struct GroupRepositoryTests {
         try await repository.save(group)
         try repository.savePads(alice.exportState(), for: group.id)
 
-        try await repository.delete(group.id)
+        try repository.delete(group.id)
         #expect(try await repository.getAll().isEmpty)
         #expect(throws: GroupRepositoryError.self) {
             _ = try repository.loadPads(for: group)

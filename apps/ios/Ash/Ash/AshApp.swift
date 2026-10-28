@@ -112,6 +112,7 @@ struct AshApp: App {
                 if locked {
                     appViewModel = nil
                     dependencies.groupMessageStore.clearAll()
+                    dependencies.groupSessions.lock()
                 }
             }
             .onChange(of: scenePhase) { oldPhase, newPhase in

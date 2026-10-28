@@ -41,6 +41,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import com.monadial.ash.domain.entities.GroupChatMessage
 import com.monadial.ash.ui.viewmodels.GroupMessagingViewModel
 import java.text.DateFormat
@@ -54,6 +55,12 @@ fun GroupMessagingScreen(
     viewModel: GroupMessagingViewModel = hiltViewModel()
 ) {
     var showInfo by remember { mutableStateOf(false) }
+
+    // Poll only while the screen is visible
+    LifecycleResumeEffect(Unit) {
+        viewModel.startPolling()
+        onPauseOrDispose { viewModel.stopPolling() }
+    }
     val state by viewModel.uiState.collectAsState()
     val messages by viewModel.messages.collectAsState()
     val group = state.group

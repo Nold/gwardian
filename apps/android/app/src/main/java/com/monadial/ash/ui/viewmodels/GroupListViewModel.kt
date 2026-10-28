@@ -3,6 +3,8 @@ package com.monadial.ash.ui.viewmodels
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.monadial.ash.data.repositories.GroupRepository
+import com.monadial.ash.data.repositories.GroupSessions
+import com.monadial.ash.domain.entities.GroupMessageStore
 import com.monadial.ash.domain.entities.GroupConversation
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
@@ -14,7 +16,9 @@ import kotlinx.coroutines.launch
 /** Group conversations shown above the two-person conversations. */
 @HiltViewModel
 class GroupListViewModel @Inject constructor(
-    private val groupRepository: GroupRepository
+    private val groupRepository: GroupRepository,
+    private val sessions: GroupSessions,
+    private val store: GroupMessageStore
 ) : ViewModel() {
 
     private val _groups = MutableStateFlow<List<GroupConversation>>(emptyList())
@@ -33,7 +37,8 @@ class GroupListViewModel @Inject constructor(
     /** Delete the group and its pads from this phone only. */
     fun delete(group: GroupConversation) {
         viewModelScope.launch {
-            groupRepository.delete(group.id)
+            runCatching { sessions.delete(group.id) }
+            store.clear(group.id)
             refresh()
         }
     }

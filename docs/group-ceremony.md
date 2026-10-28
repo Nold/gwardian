@@ -67,9 +67,16 @@ relay, with `members` and the chosen retention (`docs/backend-contract.md`).
 
 ## Messaging
 
+- Each app keeps a single in-memory copy of a group's pads (`GroupSessions`)
+  that every screen goes through, so two copies can never send from the same
+  offset or overwrite each other's saved state.
 - A member encrypts with its own pad (`PadGroup::encrypt`) and saves the
-  pad state before sending, so a crash never reuses a key. A message that
+  pad state before sending; if saving fails, nothing is sent. A message that
   fails to reach the relay is sent again with the same ciphertext.
+- Received messages are shown and acknowledged only once the pads are saved;
+  otherwise they stay on the relay. A message the pad cannot read because
+  the pad is damaged (`PadCorrupted`, `UnknownMember`) stays on the relay
+  until its retention ends, in case the pad is repaired.
 - The relay gets the sender's index with each message. A member polls and
   acknowledges with its own index: it never gets its own messages back,
   and the relay deletes a message once every other member acknowledged it
@@ -77,8 +84,10 @@ relay, with `members` and the chosen retention (`docs/backend-contract.md`).
 - Decrypted messages stay in memory only: they are gone when the app quits
   or locks. Disappearing messages are removed the
   chosen time after they arrive.
-- A message already read (`PadRangeAlreadyUsed`) or unreadable is
-  acknowledged anyway, so it does not come back on every poll.
+- A message already read (`PadRangeAlreadyUsed`) or never readable
+  (tampered) is acknowledged anyway, so it does not come back on every poll.
+- Deleting a group or locking the app drops its pads from memory; work still
+  in flight cannot write them back or show messages afterwards.
 
 ## Security level
 

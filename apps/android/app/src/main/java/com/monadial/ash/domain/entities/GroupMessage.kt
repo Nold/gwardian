@@ -33,8 +33,15 @@ class GroupMessageStore @Inject constructor() {
     private val _messages = MutableStateFlow<Map<String, List<GroupChatMessage>>>(emptyMap())
     val messages: StateFlow<Map<String, List<GroupChatMessage>>> = _messages.asStateFlow()
 
-    fun append(groupId: String, message: GroupChatMessage) =
+    /** Bumped by [clearAll]: work started before a lock cannot add messages after it */
+    @Volatile
+    var generation: Long = 0
+        private set
+
+    fun append(groupId: String, message: GroupChatMessage, generation: Long = this.generation) {
+        if (generation != this.generation) return
         _messages.update { it + (groupId to (it[groupId].orEmpty() + message)) }
+    }
 
     fun update(groupId: String, id: String, change: (GroupChatMessage) -> GroupChatMessage) =
         _messages.update { all ->
@@ -50,5 +57,8 @@ class GroupMessageStore @Inject constructor() {
 
     fun clear(groupId: String) = _messages.update { it - groupId }
 
-    fun clearAll() = _messages.update { emptyMap() }
+    fun clearAll() {
+        generation++
+        _messages.update { emptyMap() }
+    }
 }
