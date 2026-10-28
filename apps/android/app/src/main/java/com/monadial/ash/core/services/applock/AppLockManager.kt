@@ -1,12 +1,15 @@
 package com.monadial.ash.core.services.applock
 
 import com.monadial.ash.core.services.ConversationStorageService
+import com.monadial.ash.data.repositories.GroupSessions
+import com.monadial.ash.domain.entities.GroupMessageStore
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 
 /** What the app shows, decided by the app lock (docs/app-lock.md). */
 enum class LockPhase {
@@ -39,7 +42,9 @@ data class AppLockState(
 @Singleton
 class AppLockManager @Inject constructor(
     private val vault: PasscodeVault,
-    private val storage: ConversationStorageService
+    private val storage: ConversationStorageService,
+    private val groupMessages: GroupMessageStore,
+    private val groupSessions: GroupSessions
 ) {
     private val _state = MutableStateFlow(AppLockState(if (vault.isConfigured) LockPhase.LOCKED else LockPhase.SETUP))
     val state: StateFlow<AppLockState> = _state.asStateFlow()
@@ -99,6 +104,10 @@ class AppLockManager @Inject constructor(
         if (_state.value.phase != LockPhase.UNLOCKED) return
         vault.lock()
         storage.clearCache()
+        groupMessages.clearAll()
+        // Waits for any pad operation in flight, which fails anyway once the
+        // vault is locked, then drops the pads from memory
+        groupSessions.scope.launch { groupSessions.lockAll() }
         _state.update { it.copy(phase = LockPhase.LOCKED, errorMessage = null) }
         refresh()
     }

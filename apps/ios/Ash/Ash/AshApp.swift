@@ -109,7 +109,11 @@ struct AshApp: App {
             .animation(.easeInOut(duration: 0.2), value: lockViewModel.phase)
             .onChange(of: lockViewModel.isLocked) { _, locked in
                 // Drop everything read from the vault while locked
-                if locked { appViewModel = nil }
+                if locked {
+                    appViewModel = nil
+                    dependencies.groupMessageStore.clearAll()
+                    dependencies.groupSessions.lock()
+                }
             }
             .onChange(of: scenePhase) { oldPhase, newPhase in
                 switch newPhase {
@@ -226,6 +230,11 @@ struct RootView: View {
                             await viewModel.loadConversations()
                         }
                     )
+                }
+                .navigationDestination(item: $viewModel.selectedGroup) { group in
+                    GroupMessagingDestination(group: group) {
+                        Task { await viewModel.deleteGroup(group) }
+                    }
                 }
         }
         .sheet(isPresented: $viewModel.isShowingCeremony) {

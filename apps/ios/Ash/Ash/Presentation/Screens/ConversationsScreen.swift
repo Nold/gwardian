@@ -164,7 +164,11 @@ struct ConversationsScreen: View {
         ScrollView {
             LazyVStack(spacing: 12) {
                 ForEach(viewModel.groups) { group in
-                    GroupCard(group: group) { groupForInfo = group }
+                    GroupCard(
+                        group: group,
+                        onTap: { viewModel.selectGroup(group) },
+                        onShowInfo: { groupForInfo = group }
+                    )
                 }
                 ForEach(viewModel.conversations) { conversation in
                     ConversationCard(
@@ -373,6 +377,7 @@ private struct ConversationCard: View {
 private struct GroupCard: View {
     let group: GroupConversation
     let onTap: () -> Void
+    let onShowInfo: () -> Void
 
     var body: some View {
         Button(action: onTap) {
@@ -399,6 +404,11 @@ private struct GroupCard: View {
             .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 14))
         }
         .buttonStyle(.plain)
+        .contextMenu {
+            Button(action: onShowInfo) {
+                Label("Group Info", systemImage: "info.circle")
+            }
+        }
     }
 }
 

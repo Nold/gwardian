@@ -15,6 +15,7 @@ import com.monadial.ash.ui.screens.CeremonyScreen
 import com.monadial.ash.ui.screens.ConversationInfoScreen
 import com.monadial.ash.ui.screens.ConversationsScreen
 import com.monadial.ash.ui.screens.GroupCeremonyScreen
+import com.monadial.ash.ui.screens.GroupMessagingScreen
 import com.monadial.ash.ui.screens.LockScreen
 import com.monadial.ash.ui.screens.MessagingScreen
 import com.monadial.ash.ui.screens.PasscodeSetupScreen
@@ -34,6 +35,10 @@ sealed class Screen(val route: String) {
     }
 
     data object Ceremony : Screen("ceremony")
+
+    data object GroupMessaging : Screen("group/{groupId}") {
+        fun createRoute(groupId: String) = "group/$groupId"
+    }
 
     data object GroupCeremony : Screen("group-ceremony/{role}") {
         fun createRoute(role: GroupRole) = "group-ceremony/${role.name}"
@@ -77,6 +82,10 @@ private fun UnlockedApp() {
                 },
                 onNewConversation = {
                     navController.navigate(Screen.Ceremony.route)
+                },
+                onGroupClick = { groupId ->
+                    // Single top: a double tap must not open the group twice
+                    navController.navigate(Screen.GroupMessaging.createRoute(groupId)) { launchSingleTop = true }
                 },
                 onNewGroup = {
                     navController.navigate(Screen.GroupCeremony.createRoute(GroupRole.CREATOR))
@@ -127,6 +136,14 @@ private fun UnlockedApp() {
                 },
                 onCancel = { navController.popBackStack() }
             )
+        }
+
+        composable(
+            route = Screen.GroupMessaging.route,
+            arguments = listOf(navArgument("groupId") { type = NavType.StringType })
+        ) {
+            // The view model reads the group from the navigation argument
+            GroupMessagingScreen(onBack = { navController.popBackStack() })
         }
 
         composable(

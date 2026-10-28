@@ -12,9 +12,11 @@ protocol GroupRepository: Sendable {
     func getAll() async throws -> [GroupConversation]
     func save(_ group: GroupConversation) async throws
     /// Persist after every send and receive (`PadGroup.exportState()`).
-    func savePads(_ states: [MemberPadState], for groupId: String) async throws
-    func loadPads(for group: GroupConversation) async throws -> PadGroup
-    func delete(_ groupId: String) async throws
+    /// Synchronous, like the Keychain: pad state and `PadGroup` are not
+    /// Sendable, so they stay on the caller's actor.
+    func savePads(_ states: [MemberPadState], for groupId: String) throws
+    func loadPads(for group: GroupConversation) throws -> PadGroup
+    func delete(_ groupId: String) throws
 }
 
 enum GroupRepositoryError: Error {
@@ -43,11 +45,11 @@ final class KeychainGroupRepository: GroupRepository, @unchecked Sendable {
         try keychain.store(data: encoder.encode(group), for: groupPrefix + group.id)
     }
 
-    func savePads(_ states: [MemberPadState], for groupId: String) async throws {
+    func savePads(_ states: [MemberPadState], for groupId: String) throws {
         try keychain.store(data: encoder.encode(states.map(StoredMemberPad.init)), for: padsPrefix + groupId)
     }
 
-    func loadPads(for group: GroupConversation) async throws -> PadGroup {
+    func loadPads(for group: GroupConversation) throws -> PadGroup {
         guard let data = try keychain.retrieve(for: padsPrefix + group.id) else {
             throw GroupRepositoryError.padsMissing
         }
@@ -55,7 +57,7 @@ final class KeychainGroupRepository: GroupRepository, @unchecked Sendable {
         return try PadGroup.restore(me: group.me, states: states)
     }
 
-    func delete(_ groupId: String) async throws {
+    func delete(_ groupId: String) throws {
         try keychain.delete(for: groupPrefix + groupId)
         try keychain.delete(for: padsPrefix + groupId)
     }

@@ -67,9 +67,9 @@ struct GroupRepositoryTests {
 
         let first = try alice.encrypt(msgType: 1, plaintext: Array("one".utf8))
         try await repository.save(group)
-        try await repository.savePads(alice.exportState(), for: group.id)
+        try repository.savePads(alice.exportState(), for: group.id)
 
-        let restored = try await repository.loadPads(for: group)
+        let restored = try repository.loadPads(for: group)
         let second = try restored.encrypt(msgType: 1, plaintext: Array("two".utf8))
         #expect(try sam.decrypt(frame: first).plaintext == Array("one".utf8))
         #expect(try sam.decrypt(frame: second).plaintext == Array("two".utf8))
@@ -84,12 +84,12 @@ struct GroupRepositoryTests {
         let (alice, tokens) = try formGroup(me: 0, count: 2)
         let group = sample(id: tokens.conversationId, me: 0)
         try await repository.save(group)
-        try await repository.savePads(alice.exportState(), for: group.id)
+        try repository.savePads(alice.exportState(), for: group.id)
 
-        try await repository.delete(group.id)
+        try repository.delete(group.id)
         #expect(try await repository.getAll().isEmpty)
-        await #expect(throws: GroupRepositoryError.self) {
-            _ = try await repository.loadPads(for: group)
+        #expect(throws: GroupRepositoryError.self) {
+            _ = try repository.loadPads(for: group)
         }
     }
 }

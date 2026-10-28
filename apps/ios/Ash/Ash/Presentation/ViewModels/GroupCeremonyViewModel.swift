@@ -445,7 +445,7 @@ final class GroupCeremonyViewModel {
                 isFamilyConversation: passphrase == nil
             )
 
-            try await dependencies.groupRepository.savePads(group.exportState(), for: conversation.id)
+            try dependencies.groupRepository.savePads(group.exportState(), for: conversation.id)
             try await dependencies.groupRepository.save(conversation)
             register(conversation)
 
