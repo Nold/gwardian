@@ -82,8 +82,9 @@ relay, with `members` and the chosen retention (`docs/backend-contract.md`).
   and the relay deletes a message once every other member acknowledged it
   (`docs/backend-contract.md`).
 - Decrypted messages stay in memory only: they are gone when the app quits
-  or locks. Disappearing messages are removed the
-  chosen time after they arrive.
+  or locks. Each message disappears after the lifetime its author chose, and
+  can be deleted for oneself or, by its author, for everyone
+  (`docs/message-deletion.md`).
 - A message already read (`PadRangeAlreadyUsed`) or never readable
   (tampered) is acknowledged anyway, so it does not come back on every poll.
 - Deleting a group or locking the app drops its pads from memory; work still

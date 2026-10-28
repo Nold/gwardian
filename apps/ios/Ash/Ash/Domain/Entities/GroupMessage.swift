@@ -18,6 +18,9 @@ struct GroupChatMessage: Identifiable, Equatable, Sendable {
     let id: UUID
     /// Member index of the author
     let sender: UInt8
+    /// Where the keys started in the author's pad: identifies the message in
+    /// a delete request
+    let offset: UInt64?
     let text: String
     let date: Date
     var status: Status
@@ -46,12 +49,22 @@ final class GroupMessageStore {
         change(&messagesByGroup[groupId]![index])
     }
 
-    /// Drop disappearing messages whose time is up; returns true if any were.
+    /// Drop disappearing messages whose time is up; returns their ids.
     @discardableResult
-    func removeExpired(in groupId: String, now: Date = Date()) -> Bool {
-        let before = messagesByGroup[groupId]?.count ?? 0
+    func removeExpired(in groupId: String, now: Date = Date()) -> [UUID] {
+        let expired = (messagesByGroup[groupId] ?? []).filter { ($0.expiresAt ?? .distantFuture) <= now }
+        guard !expired.isEmpty else { return [] }
         messagesByGroup[groupId]?.removeAll { ($0.expiresAt ?? .distantFuture) <= now }
-        return (messagesByGroup[groupId]?.count ?? 0) != before
+        return expired.map(\.id)
+    }
+
+    func remove(_ id: UUID, from groupId: String) {
+        messagesByGroup[groupId]?.removeAll { $0.id == id }
+    }
+
+    /// A delete request from `sender`: only that member's own message goes.
+    func remove(sender: UInt8, offset: UInt64, from groupId: String) {
+        messagesByGroup[groupId]?.removeAll { $0.sender == sender && $0.offset == offset }
     }
 
     func clear(_ groupId: String) {

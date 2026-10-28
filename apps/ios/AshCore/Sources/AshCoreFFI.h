@@ -685,6 +685,16 @@ void*_Nonnull uniffi_ash_bindings_fn_func_create_fountain_generator(RustBuffer m
 RustBuffer uniffi_ash_bindings_fn_func_decode_ceremony_payload(RustBuffer payload, RustCallStatus *_Nonnull out_status
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_FUNC_DECODE_DELETE_REQUEST
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_FUNC_DECODE_DELETE_REQUEST
+uint64_t uniffi_ash_bindings_fn_func_decode_delete_request(RustBuffer payload, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_FUNC_DECODE_EXPIRING_TEXT
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_FUNC_DECODE_EXPIRING_TEXT
+RustBuffer uniffi_ash_bindings_fn_func_decode_expiring_text(RustBuffer payload, RustCallStatus *_Nonnull out_status
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_FUNC_DECODE_MEMBER_CARD
 #define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_FUNC_DECODE_MEMBER_CARD
 RustBuffer uniffi_ash_bindings_fn_func_decode_member_card(RustBuffer bytes, RustCallStatus *_Nonnull out_status
@@ -723,6 +733,16 @@ RustBuffer uniffi_ash_bindings_fn_func_derive_conversation_id(RustBuffer pad_byt
 #ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_FUNC_ENCODE_CEREMONY_PAYLOAD
 #define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_FUNC_ENCODE_CEREMONY_PAYLOAD
 RustBuffer uniffi_ash_bindings_fn_func_encode_ceremony_payload(RustBuffer metadata, RustBuffer pad_bytes, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_FUNC_ENCODE_DELETE_REQUEST
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_FUNC_ENCODE_DELETE_REQUEST
+RustBuffer uniffi_ash_bindings_fn_func_encode_delete_request(uint64_t offset, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_FUNC_ENCODE_EXPIRING_TEXT
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_FUNC_ENCODE_EXPIRING_TEXT
+RustBuffer uniffi_ash_bindings_fn_func_encode_expiring_text(uint32_t seconds, RustBuffer text, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_FUNC_ENCODE_MEMBER_CARD
@@ -788,6 +808,11 @@ uint64_t uniffi_ash_bindings_fn_func_get_pad_size_bytes(RustBuffer size, RustCal
 #define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_FUNC_GET_QR_PASSPHRASE_WORD_COUNT
 uint32_t uniffi_ash_bindings_fn_func_get_qr_passphrase_word_count(RustCallStatus *_Nonnull out_status
     
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_FUNC_GROUP_FRAME_OFFSET
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_FUNC_GROUP_FRAME_OFFSET
+uint64_t uniffi_ash_bindings_fn_func_group_frame_offset(RustBuffer frame, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_FN_FUNC_NORMALIZE_QR_PASSPHRASE
@@ -1150,6 +1175,18 @@ uint16_t uniffi_ash_bindings_checksum_func_decode_ceremony_payload(void
     
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_FUNC_DECODE_DELETE_REQUEST
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_FUNC_DECODE_DELETE_REQUEST
+uint16_t uniffi_ash_bindings_checksum_func_decode_delete_request(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_FUNC_DECODE_EXPIRING_TEXT
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_FUNC_DECODE_EXPIRING_TEXT
+uint16_t uniffi_ash_bindings_checksum_func_decode_expiring_text(void
+    
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_FUNC_DECODE_MEMBER_CARD
 #define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_FUNC_DECODE_MEMBER_CARD
 uint16_t uniffi_ash_bindings_checksum_func_decode_member_card(void
@@ -1195,6 +1232,18 @@ uint16_t uniffi_ash_bindings_checksum_func_derive_conversation_id(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_FUNC_ENCODE_CEREMONY_PAYLOAD
 #define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_FUNC_ENCODE_CEREMONY_PAYLOAD
 uint16_t uniffi_ash_bindings_checksum_func_encode_ceremony_payload(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_FUNC_ENCODE_DELETE_REQUEST
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_FUNC_ENCODE_DELETE_REQUEST
+uint16_t uniffi_ash_bindings_checksum_func_encode_delete_request(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_FUNC_ENCODE_EXPIRING_TEXT
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_FUNC_ENCODE_EXPIRING_TEXT
+uint16_t uniffi_ash_bindings_checksum_func_encode_expiring_text(void
     
 );
 #endif
@@ -1267,6 +1316,12 @@ uint16_t uniffi_ash_bindings_checksum_func_get_pad_size_bytes(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_FUNC_GET_QR_PASSPHRASE_WORD_COUNT
 #define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_FUNC_GET_QR_PASSPHRASE_WORD_COUNT
 uint16_t uniffi_ash_bindings_checksum_func_get_qr_passphrase_word_count(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_FUNC_GROUP_FRAME_OFFSET
+#define UNIFFI_FFIDEF_UNIFFI_ASH_BINDINGS_CHECKSUM_FUNC_GROUP_FRAME_OFFSET
+uint16_t uniffi_ash_bindings_checksum_func_group_frame_offset(void
     
 );
 #endif

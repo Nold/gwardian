@@ -12,6 +12,10 @@ import Security
 enum MessageType: UInt8, Sendable {
     case text = 0x01
     case location = 0x02
+    /// Request to delete one of the sender's messages (core::content)
+    case delete = 0x03
+    /// Text with its own lifetime chosen by the sender (core::content)
+    case expiringText = 0x04
 }
 
 /// Result of authenticated decryption

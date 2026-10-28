@@ -49,6 +49,28 @@ namespace ash {
     /// Largest group (members are numbered 0 to 7).
     u8 get_max_group_members();
 
+    // === Message Content (core::content) ===
+
+    /// Payload of a Delete message (type 0x03): the pad offset where the keys
+    /// of the sender's message to delete started
+    sequence<u8> encode_delete_request(u64 offset);
+
+    [Throws=AshError]
+    u64 decode_delete_request(sequence<u8> payload);
+
+    /// Payload of an ExpiringText message (type 0x04): disappears `seconds`
+    /// after it is shown; seconds must be at least 1
+    [Throws=AshError]
+    sequence<u8> encode_expiring_text(u32 seconds, string text);
+
+    [Throws=AshError]
+    ExpiringText decode_expiring_text(sequence<u8> payload);
+
+    /// Pad offset where the keys of an encoded group frame start, to refer
+    /// to a sent message in a later delete request
+    [Throws=AshError]
+    u64 group_frame_offset(sequence<u8> frame);
+
     // === Authenticated Message Operations ===
 
     /// Authentication overhead per message (64 bytes for Wegman-Carter MAC)
@@ -301,6 +323,14 @@ enum AshError {
     "PassphraseRequired",
     /// Group member card is malformed
     "InvalidMemberCard",
+    /// Delete request or expiring text payload is malformed
+    "InvalidContent",
+};
+
+/// Text with its own lifetime, from decode_expiring_text
+dictionary ExpiringText {
+    u32 seconds;
+    string text;
 };
 
 /// Ceremony metadata transferred via QR frame 0
@@ -571,6 +601,9 @@ dictionary MemberPadState {
 /// A verified, decrypted group message.
 dictionary GroupMessage {
     u8 sender;
+    /// Where the keys started in the sender's pad: identifies the message
+    /// in a delete request
+    u64 offset;
     u8 msg_type;
     sequence<u8> plaintext;
     /// Level of the sender's pad, which bounds this message's security

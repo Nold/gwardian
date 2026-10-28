@@ -2752,6 +2752,75 @@ public nonisolated func FfiConverterTypeDecryptedMessage_lower(_ value: Decrypte
 
 
 /**
+ * Text with its own lifetime, from decode_expiring_text
+ */
+public struct ExpiringText {
+    public let seconds: UInt32
+    public let text: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(seconds: UInt32, text: String) {
+        self.seconds = seconds
+        self.text = text
+    }
+}
+
+
+
+extension ExpiringText: Equatable, Hashable {
+    public static func ==(lhs: ExpiringText, rhs: ExpiringText) -> Bool {
+        if lhs.seconds != rhs.seconds {
+            return false
+        }
+        if lhs.text != rhs.text {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(seconds)
+        hasher.combine(text)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeExpiringText: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ExpiringText {
+        return
+            try ExpiringText(
+                seconds: FfiConverterUInt32.read(from: &buf), 
+                text: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ExpiringText, into buf: inout [UInt8]) {
+        FfiConverterUInt32.write(value.seconds, into: &buf)
+        FfiConverterString.write(value.text, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public nonisolated func FfiConverterTypeExpiringText_lift(_ buf: RustBuffer) throws -> ExpiringText {
+    return try FfiConverterTypeExpiringText.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public nonisolated func FfiConverterTypeExpiringText_lower(_ value: ExpiringText) -> RustBuffer {
+    return FfiConverterTypeExpiringText.lower(value)
+}
+
+
+/**
  * Result of fountain ceremony decoding
  */
 public struct FountainCeremonyResult {
@@ -2936,6 +3005,11 @@ public nonisolated func FfiConverterTypeGroupMemberCard_lower(_ value: GroupMemb
  */
 public struct GroupMessage {
     public let sender: UInt8
+    /**
+     * Where the keys started in the sender's pad: identifies the message
+     * in a delete request
+     */
+    public let offset: UInt64
     public let msgType: UInt8
     public let plaintext: [UInt8]
     /**
@@ -2945,11 +3019,16 @@ public struct GroupMessage {
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(sender: UInt8, msgType: UInt8, plaintext: [UInt8], 
+    public init(sender: UInt8, 
+        /**
+         * Where the keys started in the sender's pad: identifies the message
+         * in a delete request
+         */offset: UInt64, msgType: UInt8, plaintext: [UInt8], 
         /**
          * Level of the sender's pad, which bounds this message's security
          */level: SecurityLevel) {
         self.sender = sender
+        self.offset = offset
         self.msgType = msgType
         self.plaintext = plaintext
         self.level = level
@@ -2961,6 +3040,9 @@ public struct GroupMessage {
 extension GroupMessage: Equatable, Hashable {
     public static func ==(lhs: GroupMessage, rhs: GroupMessage) -> Bool {
         if lhs.sender != rhs.sender {
+            return false
+        }
+        if lhs.offset != rhs.offset {
             return false
         }
         if lhs.msgType != rhs.msgType {
@@ -2977,6 +3059,7 @@ extension GroupMessage: Equatable, Hashable {
 
     public func hash(into hasher: inout Hasher) {
         hasher.combine(sender)
+        hasher.combine(offset)
         hasher.combine(msgType)
         hasher.combine(plaintext)
         hasher.combine(level)
@@ -2992,6 +3075,7 @@ public struct FfiConverterTypeGroupMessage: FfiConverterRustBuffer {
         return
             try GroupMessage(
                 sender: FfiConverterUInt8.read(from: &buf), 
+                offset: FfiConverterUInt64.read(from: &buf), 
                 msgType: FfiConverterUInt8.read(from: &buf), 
                 plaintext: FfiConverterSequenceUInt8.read(from: &buf), 
                 level: FfiConverterTypeSecurityLevel.read(from: &buf)
@@ -3000,6 +3084,7 @@ public struct FfiConverterTypeGroupMessage: FfiConverterRustBuffer {
 
     public static func write(_ value: GroupMessage, into buf: inout [UInt8]) {
         FfiConverterUInt8.write(value.sender, into: &buf)
+        FfiConverterUInt64.write(value.offset, into: &buf)
         FfiConverterUInt8.write(value.msgType, into: &buf)
         FfiConverterSequenceUInt8.write(value.plaintext, into: &buf)
         FfiConverterTypeSecurityLevel.write(value.level, into: &buf)
@@ -3474,6 +3559,11 @@ public enum AshError {
      */
     case InvalidMemberCard(message: String)
     
+    /**
+     * Delete request or expiring text payload is malformed
+     */
+    case InvalidContent(message: String)
+    
 }
 
 
@@ -3606,6 +3696,10 @@ public struct FfiConverterTypeAshError: FfiConverterRustBuffer {
             message: try FfiConverterString.read(from: &buf)
         )
         
+        case 30: return .InvalidContent(
+            message: try FfiConverterString.read(from: &buf)
+        )
+        
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -3675,6 +3769,8 @@ public struct FfiConverterTypeAshError: FfiConverterRustBuffer {
             writeInt(&buf, Int32(28))
         case .InvalidMemberCard(_ /* message is ignored*/):
             writeInt(&buf, Int32(29))
+        case .InvalidContent(_ /* message is ignored*/):
+            writeInt(&buf, Int32(30))
 
         
         }
@@ -4535,6 +4631,20 @@ public nonisolated func decodeCeremonyPayload(payload: [UInt8])throws  -> Ceremo
     )
 })
 }
+public nonisolated func decodeDeleteRequest(payload: [UInt8])throws  -> UInt64 {
+    return try  FfiConverterUInt64.lift(try rustCallWithError(FfiConverterTypeAshError.lift) {
+    uniffi_ash_bindings_fn_func_decode_delete_request(
+        FfiConverterSequenceUInt8.lower(payload),$0
+    )
+})
+}
+public nonisolated func decodeExpiringText(payload: [UInt8])throws  -> ExpiringText {
+    return try  FfiConverterTypeExpiringText.lift(try rustCallWithError(FfiConverterTypeAshError.lift) {
+    uniffi_ash_bindings_fn_func_decode_expiring_text(
+        FfiConverterSequenceUInt8.lower(payload),$0
+    )
+})
+}
 public nonisolated func decodeMemberCard(bytes: [UInt8])throws  -> GroupMemberCard {
     return try  FfiConverterTypeGroupMemberCard.lift(try rustCallWithError(FfiConverterTypeAshError.lift) {
     uniffi_ash_bindings_fn_func_decode_member_card(
@@ -4628,6 +4738,29 @@ public nonisolated func encodeCeremonyPayload(metadata: CeremonyMetadata, padByt
     uniffi_ash_bindings_fn_func_encode_ceremony_payload(
         FfiConverterTypeCeremonyMetadata.lower(metadata),
         FfiConverterSequenceUInt8.lower(padBytes),$0
+    )
+})
+}
+/**
+ * Payload of a Delete message (type 0x03): the pad offset where the keys
+ * of the sender's message to delete started
+ */
+public nonisolated func encodeDeleteRequest(offset: UInt64) -> [UInt8] {
+    return try!  FfiConverterSequenceUInt8.lift(try! rustCall() {
+    uniffi_ash_bindings_fn_func_encode_delete_request(
+        FfiConverterUInt64.lower(offset),$0
+    )
+})
+}
+/**
+ * Payload of an ExpiringText message (type 0x04): disappears `seconds`
+ * after it is shown; seconds must be at least 1
+ */
+public nonisolated func encodeExpiringText(seconds: UInt32, text: String)throws  -> [UInt8] {
+    return try  FfiConverterSequenceUInt8.lift(try rustCallWithError(FfiConverterTypeAshError.lift) {
+    uniffi_ash_bindings_fn_func_encode_expiring_text(
+        FfiConverterUInt32.lower(seconds),
+        FfiConverterString.lower(text),$0
     )
 })
 }
@@ -4769,6 +4902,17 @@ public nonisolated func getQrPassphraseWordCount() -> UInt32 {
 })
 }
 /**
+ * Pad offset where the keys of an encoded group frame start, to refer
+ * to a sent message in a later delete request
+ */
+public nonisolated func groupFrameOffset(frame: [UInt8])throws  -> UInt64 {
+    return try  FfiConverterUInt64.lift(try rustCallWithError(FfiConverterTypeAshError.lift) {
+    uniffi_ash_bindings_fn_func_group_frame_offset(
+        FfiConverterSequenceUInt8.lower(frame),$0
+    )
+})
+}
+/**
  * Canonical spelling of a valid passphrase, for display.
  */
 public nonisolated func normalizeQrPassphrase(passphrase: String)throws  -> String {
@@ -4859,6 +5003,12 @@ nonisolated(unsafe) private var initializationResult: InitializationResult = {
     if (uniffi_ash_bindings_checksum_func_decode_ceremony_payload() != 16593) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_ash_bindings_checksum_func_decode_delete_request() != 38409) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ash_bindings_checksum_func_decode_expiring_text() != 11412) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_ash_bindings_checksum_func_decode_member_card() != 63108) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -4881,6 +5031,12 @@ nonisolated(unsafe) private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_ash_bindings_checksum_func_encode_ceremony_payload() != 25007) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ash_bindings_checksum_func_encode_delete_request() != 56926) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ash_bindings_checksum_func_encode_expiring_text() != 64563) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_ash_bindings_checksum_func_encode_member_card() != 62075) {
@@ -4917,6 +5073,9 @@ nonisolated(unsafe) private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_ash_bindings_checksum_func_get_qr_passphrase_word_count() != 25289) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ash_bindings_checksum_func_group_frame_offset() != 18795) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_ash_bindings_checksum_func_normalize_qr_passphrase() != 19981) {

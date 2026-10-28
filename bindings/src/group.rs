@@ -78,6 +78,8 @@ pub struct MemberPadState {
 #[derive(Debug, Clone)]
 pub struct GroupMessage {
     pub sender: u8,
+    /// Where the keys started in the sender's pad.
+    pub offset: u64,
     pub msg_type: u8,
     pub plaintext: Vec<u8>,
     /// Level of the sender's pad, which bounds this message's security.
@@ -237,6 +239,7 @@ impl PadGroup {
             .expect("sender pad exists after successful decryption");
         Ok(GroupMessage {
             sender: frame.sender,
+            offset: frame.offset,
             msg_type: frame.frame.msg_type.to_byte(),
             plaintext,
             level,

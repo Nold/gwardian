@@ -105,6 +105,7 @@
 
 pub mod auth;
 pub mod ceremony;
+pub mod content;
 pub mod crc;
 pub mod error;
 pub mod fountain;

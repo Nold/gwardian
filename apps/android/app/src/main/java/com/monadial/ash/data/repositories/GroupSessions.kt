@@ -87,10 +87,10 @@ class GroupSessions @Inject constructor(
      * are recorded as used. If saving fails the keys stay burned in memory,
      * which is safe, and nothing is sent.
      */
-    suspend fun encrypt(group: GroupConversation, msgType: UByte, text: String): ByteArray = lock.withLock {
+    suspend fun encrypt(group: GroupConversation, msgType: UByte, payload: List<UByte>): ByteArray = lock.withLock {
         withContext(Dispatchers.Default) {
             val pads = padsFor(group)
-            val frame = pads.encrypt(msgType, text.encodeToByteArray().map { it.toUByte() })
+            val frame = pads.encrypt(msgType, payload)
             save(group, pads)
             frame.map { it.toByte() }.toByteArray()
         }

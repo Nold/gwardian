@@ -74,6 +74,8 @@ pub enum AshError {
     PassphraseRequired,
     #[error("Invalid group member card")]
     InvalidMemberCard,
+    #[error("Invalid message content")]
+    InvalidContent,
     #[error("Commitment mismatch")]
     CommitmentMismatch,
     #[error("Decryption failed")]
@@ -117,6 +119,7 @@ impl From<ash_core::Error> for AshError {
             ash_core::Error::PadCorrupted { .. } => AshError::PadCorrupted,
             ash_core::Error::SecurityDowngrade { .. } => AshError::SecurityDowngrade,
             ash_core::Error::InvalidMemberCard { .. } => AshError::InvalidMemberCard,
+            ash_core::Error::InvalidContent { .. } => AshError::InvalidContent,
         }
     }
 }
@@ -629,6 +632,36 @@ pub fn decode_member_card(bytes: Vec<u8>) -> Result<GroupMemberCard, AshError> {
 /// Largest group (members are numbered 0 to 7)
 pub fn get_max_group_members() -> u8 {
     ash_core::group::MAX_MEMBERS
+}
+
+// === Message Content ===
+
+/// Text with its own lifetime
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ExpiringText {
+    pub seconds: u32,
+    pub text: String,
+}
+
+pub fn encode_delete_request(offset: u64) -> Vec<u8> {
+    ash_core::content::encode_delete(offset).to_vec()
+}
+
+pub fn decode_delete_request(payload: Vec<u8>) -> Result<u64, AshError> {
+    Ok(ash_core::content::decode_delete(&payload)?)
+}
+
+pub fn encode_expiring_text(seconds: u32, text: String) -> Result<Vec<u8>, AshError> {
+    Ok(ash_core::content::encode_expiring_text(seconds, &text)?)
+}
+
+pub fn decode_expiring_text(payload: Vec<u8>) -> Result<ExpiringText, AshError> {
+    let (seconds, text) = ash_core::content::decode_expiring_text(&payload)?;
+    Ok(ExpiringText { seconds, text })
+}
+
+pub fn group_frame_offset(frame: Vec<u8>) -> Result<u64, AshError> {
+    Ok(ash_core::group::GroupFrame::decode(&frame)?.offset)
 }
 
 // === Free Functions ===
@@ -1144,5 +1177,44 @@ mod tests {
             Err(AshError::InvalidMemberCard)
         ));
         assert_eq!(get_max_group_members(), 8);
+    }
+
+    #[test]
+    fn test_message_content_round_trip() {
+        assert_eq!(
+            decode_delete_request(encode_delete_request(4242)).unwrap(),
+            4242
+        );
+        assert!(matches!(
+            decode_delete_request(vec![1]),
+            Err(AshError::InvalidContent)
+        ));
+        let expiring =
+            decode_expiring_text(encode_expiring_text(30, "hé".into()).unwrap()).unwrap();
+        assert_eq!(
+            expiring,
+            ExpiringText {
+                seconds: 30,
+                text: "hé".into()
+            }
+        );
+        assert!(matches!(
+            encode_expiring_text(0, "x".into()),
+            Err(AshError::InvalidContent)
+        ));
+    }
+
+    #[test]
+    fn test_group_frame_offset_matches_decrypted_offset() {
+        let pad = |seed: u8| (0..4096u32).map(|i| (i as u8) ^ seed).collect::<Vec<u8>>();
+        let alice = PadGroup::new(0, pad(0), SecurityLevel::Maximum);
+        alice.add_member(1, pad(1), SecurityLevel::Maximum).unwrap();
+        let bob = PadGroup::new(1, pad(1), SecurityLevel::Maximum);
+        bob.add_member(0, pad(0), SecurityLevel::Maximum).unwrap();
+        alice.encrypt(0x01, b"first".to_vec()).unwrap();
+        let frame = alice.encrypt(0x01, b"second".to_vec()).unwrap();
+        let offset = group_frame_offset(frame.clone()).unwrap();
+        assert!(offset > 0);
+        assert_eq!(bob.decrypt(frame).unwrap().offset, offset);
     }
 }

@@ -96,6 +96,12 @@ pub enum MessageType {
     Text = 0x01,
     /// One-shot location (latitude, longitude as fixed-point).
     Location = 0x02,
+    /// Request to delete one of the sender's own earlier messages, by the
+    /// pad offset its keys started at (see [`crate::content`]).
+    Delete = 0x03,
+    /// Text with its own display lifetime chosen by the sender
+    /// (see [`crate::content`]).
+    ExpiringText = 0x04,
 }
 
 impl MessageType {
@@ -104,6 +110,8 @@ impl MessageType {
         match byte {
             0x01 => Some(Self::Text),
             0x02 => Some(Self::Location),
+            0x03 => Some(Self::Delete),
+            0x04 => Some(Self::ExpiringText),
             _ => None,
         }
     }
@@ -616,6 +624,11 @@ mod tests {
     fn message_type_conversion() {
         assert_eq!(MessageType::from_byte(0x01), Some(MessageType::Text));
         assert_eq!(MessageType::from_byte(0x02), Some(MessageType::Location));
+        assert_eq!(MessageType::from_byte(0x03), Some(MessageType::Delete));
+        assert_eq!(
+            MessageType::from_byte(0x04),
+            Some(MessageType::ExpiringText)
+        );
         assert_eq!(MessageType::from_byte(0x00), None);
         assert_eq!(MessageType::from_byte(0xFF), None);
 

@@ -5,13 +5,28 @@
 
 import Foundation
 
+/// What an incoming frame carried
+enum ReceivedContent: Sendable {
+    case message(Message)
+    /// The peer asks to delete its own message with this sequence
+    case deleteRequest(sequence: UInt64)
+    /// Consumed, nothing to show (malformed control content)
+    case ignored
+}
+
+private enum DecodedContent {
+    case message(MessageContent, lifetime: TimeInterval?)
+    case delete(UInt64)
+    case ignored
+}
+
 protocol ReceiveMessageUseCaseProtocol: Sendable {
     func execute(
         ciphertext: Data,
         sequence: UInt64?,
         blobId: UUID,
         in conversation: Conversation
-    ) async throws -> (message: Message, updatedConversation: Conversation)
+    ) async throws -> (received: ReceivedContent, updatedConversation: Conversation)
 }
 
 enum ReceiveMessageError: Error, Sendable {
@@ -43,7 +58,7 @@ final class ReceiveMessageUseCase: ReceiveMessageUseCaseProtocol, Sendable {
         sequence: UInt64?,
         blobId: UUID,
         in conversation: Conversation
-    ) async throws -> (message: Message, updatedConversation: Conversation) {
+    ) async throws -> (received: ReceivedContent, updatedConversation: Conversation) {
         let frameBytes = Array(ciphertext)
 
         // Frame format: [version: 1][type: 1][length: 2][ciphertext: N][tag: 32] = N + 36 bytes overhead
@@ -98,6 +113,27 @@ final class ReceiveMessageUseCase: ReceiveMessageUseCaseProtocol, Sendable {
             throw ReceiveMessageError.decryptionFailed
         }
 
+        // Decode plaintext based on message type from frame, before any state
+        // is committed, so nothing can fail after it. The author chooses each
+        // text's lifetime; plain text does not disappear. Locations keep the
+        // conversation's setting. Malformed control content is consumed and
+        // ignored: it is authenticated, so only a broken peer sends it.
+        let decoded: DecodedContent
+        switch decryptResult.messageType {
+        case .delete:
+            decoded = (try? decodeDeleteRequest(payload: decryptResult.plaintext)).map(DecodedContent.delete) ?? .ignored
+        case .expiringText:
+            if let expiring = try? decodeExpiringText(payload: decryptResult.plaintext) {
+                decoded = .message(.text(expiring.text), lifetime: TimeInterval(expiring.seconds))
+            } else {
+                decoded = .ignored
+            }
+        case .text:
+            decoded = .message(.text(String(decoding: decryptResult.plaintext, as: UTF8.self)), lifetime: nil)
+        case .location:
+            decoded = .message(decodeLocation(decryptResult.plaintext), lifetime: conversation.disappearingMessages.seconds)
+        }
+
         // Calculate peer's consumption and update Rust Pad
         let peerRole: Role = conversation.role == .initiator ? .responder : .initiator
         let peerConsumed = calculatePeerConsumed(
@@ -121,49 +157,40 @@ final class ReceiveMessageUseCase: ReceiveMessageUseCaseProtocol, Sendable {
         try await conversationRepository.save(updatedConversation)
         Log.debug(.crypto, "Conversation state updated")
 
-        // Decode plaintext to content based on message type from frame
-        let content = decodeContent(decryptResult.plaintext, messageType: decryptResult.messageType)
-
-        switch content {
-        case .text:
-            Log.debug(.crypto, "Content type: text")
-        case .location:
-            Log.debug(.crypto, "Content type: location")
+        switch decoded {
+        case .delete(let target):
+            Log.debug(.crypto, "Content type: delete request")
+            return (.deleteRequest(sequence: target), updatedConversation)
+        case .ignored:
+            Log.warning(.crypto, "Malformed message content ignored")
+            return (.ignored, updatedConversation)
+        case .message(let content, let lifetime):
+            // Create the incoming message with the sequence for deduplication
+            var message = Message.incoming(
+                content: content,
+                sequence: offset,
+                disappearingSeconds: lifetime,
+                blobId: blobId,
+                authTag: decryptResult.authTag
+            )
+            message.padLength = UInt64(totalPadConsumption)
+            return (.message(message), updatedConversation)
         }
-
-        // Create the incoming message with the sequence for deduplication
-        let disappearingSeconds = conversation.disappearingMessages.seconds
-        let message = Message.incoming(
-            content: content,
-            sequence: offset,
-            disappearingSeconds: disappearingSeconds,
-            blobId: blobId,
-            authTag: decryptResult.authTag
-        )
-
-        return (message, updatedConversation)
     }
 
-    /// Decode plaintext bytes to MessageContent based on message type
     /// Location messages are prefixed with "LOC:" followed by "lat,lon"
-    private func decodeContent(_ plaintext: [UInt8], messageType: MessageType) -> MessageContent {
+    private func decodeLocation(_ plaintext: [UInt8]) -> MessageContent {
         let text = String(decoding: plaintext, as: UTF8.self)
-
-        switch messageType {
-        case .location:
-            // Parse location: "LOC:lat,lon" or just "lat,lon"
-            let coordString = text.hasPrefix("LOC:") ? String(text.dropFirst(4)) : text
-            let parts = coordString.split(separator: ",")
-            if parts.count == 2,
-               let lat = Double(parts[0]),
-               let lon = Double(parts[1]) {
-                return .location(latitude: lat, longitude: lon)
-            }
-            // Fall back to text if parsing fails
-            return .text(text)
-        case .text:
-            return .text(text)
+        // Parse location: "LOC:lat,lon" or just "lat,lon"
+        let coordString = text.hasPrefix("LOC:") ? String(text.dropFirst(4)) : text
+        let parts = coordString.split(separator: ",")
+        if parts.count == 2,
+           let lat = Double(parts[0]),
+           let lon = Double(parts[1]) {
+            return .location(latitude: lat, longitude: lon)
         }
+        // Fall back to text if parsing fails
+        return .text(text)
     }
 
     /// Calculate how much the peer has consumed based on their message sequence

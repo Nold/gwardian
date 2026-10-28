@@ -26,6 +26,9 @@ final class GroupMessagingViewModel {
     private(set) var remainingFraction: Double = 1
     private(set) var isConnected = false
     var draft = ""
+    /// Lifetime of the next message, chosen by its author; starts at the
+    /// group's setting
+    var lifetime: DisappearingMessages
 
     // MARK: - Private
 
@@ -42,14 +45,17 @@ final class GroupMessagingViewModel {
 
     private var logId: String { String(group.id.prefix(8)) }
 
-    /// Wire type of a text message (core MessageType::Text)
+    /// Wire types (core MessageType)
     private static let textType: UInt8 = 0x01
+    private static let deleteType: UInt8 = 0x03
+    private static let expiringTextType: UInt8 = 0x04
 
     // MARK: - Initialization
 
     init(group: GroupConversation, dependencies: Dependencies) {
         self.group = group
         self.dependencies = dependencies
+        self.lifetime = group.disappearingMessages
         self.relay = dependencies.createRelayService(for: group.relayURL)
         self.sseService = SSEService(baseURLString: group.relayURL)
     }
@@ -59,7 +65,7 @@ final class GroupMessagingViewModel {
     var canSend: Bool {
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard isLoaded, !text.isEmpty else { return false }
-        return sessions.canSend(length: text.utf8.count, in: group)
+        return sessions.canSend(length: text.utf8.count + 4, in: group)
     }
 
     var isPadExhausted: Bool {
@@ -105,10 +111,19 @@ final class GroupMessagingViewModel {
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard canSend else { return }
 
+        let seconds = lifetime.seconds
         let frame: [UInt8]
         do {
+            // The author decides how long the message lives: plain text never
+            // disappears on its own
+            var msgType = Self.textType
+            var payload = Array(text.utf8)
+            if let seconds {
+                msgType = Self.expiringTextType
+                payload = try encodeExpiringText(seconds: UInt32(seconds), text: text)
+            }
             // Saved before returning: nothing is sent with unrecorded keys
-            frame = try sessions.encrypt(text, msgType: Self.textType, in: group)
+            frame = try sessions.encrypt(payload, msgType: msgType, in: group)
         } catch {
             Log.error(.crypto, "[\(logId)] Group message not sent: \(error)")
             dependencies.hapticService.error()
@@ -121,10 +136,11 @@ final class GroupMessagingViewModel {
         let message = GroupChatMessage(
             id: UUID(),
             sender: group.me,
+            offset: try? groupFrameOffset(frame: frame),
             text: text,
             date: Date(),
             status: .sending,
-            expiresAt: nil
+            expiresAt: seconds.map { Date().addingTimeInterval(TimeInterval($0)) }
         )
         dependencies.groupMessageStore.append(message, to: group.id)
         sessions.setPending(frame, for: message.id, in: group.id)
@@ -235,19 +251,38 @@ final class GroupMessagingViewModel {
             switch outcome {
             case .message(let message):
                 toAck.append(relayMessage.id)
-                guard message.sender != group.me, message.msgType == Self.textType else { continue }
-                dependencies.groupMessageStore.append(
-                    GroupChatMessage(
-                        id: UUID(),
-                        sender: message.sender,
-                        text: String(decoding: message.plaintext, as: UTF8.self),
-                        date: relayMessage.receivedAt,
-                        status: .received,
-                        expiresAt: group.disappearingMessages.seconds.map { now.addingTimeInterval(TimeInterval($0)) }
-                    ),
-                    to: group.id
-                )
-                shown = true
+                guard message.sender != group.me else { continue }
+                switch message.msgType {
+                case Self.deleteType:
+                    // Only the author's own message can be deleted this way
+                    if let offset = try? decodeDeleteRequest(payload: message.plaintext) {
+                        dependencies.groupMessageStore.remove(sender: message.sender, offset: offset, from: group.id)
+                        shown = true
+                    }
+                case Self.textType, Self.expiringTextType:
+                    var text = String(decoding: message.plaintext, as: UTF8.self)
+                    var expiresAt: Date?
+                    if message.msgType == Self.expiringTextType {
+                        guard let expiring = try? decodeExpiringText(payload: message.plaintext) else { continue }
+                        text = expiring.text
+                        expiresAt = now.addingTimeInterval(TimeInterval(expiring.seconds))
+                    }
+                    dependencies.groupMessageStore.append(
+                        GroupChatMessage(
+                            id: UUID(),
+                            sender: message.sender,
+                            offset: message.offset,
+                            text: text,
+                            date: relayMessage.receivedAt,
+                            status: .received,
+                            expiresAt: expiresAt
+                        ),
+                        to: group.id
+                    )
+                    shown = true
+                default:
+                    break
+                }
             case .duplicate, .rejected:
                 toAck.append(relayMessage.id)
             case .keep:
@@ -259,6 +294,67 @@ final class GroupMessagingViewModel {
             refreshMessages()
         }
         return toAck
+    }
+
+    // MARK: - Deletion
+
+    /// Remove the message from this phone only.
+    func deleteForMe(_ message: GroupChatMessage) {
+        dependencies.groupMessageStore.remove(message.id, from: group.id)
+        sessions.clearPending(message.id, in: group.id)
+        refreshMessages()
+    }
+
+    /// Only the author can ask the other phones to delete a message. This is
+    /// a request: a modified app or an earlier screenshot can keep it.
+    func canDeleteForEveryone(_ message: GroupChatMessage) -> Bool {
+        message.isOutgoing && message.status == .sent && message.offset != nil
+            && (pendingDeletes[message.id] == nil || deleteFailedIds.contains(message.id))
+    }
+
+    /// Delete requests whose sending failed: offered again
+    private(set) var deleteFailedIds: Set<UUID> = []
+    /// Encrypted delete requests not yet accepted by the relay
+    private var pendingDeletes: [UUID: [UInt8]] = [:]
+
+    func deleteForEveryone(_ message: GroupChatMessage) async {
+        guard canDeleteForEveryone(message), let offset = message.offset, let relay else { return }
+        if pendingDeletes[message.id] == nil {
+            do {
+                pendingDeletes[message.id] = try sessions.encrypt(
+                    encodeDeleteRequest(offset: offset),
+                    msgType: Self.deleteType,
+                    in: group
+                )
+                remainingFraction = sessions.remainingFraction(in: group)
+            } catch {
+                Log.error(.crypto, "[\(logId)] Delete request not encrypted: \(error)")
+                dependencies.hapticService.error()
+                return
+            }
+        }
+        guard let request = pendingDeletes[message.id] else { return }
+        // The message stays until the relay accepts the request; sending the
+        // same ciphertext again reuses no key
+        do {
+            _ = try await relay.submitMessage(
+                conversationId: group.id,
+                authToken: group.authToken,
+                ciphertext: Data(request),
+                sequence: nil,
+                ttlSeconds: group.messageRetention.seconds,
+                extendedTTL: false,
+                persistent: false,
+                sender: group.me
+            )
+            pendingDeletes[message.id] = nil
+            deleteFailedIds.remove(message.id)
+            deleteForMe(message)
+        } catch {
+            Log.warning(.relay, "[\(logId)] Delete request not sent: \(error)")
+            deleteFailedIds.insert(message.id)
+            dependencies.hapticService.error()
+        }
     }
 
     // MARK: - Connection
@@ -324,13 +420,18 @@ final class GroupMessagingViewModel {
     }
 
     private func startExpiryTimer() {
-        guard expiryTimer == nil, group.disappearingMessages.seconds != nil else { return }
+        // Any message can carry its own lifetime, so the timer always runs
+        guard expiryTimer == nil else { return }
         expiryTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 guard let self else { return }
-                if self.dependencies.groupMessageStore.removeExpired(in: self.group.id) {
-                    self.refreshMessages()
+                let expired = self.dependencies.groupMessageStore.removeExpired(in: self.group.id)
+                guard !expired.isEmpty else { return }
+                // An unsent message that expired is never sent
+                for id in expired {
+                    self.sessions.clearPending(id, in: self.group.id)
                 }
+                self.refreshMessages()
             }
         }
     }

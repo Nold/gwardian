@@ -104,6 +104,9 @@ struct Message: Identifiable, Equatable, Hashable, Sendable {
     /// Authentication tag (32 bytes) for message integrity verification display
     /// Present for incoming messages with authenticated encryption
     let authTag: [UInt8]?
+    /// Pad bytes this message used from its sequence (auth key + encryption
+    /// key), to wipe exactly those once it is gone. Nil when unknown.
+    var padLength: UInt64? = nil
 
     // MARK: - Computed Properties
 
@@ -152,14 +155,16 @@ extension Message {
     static func outgoing(
         text: String,
         sequence: UInt64,
-        serverTTLSeconds: TimeInterval = 300
+        serverTTLSeconds: TimeInterval = 300,
+        lifetimeSeconds: UInt32? = nil
     ) -> Message {
         Message(
             id: UUID(),
             content: .text(text),
             timestamp: Date(),
             isOutgoing: true,
-            expiresAt: nil,  // Outgoing messages don't have display expiry until delivered
+            // The author's chosen lifetime applies on this phone too
+            expiresAt: lifetimeSeconds.map { Date().addingTimeInterval(TimeInterval($0)) },
             serverExpiresAt: Date().addingTimeInterval(serverTTLSeconds),
             deliveryStatus: .sending,
             sequence: sequence,
