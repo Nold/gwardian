@@ -83,7 +83,7 @@ jobs:
             exit 1
           fi
 
-      - name: Run pad transfer and app lock tests
+      - name: Run pad transfer, app lock and group tests
         working-directory: apps/ios/Ash
         run: |
           # Without pipefail the step would take tee's exit status and never fail
@@ -137,6 +137,8 @@ jobs:
             -only-testing:AshTests/PasscodeVaultTests \
             -only-testing:AshTests/VaultedKeychainServiceTests \
             -only-testing:AshTests/AppLockViewModelTests \
+            -only-testing:AshTests/GroupRepositoryTests \
+            -only-testing:AshTests/GroupSessionsTests \
             CODE_SIGNING_ALLOWED=NO 2>&1 | tee test.log | grep -E "error:|failed|passed|Test (Suite|Case)" ; then
             msg=$(grep -E "error:|failed|xcodebuild: error" test.log | head -30 \
               | sed -e 's/%/%25/g' -e 's/\r/%0D/g' | sed ':a;N;$!ba;s/\n/%0A/g')
