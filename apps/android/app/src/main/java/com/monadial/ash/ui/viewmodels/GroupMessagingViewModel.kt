@@ -44,7 +44,9 @@ data class GroupMessagingUiState(
     val draftFits: Boolean = false,
     val draft: String = "",
     /** Lifetime of the next message, chosen by its author */
-    val lifetime: DisappearingMessages = DisappearingMessages.OFF
+    val lifetime: DisappearingMessages = DisappearingMessages.OFF,
+    /** Messages whose delete-for-everyone request failed: offered again */
+    val deleteFailedIds: Set<String> = emptySet()
 )
 
 /**
@@ -107,7 +109,8 @@ class GroupMessagingViewModel @Inject constructor(
         // Any message can carry its own lifetime, so expiry always runs
         viewModelScope.launch {
             while (isActive) {
-                store.removeExpired(groupId)
+                // An unsent message that expired is never sent
+                store.removeExpired(groupId).forEach { sessions.clearPending(groupId, it) }
                 delay(1_000)
             }
         }
@@ -325,25 +328,34 @@ class GroupMessagingViewModel @Inject constructor(
         sessions.scope.launch { sessions.clearPending(groupId, message.id) }
     }
 
-    /** Only the author can ask the other phones to delete a message. */
-    fun canDeleteForEveryone(message: GroupChatMessage): Boolean =
-        message.isOutgoing && message.status == GroupChatMessage.Status.SENT && message.offset != null
+    /** Encrypted delete requests not yet accepted by the relay, by message */
+    private val pendingDeletes = java.util.concurrent.ConcurrentHashMap<String, ByteArray>()
 
-    /** A request: a modified app or an earlier screenshot can keep the message. */
+    /** Only the author can ask the other phones to delete a message; a failed request can be retried. */
+    fun canDeleteForEveryone(message: GroupChatMessage): Boolean =
+        message.isOutgoing && message.status == GroupChatMessage.Status.SENT && message.offset != null &&
+            (message.id !in pendingDeletes || message.id in _uiState.value.deleteFailedIds)
+
+    /**
+     * A request: a modified app or an earlier screenshot can keep the message.
+     * The message stays until the relay accepts the request; sending the same
+     * ciphertext again reuses no key.
+     */
     fun deleteForEveryone(message: GroupChatMessage) {
         val group = _uiState.value.group ?: return
         val offset = message.offset ?: return
         if (!canDeleteForEveryone(message)) return
         sessions.scope.launch {
-            val request = try {
-                sessions.encrypt(group, DELETE_TYPE, encodeDeleteRequest(offset.toULong()))
+            val request = pendingDeletes[message.id] ?: try {
+                sessions.encrypt(group, DELETE_TYPE, encodeDeleteRequest(offset.toULong())).also {
+                    pendingDeletes[message.id] = it
+                    refreshPadState(group)
+                }
             } catch (e: Exception) {
-                Log.e(TAG, "Delete request not sent: ${e.message}")
+                Log.e(TAG, "Delete request not encrypted: ${e.message}")
                 return@launch
             }
-            store.remove(group.id, message.id)
-            refreshPadState(group)
-            relayService.submitMessage(
+            val result = relayService.submitMessage(
                 conversationId = group.id,
                 authToken = group.authToken,
                 ciphertext = request,
@@ -351,6 +363,14 @@ class GroupMessagingViewModel @Inject constructor(
                 relayUrl = group.relayUrl,
                 sender = group.me
             )
+            if (result is AppResult.Success) {
+                pendingDeletes.remove(message.id)
+                _uiState.update { it.copy(deleteFailedIds = it.deleteFailedIds - message.id) }
+                store.remove(group.id, message.id)
+            } else {
+                Log.w(TAG, "Delete request not sent")
+                _uiState.update { it.copy(deleteFailedIds = it.deleteFailedIds + message.id) }
+            }
         }
     }
 

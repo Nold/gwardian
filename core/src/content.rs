@@ -23,8 +23,8 @@
 //! ```
 //!
 //! The text disappears `seconds` after it is shown on the receiving phone.
-//! `seconds` must be at least 1; plain `Text` follows the conversation's
-//! setting instead.
+//! `seconds` must be at least 1. Plain `Text` does not disappear on its own:
+//! the author chooses each message's lifetime.
 
 use crate::error::{Error, Result};
 

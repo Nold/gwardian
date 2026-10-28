@@ -39,6 +39,8 @@ struct EncryptedFrame: Sendable {
     let updatedConversation: Conversation
     let ciphertext: Data
     let sequence: UInt64
+    /// Pad bytes used from `sequence`
+    let padLength: UInt64
 }
 
 enum SendMessageError: Error, Sendable {
@@ -77,12 +79,13 @@ final class SendMessageUseCase: SendMessageUseCaseProtocol, Sendable {
 
         // Server uses fixed 5-minute (300s) TTL - use this as initial estimate
         // The actual expiry will be updated from server response via withServerExpiresAt()
-        let message = createOutgoingMessage(
+        var message = createOutgoingMessage(
             for: content,
             sequence: encrypted.sequence,
             ttl: 300,
             lifetime: lifetime
         )
+        message.padLength = encrypted.padLength
 
         return SendMessageResult(
             message: message,
@@ -167,7 +170,8 @@ final class SendMessageUseCase: SendMessageUseCaseProtocol, Sendable {
         return EncryptedFrame(
             updatedConversation: updatedConversation,
             ciphertext: Data(ciphertext),
-            sequence: sequence
+            sequence: sequence,
+            padLength: UInt64(totalPadConsumption)
         )
     }
 

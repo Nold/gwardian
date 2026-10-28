@@ -372,7 +372,9 @@ private struct MessagingContent: View {
                                     onDeleteForMe: { viewModel.deleteForMe(message) },
                                     onDeleteForEveryone: viewModel.canDeleteForEveryone(message)
                                         ? { Task { await viewModel.deleteForEveryone(message) } }
-                                        : nil
+                                        : viewModel.deleteFailedIds.contains(message.id)
+                                            ? { Task { await viewModel.retryDeleteForEveryone(message) } }
+                                            : nil
                                 )
                                 .id(message.id)
                             }

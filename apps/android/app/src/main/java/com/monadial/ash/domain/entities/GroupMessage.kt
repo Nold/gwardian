@@ -50,12 +50,14 @@ class GroupMessageStore @Inject constructor() {
             all + (groupId to all[groupId].orEmpty().map { if (it.id == id) change(it) else it })
         }
 
-    /** Drop disappearing messages whose time is up. */
-    fun removeExpired(groupId: String, now: Long = System.currentTimeMillis()) =
-        _messages.update { all ->
-            val kept = all[groupId].orEmpty().filter { (it.expiresAt ?: Long.MAX_VALUE) > now }
-            if (kept.size == all[groupId]?.size) all else all + (groupId to kept)
-        }
+    /** Drop disappearing messages whose time is up; returns their ids. */
+    fun removeExpired(groupId: String, now: Long = System.currentTimeMillis()): List<String> {
+        val expired = _messages.value[groupId].orEmpty().filter { (it.expiresAt ?: Long.MAX_VALUE) <= now }
+        if (expired.isEmpty()) return emptyList()
+        val ids = expired.map { it.id }.toSet()
+        _messages.update { all -> all + (groupId to all[groupId].orEmpty().filterNot { it.id in ids }) }
+        return ids.toList()
+    }
 
     fun remove(groupId: String, id: String) =
         _messages.update { all -> all + (groupId to all[groupId].orEmpty().filterNot { it.id == id }) }

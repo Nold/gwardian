@@ -10,6 +10,14 @@ enum ReceivedContent: Sendable {
     case message(Message)
     /// The peer asks to delete its own message with this sequence
     case deleteRequest(sequence: UInt64)
+    /// Consumed, nothing to show (malformed control content)
+    case ignored
+}
+
+private enum DecodedContent {
+    case message(MessageContent, lifetime: TimeInterval?)
+    case delete(UInt64)
+    case ignored
 }
 
 protocol ReceiveMessageUseCaseProtocol: Sendable {
@@ -105,6 +113,27 @@ final class ReceiveMessageUseCase: ReceiveMessageUseCaseProtocol, Sendable {
             throw ReceiveMessageError.decryptionFailed
         }
 
+        // Decode plaintext based on message type from frame, before any state
+        // is committed, so nothing can fail after it. The author chooses each
+        // text's lifetime; plain text does not disappear. Locations keep the
+        // conversation's setting. Malformed control content is consumed and
+        // ignored: it is authenticated, so only a broken peer sends it.
+        let decoded: DecodedContent
+        switch decryptResult.messageType {
+        case .delete:
+            decoded = (try? decodeDeleteRequest(payload: decryptResult.plaintext)).map(DecodedContent.delete) ?? .ignored
+        case .expiringText:
+            if let expiring = try? decodeExpiringText(payload: decryptResult.plaintext) {
+                decoded = .message(.text(expiring.text), lifetime: TimeInterval(expiring.seconds))
+            } else {
+                decoded = .ignored
+            }
+        case .text:
+            decoded = .message(.text(String(decoding: decryptResult.plaintext, as: UTF8.self)), lifetime: nil)
+        case .location:
+            decoded = .message(decodeLocation(decryptResult.plaintext), lifetime: conversation.disappearingMessages.seconds)
+        }
+
         // Calculate peer's consumption and update Rust Pad
         let peerRole: Role = conversation.role == .initiator ? .responder : .initiator
         let peerConsumed = calculatePeerConsumed(
@@ -128,38 +157,25 @@ final class ReceiveMessageUseCase: ReceiveMessageUseCaseProtocol, Sendable {
         try await conversationRepository.save(updatedConversation)
         Log.debug(.crypto, "Conversation state updated")
 
-        // Decode plaintext based on message type from frame. The author
-        // chooses each text's lifetime; plain text does not disappear.
-        // Locations keep the conversation's setting.
-        let content: MessageContent
-        let lifetime: TimeInterval?
-        switch decryptResult.messageType {
-        case .delete:
-            let target = try decodeDeleteRequest(payload: decryptResult.plaintext)
+        switch decoded {
+        case .delete(let target):
             Log.debug(.crypto, "Content type: delete request")
             return (.deleteRequest(sequence: target), updatedConversation)
-        case .expiringText:
-            let expiring = try decodeExpiringText(payload: decryptResult.plaintext)
-            content = .text(expiring.text)
-            lifetime = TimeInterval(expiring.seconds)
-        case .text:
-            content = .text(String(decoding: decryptResult.plaintext, as: UTF8.self))
-            lifetime = nil
-        case .location:
-            content = decodeLocation(decryptResult.plaintext)
-            lifetime = conversation.disappearingMessages.seconds
+        case .ignored:
+            Log.warning(.crypto, "Malformed message content ignored")
+            return (.ignored, updatedConversation)
+        case .message(let content, let lifetime):
+            // Create the incoming message with the sequence for deduplication
+            var message = Message.incoming(
+                content: content,
+                sequence: offset,
+                disappearingSeconds: lifetime,
+                blobId: blobId,
+                authTag: decryptResult.authTag
+            )
+            message.padLength = UInt64(totalPadConsumption)
+            return (.message(message), updatedConversation)
         }
-
-        // Create the incoming message with the sequence for deduplication
-        let message = Message.incoming(
-            content: content,
-            sequence: offset,
-            disappearingSeconds: lifetime,
-            blobId: blobId,
-            authTag: decryptResult.authTag
-        )
-
-        return (.message(message), updatedConversation)
     }
 
     /// Location messages are prefixed with "LOC:" followed by "lat,lon"

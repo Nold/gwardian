@@ -309,24 +309,52 @@ final class GroupMessagingViewModel {
     /// a request: a modified app or an earlier screenshot can keep it.
     func canDeleteForEveryone(_ message: GroupChatMessage) -> Bool {
         message.isOutgoing && message.status == .sent && message.offset != nil
+            && (pendingDeletes[message.id] == nil || deleteFailedIds.contains(message.id))
     }
 
+    /// Delete requests whose sending failed: offered again
+    private(set) var deleteFailedIds: Set<UUID> = []
+    /// Encrypted delete requests not yet accepted by the relay
+    private var pendingDeletes: [UUID: [UInt8]] = [:]
+
     func deleteForEveryone(_ message: GroupChatMessage) async {
-        guard canDeleteForEveryone(message), let offset = message.offset else { return }
-        let request: [UInt8]
-        do {
-            request = try sessions.encrypt(encodeDeleteRequest(offset: offset), msgType: Self.deleteType, in: group)
-        } catch {
-            Log.error(.crypto, "[\(logId)] Delete request not sent: \(error)")
-            dependencies.hapticService.error()
-            return
+        guard canDeleteForEveryone(message), let offset = message.offset, let relay else { return }
+        if pendingDeletes[message.id] == nil {
+            do {
+                pendingDeletes[message.id] = try sessions.encrypt(
+                    encodeDeleteRequest(offset: offset),
+                    msgType: Self.deleteType,
+                    in: group
+                )
+                remainingFraction = sessions.remainingFraction(in: group)
+            } catch {
+                Log.error(.crypto, "[\(logId)] Delete request not encrypted: \(error)")
+                dependencies.hapticService.error()
+                return
+            }
         }
-        deleteForMe(message)
-        remainingFraction = sessions.remainingFraction(in: group)
-        // Sent like a message, without a bubble; a failure is felt as a haptic
-        let id = UUID()
-        sessions.setPending(request, for: id, in: group.id)
-        await submit(id)
+        guard let request = pendingDeletes[message.id] else { return }
+        // The message stays until the relay accepts the request; sending the
+        // same ciphertext again reuses no key
+        do {
+            _ = try await relay.submitMessage(
+                conversationId: group.id,
+                authToken: group.authToken,
+                ciphertext: Data(request),
+                sequence: nil,
+                ttlSeconds: group.messageRetention.seconds,
+                extendedTTL: false,
+                persistent: false,
+                sender: group.me
+            )
+            pendingDeletes[message.id] = nil
+            deleteFailedIds.remove(message.id)
+            deleteForMe(message)
+        } catch {
+            Log.warning(.relay, "[\(logId)] Delete request not sent: \(error)")
+            deleteFailedIds.insert(message.id)
+            dependencies.hapticService.error()
+        }
     }
 
     // MARK: - Connection
@@ -397,9 +425,13 @@ final class GroupMessagingViewModel {
         expiryTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 guard let self else { return }
-                if self.dependencies.groupMessageStore.removeExpired(in: self.group.id) {
-                    self.refreshMessages()
+                let expired = self.dependencies.groupMessageStore.removeExpired(in: self.group.id)
+                guard !expired.isEmpty else { return }
+                // An unsent message that expired is never sent
+                for id in expired {
+                    self.sessions.clearPending(id, in: self.group.id)
                 }
+                self.refreshMessages()
             }
         }
     }

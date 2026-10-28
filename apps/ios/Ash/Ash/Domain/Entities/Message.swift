@@ -104,6 +104,9 @@ struct Message: Identifiable, Equatable, Hashable, Sendable {
     /// Authentication tag (32 bytes) for message integrity verification display
     /// Present for incoming messages with authenticated encryption
     let authTag: [UInt8]?
+    /// Pad bytes this message used from its sequence (auth key + encryption
+    /// key), to wipe exactly those once it is gone. Nil when unknown.
+    var padLength: UInt64? = nil
 
     // MARK: - Computed Properties
 

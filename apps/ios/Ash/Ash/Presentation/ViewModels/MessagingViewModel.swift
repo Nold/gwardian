@@ -199,8 +199,11 @@ final class MessagingViewModel {
 
         // Persist messages to repository (survives navigation away from conversation)
         // First clear old messages for this conversation, then save current ones
+        // On disk, only messages that will disappear: a message without a
+        // lifetime would otherwise stay there forever
+        let toDisk = dependencies.messageStorageService.isPersistenceEnabled(for: currentConversation)
         await messageRepository.clear(for: conversation.id)
-        for message in messages {
+        for message in messages where !toDisk || message.expiresAt != nil {
             await messageRepository.addMessage(message, to: conversation.id)
         }
         Log.debug(.storage, "[\(logId)] Persisted \(messages.count) messages on disappear")
@@ -230,7 +233,8 @@ final class MessagingViewModel {
             return
         }
 
-        if !currentConversation.canSendMessage(ofLength: messageBytes) {
+        // An expiring text carries its lifetime in 4 more bytes
+        if !currentConversation.canSendMessage(ofLength: messageBytes + (lifetime.seconds == nil ? 0 : 4)) {
             messageSizeError = L10n.Error.insufficientPad
             dependencies.hapticService.error()
             Log.warning(.message, "[\(logId)] Insufficient pad: need \(messageBytes) bytes, have \(currentConversation.remainingBytes)")
@@ -753,6 +757,8 @@ final class MessagingViewModel {
                 // Only the peer's own messages: ours have sequences in our range
                 Log.info(.message, "[\(logId)] Peer deleted its message seq=\(target)")
                 removeMessages { !$0.isOutgoing && $0.sequence == target }
+            case .ignored:
+                break
             }
 
             try? await dependencies.conversationRepository.save(currentConversation)
@@ -773,9 +779,13 @@ final class MessagingViewModel {
         removeMessages { $0.id == message.id }
     }
 
+    /// Delete requests whose sending failed, shown with a retry action
+    private(set) var deleteFailedIds: Set<UUID> = []
+    private var pendingDeleteRequests: [UUID: EncryptedFrame] = [:]
+
     /// Only the author can ask the other phone to delete a message.
     func canDeleteForEveryone(_ message: Message) -> Bool {
-        guard message.isOutgoing, message.sequence != nil else { return false }
+        guard message.isOutgoing, message.sequence != nil, pendingDeleteRequests[message.id] == nil else { return false }
         switch message.deliveryStatus {
         case .sent, .delivered: return true
         default: return false
@@ -789,10 +799,27 @@ final class MessagingViewModel {
             let request = try await dependencies.sendMessageUseCase.executeDelete(sequence: sequence, in: currentConversation)
             currentConversation = request.updatedConversation
             sentSequences.insert(request.sequence)
-            deleteForMe(message)
-            try await submitDeleteRequest(request)
+            pendingDeleteRequests[message.id] = request
         } catch {
-            Log.error(.message, "[\(logId)] Delete request failed: \(error)")
+            Log.error(.message, "[\(logId)] Delete request not encrypted: \(error)")
+            dependencies.hapticService.error()
+            return
+        }
+        await retryDeleteForEveryone(message)
+    }
+
+    /// Send the encrypted request again if it did not reach the relay; the
+    /// same ciphertext reuses no key. The message stays until it is accepted.
+    func retryDeleteForEveryone(_ message: Message) async {
+        guard let request = pendingDeleteRequests[message.id] else { return }
+        do {
+            try await submitDeleteRequest(request)
+            pendingDeleteRequests[message.id] = nil
+            deleteFailedIds.remove(message.id)
+            deleteForMe(message)
+        } catch {
+            Log.error(.message, "[\(logId)] Delete request not sent: \(error)")
+            deleteFailedIds.insert(message.id)
             dependencies.hapticService.error()
         }
     }
@@ -823,11 +850,13 @@ final class MessagingViewModel {
     private func wipePadBytes(of removed: [Message]) {
         Task {
             for message in removed {
-                guard let sequence = message.sequence else { continue }
+                // Exactly the bytes this message used: wiping more could zero
+                // the key of a message not decrypted yet
+                guard let sequence = message.sequence, let length = message.padLength else { continue }
                 do {
                     try await dependencies.padManager.zeroPadBytes(
                         offset: sequence,
-                        length: UInt64(message.content.byteCount),
+                        length: length,
                         for: conversation.id
                     )
                 } catch {
@@ -876,23 +905,7 @@ final class MessagingViewModel {
 
         // For forward secrecy: zero the pad bytes used by each expired message
         // This ensures even if the pad is later compromised, expired messages can't be decrypted
-        Task {
-            for message in expiredMessages {
-                guard let sequence = message.sequence else { continue }
-                let byteCount = UInt64(message.content.byteCount)
-
-                do {
-                    try await dependencies.padManager.zeroPadBytes(
-                        offset: sequence,
-                        length: byteCount,
-                        for: conversation.id
-                    )
-                } catch {
-                    // Don't fail the prune if zeroing fails (pad might be gone)
-                    Log.warning(.crypto, "[\(logId)] Failed to zero pad bytes for expired message: \(error)")
-                }
-            }
-        }
+        wipePadBytes(of: expiredMessages)
 
         // Mark expired messages as wiped (keep in UI but show as "expired")
         let expiredIds = Set(expiredMessages.map(\.id))
