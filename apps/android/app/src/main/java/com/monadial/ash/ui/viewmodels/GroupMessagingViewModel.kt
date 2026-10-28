@@ -334,7 +334,7 @@ class GroupMessagingViewModel @Inject constructor(
     /** Only the author can ask the other phones to delete a message; a failed request can be retried. */
     fun canDeleteForEveryone(message: GroupChatMessage): Boolean =
         message.isOutgoing && message.status == GroupChatMessage.Status.SENT && message.offset != null &&
-            (message.id !in pendingDeletes || message.id in _uiState.value.deleteFailedIds)
+            (!pendingDeletes.containsKey(message.id) || message.id in _uiState.value.deleteFailedIds)
 
     /**
      * A request: a modified app or an earlier screenshot can keep the message.
