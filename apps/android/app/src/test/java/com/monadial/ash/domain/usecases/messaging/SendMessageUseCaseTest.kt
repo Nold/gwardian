@@ -64,7 +64,7 @@ class SendMessageUseCaseTest {
             )
             every { cryptoService.encrypt(any(), any()) } returns ByteArray(13) { 0xAA.toByte() }
             coEvery { conversationRepository.saveConversation(any()) } returns AppResult.Success(Unit)
-            coEvery { relayService.submitMessage(any(), any(), any(), any(), any(), any(), any(), any()) } returns
+            coEvery { relayService.submitMessage(any(), any(), any(), any(), any(), any(), any(), any(), any()) } returns
                 AppResult.Success(SendResult(success = true, blobId = expectedBlobId))
 
             // When
@@ -106,7 +106,7 @@ class SendMessageUseCaseTest {
             )
             every { cryptoService.encrypt(any(), any()) } returns ByteArray(16) { 0xBB.toByte() }
             coEvery { conversationRepository.saveConversation(any()) } returns AppResult.Success(Unit)
-            coEvery { relayService.submitMessage(any(), any(), any(), any(), any(), any(), any(), any()) } returns
+            coEvery { relayService.submitMessage(any(), any(), any(), any(), any(), any(), any(), any(), any()) } returns
                 AppResult.Success(SendResult(success = true, blobId = expectedBlobId))
 
             // When
@@ -165,7 +165,7 @@ class SendMessageUseCaseTest {
             coEvery { padRepository.consumeForSending(any(), any(), any()) } returns AppResult.Success(ByteArray(12))
             every { cryptoService.encrypt(any(), any()) } returns ByteArray(12)
             coEvery { conversationRepository.saveConversation(any()) } returns AppResult.Success(Unit)
-            coEvery { relayService.submitMessage(any(), any(), any(), any(), any(), any(), any(), any()) } returns
+            coEvery { relayService.submitMessage(any(), any(), any(), any(), any(), any(), any(), any(), any()) } returns
                 AppResult.Error(AppError.Network.ConnectionFailed("Network error"))
 
             // When
@@ -189,7 +189,7 @@ class SendMessageUseCaseTest {
             coEvery { padRepository.consumeForSending(any(), any(), any()) } returns AppResult.Success(ByteArray(12))
             every { cryptoService.encrypt(any(), any()) } returns ByteArray(12)
             coEvery { conversationRepository.saveConversation(any()) } returns AppResult.Success(Unit)
-            coEvery { relayService.submitMessage(any(), any(), any(), any(), any(), any(), any(), any()) } returns
+            coEvery { relayService.submitMessage(any(), any(), any(), any(), any(), any(), any(), any(), any()) } returns
                 AppResult.Success(SendResult(success = true, blobId = null))
 
             // When
@@ -220,7 +220,7 @@ class SendMessageUseCaseTest {
                 AppResult.Success(ByteArray(24) { 0xFF.toByte() })
             every { cryptoService.encrypt(any(), any()) } returns ByteArray(24) { 0xCC.toByte() }
             coEvery { conversationRepository.saveConversation(any()) } returns AppResult.Success(Unit)
-            coEvery { relayService.submitMessage(any(), any(), any(), any(), any(), any(), any(), any()) } returns
+            coEvery { relayService.submitMessage(any(), any(), any(), any(), any(), any(), any(), any(), any()) } returns
                 AppResult.Success(SendResult(success = true, blobId = expectedBlobId))
 
             // When
@@ -252,7 +252,7 @@ class SendMessageUseCaseTest {
             coEvery { padRepository.consumeForSending(any(), any(), any()) } returns AppResult.Success(keyBytes)
             every { cryptoService.encrypt(keyBytes, any()) } returns ciphertext
             coEvery { conversationRepository.saveConversation(any()) } returns AppResult.Success(Unit)
-            coEvery { relayService.submitMessage(any(), any(), ciphertext, any(), any(), any(), any(), any()) } returns
+            coEvery { relayService.submitMessage(any(), any(), ciphertext, any(), any(), any(), any(), any(), any()) } returns
                 AppResult.Success(SendResult(success = true, blobId = "blob-123"))
 
             // When
@@ -260,7 +260,7 @@ class SendMessageUseCaseTest {
 
             // Then
             assertThat(result.isSuccess).isTrue()
-            coVerify { relayService.submitMessage(any(), any(), ciphertext, any(), any(), any(), any(), any()) }
+            coVerify { relayService.submitMessage(any(), any(), ciphertext, any(), any(), any(), any(), any(), any()) }
         }
     }
 }

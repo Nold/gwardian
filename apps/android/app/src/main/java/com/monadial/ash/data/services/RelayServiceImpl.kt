@@ -38,7 +38,8 @@ class RelayServiceImpl @Inject constructor(
         ttlSeconds: Long?,
         extendedTTL: Boolean,
         persistent: Boolean,
-        relayUrl: String?
+        relayUrl: String?,
+        sender: Int?
     ): AppResult<SendResult> {
         val result = coreRelayService.submitMessage(
             conversationId = conversationId,
@@ -48,7 +49,8 @@ class RelayServiceImpl @Inject constructor(
             ttlSeconds = ttlSeconds,
             extendedTTL = extendedTTL,
             persistent = persistent,
-            relayUrl = relayUrl
+            relayUrl = relayUrl,
+            sender = sender
         )
         return if (result.success) {
             AppResult.Success(result)
@@ -63,13 +65,15 @@ class RelayServiceImpl @Inject constructor(
         conversationId: String,
         authToken: String,
         cursor: String?,
-        relayUrl: String?
+        relayUrl: String?,
+        member: Int?
     ): AppResult<PollResult> {
         val result = coreRelayService.fetchMessages(
             conversationId = conversationId,
             authToken = authToken,
             cursor = cursor,
-            relayUrl = relayUrl
+            relayUrl = relayUrl,
+            member = member
         )
         return if (result.success) {
             if (result.burned) {
@@ -97,13 +101,15 @@ class RelayServiceImpl @Inject constructor(
         conversationId: String,
         authToken: String,
         blobIds: List<String>,
-        relayUrl: String?
+        relayUrl: String?,
+        member: Int?
     ): AppResult<Int> {
         return coreRelayService.acknowledgeMessages(
             conversationId = conversationId,
             authToken = authToken,
             blobIds = blobIds,
-            relayUrl = relayUrl
+            relayUrl = relayUrl,
+            member = member
         ).toAppResult()
     }
 

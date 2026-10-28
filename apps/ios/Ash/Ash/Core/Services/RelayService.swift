@@ -21,20 +21,26 @@ protocol RelayServiceProtocol: Sendable {
         sequence: UInt64?,
         ttlSeconds: UInt64?,
         extendedTTL: Bool,
-        persistent: Bool
+        persistent: Bool,
+        sender: UInt8?
     ) async throws -> SubmitResult
 
+    /// `member` set for a group: skips this member's own messages and those
+    /// it acknowledged
     func pollMessages(
         conversationId: String,
         authToken: String,
-        cursor: RelayCursor?
+        cursor: RelayCursor?,
+        member: UInt8?
     ) async throws -> PollResponse
 
-    /// Acknowledge message delivery (tells sender we received it)
+    /// Acknowledge message delivery (tells sender we received it). In a
+    /// group, the relay deletes a message once every other member acked it.
     func ackMessages(
         conversationId: String,
         authToken: String,
-        blobIds: [UUID]
+        blobIds: [UUID],
+        member: UInt8?
     ) async throws -> Int
 
     func registerDevice(
@@ -59,6 +65,44 @@ protocol RelayServiceProtocol: Sendable {
 }
 
 extension RelayServiceProtocol {
+    /// Two-person conversations: no sender or member index
+    func submitMessage(
+        conversationId: String,
+        authToken: String,
+        ciphertext: Data,
+        sequence: UInt64?,
+        ttlSeconds: UInt64?,
+        extendedTTL: Bool,
+        persistent: Bool
+    ) async throws -> SubmitResult {
+        try await submitMessage(
+            conversationId: conversationId,
+            authToken: authToken,
+            ciphertext: ciphertext,
+            sequence: sequence,
+            ttlSeconds: ttlSeconds,
+            extendedTTL: extendedTTL,
+            persistent: persistent,
+            sender: nil
+        )
+    }
+
+    func pollMessages(
+        conversationId: String,
+        authToken: String,
+        cursor: RelayCursor?
+    ) async throws -> PollResponse {
+        try await pollMessages(conversationId: conversationId, authToken: authToken, cursor: cursor, member: nil)
+    }
+
+    func ackMessages(
+        conversationId: String,
+        authToken: String,
+        blobIds: [UUID]
+    ) async throws -> Int {
+        try await ackMessages(conversationId: conversationId, authToken: authToken, blobIds: blobIds, member: nil)
+    }
+
     func registerConversation(
         conversationId: String,
         authTokenHash: String,
@@ -178,7 +222,8 @@ final class RelayService: RelayServiceProtocol, Sendable {
         sequence: UInt64?,
         ttlSeconds: UInt64?,
         extendedTTL: Bool,
-        persistent: Bool
+        persistent: Bool,
+        sender: UInt8?
     ) async throws -> SubmitResult {
         let url = baseURL.appendingPathComponent("v1/messages")
         let id = logId(conversationId)
@@ -196,7 +241,8 @@ final class RelayService: RelayServiceProtocol, Sendable {
             sequence: sequence,
             ttlSeconds: ttlSeconds,
             extendedTTL: extendedTTL,
-            persistent: persistent
+            persistent: persistent,
+            sender: sender
         )
         request.httpBody = try encoder.encode(body)
 
@@ -217,12 +263,16 @@ final class RelayService: RelayServiceProtocol, Sendable {
     func pollMessages(
         conversationId: String,
         authToken: String,
-        cursor: RelayCursor?
+        cursor: RelayCursor?,
+        member: UInt8?
     ) async throws -> PollResponse {
         var components = URLComponents(url: baseURL.appendingPathComponent("v1/messages"), resolvingAgainstBaseURL: true)!
         var queryItems = [URLQueryItem(name: "conversation_id", value: conversationId)]
         if let cursor = cursor {
             queryItems.append(URLQueryItem(name: "cursor", value: cursor))
+        }
+        if let member {
+            queryItems.append(URLQueryItem(name: "member", value: String(member)))
         }
         components.queryItems = queryItems
 
@@ -270,7 +320,8 @@ final class RelayService: RelayServiceProtocol, Sendable {
     func ackMessages(
         conversationId: String,
         authToken: String,
-        blobIds: [UUID]
+        blobIds: [UUID],
+        member: UInt8?
     ) async throws -> Int {
         guard !blobIds.isEmpty else { return 0 }
 
@@ -286,7 +337,8 @@ final class RelayService: RelayServiceProtocol, Sendable {
 
         let body = AckMessageRequest(
             conversationId: conversationId,
-            blobIds: blobIds
+            blobIds: blobIds,
+            member: member
         )
         request.httpBody = try encoder.encode(body)
 
@@ -450,13 +502,15 @@ private struct SubmitMessageRequest: Encodable {
     let ttlSeconds: UInt64?
     let extendedTTL: Bool
     let persistent: Bool
+    /// Group member index of the sender; omitted for two-person conversations
+    let sender: UInt8?
 
     enum CodingKeys: String, CodingKey {
         case conversationId = "conversation_id"
         case ciphertext, sequence
         case ttlSeconds = "ttl_seconds"
         case extendedTTL = "extended_ttl"
-        case persistent
+        case persistent, sender
     }
 }
 
@@ -552,10 +606,13 @@ private struct ErrorResponse: Decodable {
 private struct AckMessageRequest: Encodable {
     let conversationId: String
     let blobIds: [UUID]
+    /// Group member acknowledging; omitted for two-person conversations
+    let member: UInt8?
 
     enum CodingKeys: String, CodingKey {
         case conversationId = "conversation_id"
         case blobIds = "blob_ids"
+        case member
     }
 }
 

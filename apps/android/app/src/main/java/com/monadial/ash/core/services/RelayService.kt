@@ -31,7 +31,9 @@ data class SubmitMessageRequest(
     val sequence: Long? = null,
     @SerialName("ttl_seconds") val ttlSeconds: Long? = null,
     @SerialName("extended_ttl") val extendedTTL: Boolean = false,
-    val persistent: Boolean = false
+    val persistent: Boolean = false,
+    /** Group member index of the sender; omitted for two-person conversations */
+    val sender: Int? = null
 )
 
 @Serializable
@@ -40,7 +42,9 @@ data class SubmitMessageResponse(val accepted: Boolean, @SerialName("blob_id") v
 @Serializable
 data class AckMessageRequest(
     @SerialName("conversation_id") val conversationId: String,
-    @SerialName("blob_ids") val blobIds: List<String>
+    @SerialName("blob_ids") val blobIds: List<String>,
+    /** Group member acknowledging; omitted for two-person conversations */
+    val member: Int? = null
 )
 
 @Serializable
@@ -176,7 +180,8 @@ class RelayService @Inject constructor(
         ttlSeconds: Long? = null,
         extendedTTL: Boolean = false,
         persistent: Boolean = false,
-        relayUrl: String? = null
+        relayUrl: String? = null,
+        sender: Int? = null
     ): SendResult {
         val id = logId(conversationId)
         return try {
@@ -192,7 +197,8 @@ class RelayService @Inject constructor(
                     sequence = sequence,
                     ttlSeconds = ttlSeconds,
                     extendedTTL = extendedTTL,
-                    persistent = persistent
+                    persistent = persistent,
+                    sender = sender
                 )
 
             val response: HttpResponse =
@@ -225,7 +231,8 @@ class RelayService @Inject constructor(
         conversationId: String,
         authToken: String,
         cursor: String? = null,
-        relayUrl: String? = null
+        relayUrl: String? = null,
+        member: Int? = null
     ): PollResult {
         val id = logId(conversationId)
         return try {
@@ -235,6 +242,7 @@ class RelayService @Inject constructor(
                     header("Authorization", "Bearer $authToken")
                     parameter("conversation_id", conversationId)
                     cursor?.let { parameter("cursor", it) }
+                    member?.let { parameter("member", it) }
                 }
 
             if (response.status.isSuccess()) {
@@ -288,7 +296,8 @@ class RelayService @Inject constructor(
         conversationId: String,
         authToken: String,
         blobIds: List<String>,
-        relayUrl: String? = null
+        relayUrl: String? = null,
+        member: Int? = null
     ): Result<Int> {
         if (blobIds.isEmpty()) return Result.success(0)
 
@@ -301,7 +310,8 @@ class RelayService @Inject constructor(
             val request =
                 AckMessageRequest(
                     conversationId = conversationId,
-                    blobIds = blobIds
+                    blobIds = blobIds,
+                    member = member
                 )
 
             val response: HttpResponse =

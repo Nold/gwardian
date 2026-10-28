@@ -39,7 +39,9 @@ interface RelayService {
         ttlSeconds: Long? = null,
         extendedTTL: Boolean = false,
         persistent: Boolean = false,
-        relayUrl: String? = null
+        relayUrl: String? = null,
+        /** Group member index of the sender */
+        sender: Int? = null
     ): AppResult<SendResult>
 
     /**
@@ -49,7 +51,9 @@ interface RelayService {
         conversationId: String,
         authToken: String,
         cursor: String? = null,
-        relayUrl: String? = null
+        relayUrl: String? = null,
+        /** Group member polling: skips its own messages and those it acknowledged */
+        member: Int? = null
     ): AppResult<PollResult>
 
     /**
@@ -69,7 +73,9 @@ interface RelayService {
         conversationId: String,
         authToken: String,
         blobIds: List<String>,
-        relayUrl: String? = null
+        relayUrl: String? = null,
+        /** Group member acknowledging */
+        member: Int? = null
     ): AppResult<Int>
 
     // === Conversation Management ===

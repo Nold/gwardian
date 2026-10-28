@@ -65,6 +65,21 @@ then consumed, so they never also serve as message keys: member 0's first
 message starts at offset 160. Every member registers the group with the
 relay, with `members` and the chosen retention (`docs/backend-contract.md`).
 
+## Messaging
+
+- A member encrypts with its own pad (`PadGroup::encrypt`) and saves the
+  pad state before sending, so a crash never reuses a key. A message that
+  fails to reach the relay is sent again with the same ciphertext.
+- The relay gets the sender's index with each message. A member polls and
+  acknowledges with its own index: it never gets its own messages back,
+  and the relay deletes a message once every other member acknowledged it
+  (`docs/backend-contract.md`).
+- Decrypted messages stay in memory only: they are gone when the app quits
+  or locks. Disappearing messages are removed the
+  chosen time after they arrive.
+- A message already read (`PadRangeAlreadyUsed`) or unreadable is
+  acknowledged anyway, so it does not come back on every poll.
+
 ## Security level
 
 Cards travel by QR code only, so every pad is at the 🔴 Maximum level.

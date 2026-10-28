@@ -3,6 +3,8 @@ package com.monadial.ash.ui.screens
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -77,6 +79,7 @@ import java.util.Locale
 fun ConversationsScreen(
     onConversationClick: (String) -> Unit,
     onNewConversation: () -> Unit,
+    onGroupClick: (String) -> Unit,
     onNewGroup: () -> Unit,
     onJoinGroup: () -> Unit,
     onSettingsClick: () -> Unit,
@@ -162,7 +165,11 @@ fun ConversationsScreen(
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     items(groups, key = { "group-" + it.id }) { group ->
-                        GroupCard(group = group, onClick = { groupForInfo = group })
+                        GroupCard(
+                            group = group,
+                            onClick = { onGroupClick(group.id) },
+                            onLongClick = { groupForInfo = group }
+                        )
                     }
                     items(conversations, key = { it.id }) { conversation ->
                         SwipeableConversationCard(
@@ -229,12 +236,15 @@ fun ConversationsScreen(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun GroupCard(group: GroupConversation, onClick: () -> Unit) {
+private fun GroupCard(group: GroupConversation, onClick: () -> Unit, onLongClick: () -> Unit) {
     Card(
-        onClick = onClick,
         shape = RoundedCornerShape(12.dp),
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
     ) {
         Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.Default.Groups, contentDescription = null, tint = Color(group.color.toColorLong()))
@@ -258,7 +268,7 @@ private fun GroupCard(group: GroupConversation, onClick: () -> Unit) {
 
 /** Members and settings; deleting only affects this phone. */
 @Composable
-private fun GroupInfoDialog(group: GroupConversation, onDismiss: () -> Unit, onDelete: () -> Unit) {
+internal fun GroupInfoDialog(group: GroupConversation, onDismiss: () -> Unit, onDelete: () -> Unit) {
     var confirming by remember { mutableStateOf(false) }
     AlertDialog(
         onDismissRequest = onDismiss,

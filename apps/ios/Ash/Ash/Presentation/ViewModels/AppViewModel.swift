@@ -19,6 +19,7 @@ final class AppViewModel {
 
     private(set) var conversations: [Conversation] = []
     private(set) var groups: [GroupConversation] = []
+    var selectedGroup: GroupConversation?
     /// Group ceremony in progress, shown as a sheet
     var groupCeremonyViewModel: GroupCeremonyViewModel?
     var selectedConversation: Conversation?
@@ -124,6 +125,11 @@ final class AppViewModel {
         isShowingCeremony = true
     }
 
+    func selectGroup(_ group: GroupConversation) {
+        dependencies.hapticService.selection()
+        selectedGroup = group
+    }
+
     func startNewGroup(role: GroupCeremonyViewModel.Role) {
         dependencies.hapticService.medium()
         groupCeremonyViewModel = GroupCeremonyViewModel(dependencies: dependencies, role: role)
@@ -135,11 +141,16 @@ final class AppViewModel {
             groups.removeAll { $0.id == group.id }
             groups.insert(group, at: 0)
         }
+        selectedGroup = group
     }
 
     /// Delete the group and its pads from this phone.
     func deleteGroup(_ group: GroupConversation) async {
         dependencies.hapticService.heavy()
+        if selectedGroup?.id == group.id {
+            selectedGroup = nil
+        }
+        dependencies.groupMessageStore.clear(group.id)
         do {
             try await dependencies.groupRepository.delete(group.id)
         } catch {
@@ -244,6 +255,8 @@ final class AppViewModel {
             for group in groups {
                 try? await dependencies.groupRepository.delete(group.id)
             }
+            dependencies.groupMessageStore.clearAll()
+            selectedGroup = nil
             groups = []
         } catch {
             // Handle error

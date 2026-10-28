@@ -1,6 +1,7 @@
 package com.monadial.ash.core.services.applock
 
 import com.monadial.ash.core.services.ConversationStorageService
+import com.monadial.ash.domain.entities.GroupMessageStore
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -39,7 +40,8 @@ data class AppLockState(
 @Singleton
 class AppLockManager @Inject constructor(
     private val vault: PasscodeVault,
-    private val storage: ConversationStorageService
+    private val storage: ConversationStorageService,
+    private val groupMessages: GroupMessageStore
 ) {
     private val _state = MutableStateFlow(AppLockState(if (vault.isConfigured) LockPhase.LOCKED else LockPhase.SETUP))
     val state: StateFlow<AppLockState> = _state.asStateFlow()
@@ -99,6 +101,7 @@ class AppLockManager @Inject constructor(
         if (_state.value.phase != LockPhase.UNLOCKED) return
         vault.lock()
         storage.clearCache()
+        groupMessages.clearAll()
         _state.update { it.copy(phase = LockPhase.LOCKED, errorMessage = null) }
         refresh()
     }
