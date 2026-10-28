@@ -1,18 +1,20 @@
-# ASH
+# Gwardian
 
 Secure, ephemeral messaging for high-security, low-frequency communication.
 
-## What is ASH?
+Gwardian is derived from [ASH](https://github.com/monadial/ash) by Monadial, licensed under the Apache License 2.0 (see `LICENSE.md`).
 
-ASH is a messaging application that uses One-Time Pad (OTP) encryption to provide information-theoretic security. It is designed for situations where confidentiality matters and trust in infrastructure is limited.
+## What is Gwardian?
 
-ASH prioritizes:
+Gwardian is a messaging application that uses One-Time Pad (OTP) encryption to provide information-theoretic security. It is designed for situations where confidentiality matters and trust in infrastructure is limited.
+
+Gwardian prioritizes:
 - Correctness over convenience
 - Human-verifiable security
 - Minimal trust in infrastructure
 - Deliberate user actions
 
-ASH is **not** designed for everyday chat.
+Gwardian is **not** designed for everyday chat.
 
 ## How it works
 
@@ -49,13 +51,13 @@ Note: Android support is planned for future versions.
 
 ## Security Model
 
-ASH provides:
+Gwardian provides:
 - Message confidentiality against network and backend observers
 - Information-theoretic security via One-Time Pad
 - Pad non-reuse enforcement by design
 - Human-verifiable ceremony correctness
 
-ASH does **not** provide:
+Gwardian does **not** provide:
 - Anonymity at the network level
 - Protection against device compromise
 - Protection against malicious participants

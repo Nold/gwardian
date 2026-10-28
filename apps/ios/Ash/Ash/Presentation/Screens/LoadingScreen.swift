@@ -88,7 +88,7 @@ struct AppLogo: View {
 
             if showTitle {
                 // App name
-                Text("ASH")
+                Text("Gwardian")
                     .font(size.titleFont)
                     .foregroundStyle(Color.primary)
                     .tracking(4)

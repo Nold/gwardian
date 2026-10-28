@@ -401,6 +401,19 @@ struct SettingsScreen: View {
                 Divider()
                     .padding(.leading, 56)
 
+                // Apache 2.0 attribution of the project Gwardian is derived from
+                SettingsInfoRow(
+                    icon: "doc.text",
+                    iconColor: .secondary,
+                    title: "Based on",
+                    value: "ASH by Monadial (Apache 2.0)",
+                    isFirst: false,
+                    isLast: false
+                )
+
+                Divider()
+                    .padding(.leading, 56)
+
                 // Security model link
                 NavigationLink {
                     SecurityInfoView()
@@ -409,7 +422,7 @@ struct SettingsScreen: View {
                         icon: "shield.checkered",
                         iconColor: Color.ashSuccess,
                         title: "Security Model",
-                        subtitle: "How ASH protects your messages",
+                        subtitle: "How Gwardian protects your messages",
                         isFirst: false,
                         isLast: false
                     )
@@ -706,7 +719,7 @@ private struct SecurityInfoView: View {
                     Text("Security Model")
                         .font(.title2.bold())
 
-                    Text("How ASH protects your communications")
+                    Text("How Gwardian protects your communications")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }

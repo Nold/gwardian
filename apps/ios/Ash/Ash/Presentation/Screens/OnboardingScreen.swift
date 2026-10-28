@@ -68,7 +68,7 @@ struct OnboardingScreen: View {
         OnboardingPage(
             customImage: "ash_logo",
             iconColor: .ashAccent,
-            title: "Welcome to ASH",
+            title: "Welcome to Gwardian",
             subtitle: "Secure ephemeral messaging with mathematically proven encryption",
             points: [
                 OnboardingPoint(

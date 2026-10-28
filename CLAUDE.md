@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-ASH is a secure, ephemeral messaging application for high-security, low-frequency communication. It uses One-Time Pad (OTP) encryption with no key recovery, no key escrow, and minimal infrastructure trust.
+Gwardian (derived from ASH by Monadial; internal code names still say `ash`) is a secure, ephemeral messaging application for high-security, low-frequency communication. It uses One-Time Pad (OTP) encryption with no key recovery, no key escrow, and minimal infrastructure trust.
 
 ## Repository Structure
 
