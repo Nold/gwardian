@@ -73,6 +73,20 @@ struct GroupMessagingScreen: View {
                             onRetry: { Task { await viewModel.retry(message) } }
                         )
                         .id(message.id)
+                        .contextMenu {
+                            Button(role: .destructive) {
+                                viewModel.deleteForMe(message)
+                            } label: {
+                                Label("Delete for Me", systemImage: "trash")
+                            }
+                            if viewModel.canDeleteForEveryone(message) {
+                                Button(role: .destructive) {
+                                    Task { await viewModel.deleteForEveryone(message) }
+                                } label: {
+                                    Label("Delete for Everyone", systemImage: "trash.slash")
+                                }
+                            }
+                        }
                     }
                 }
                 .padding(.horizontal, Spacing.md)
@@ -94,10 +108,6 @@ struct GroupMessagingScreen: View {
                     .frame(width: 6, height: 6)
                 Text("\(Int(viewModel.remainingFraction * 100)) % of your pad left")
             }
-            if let seconds = viewModel.group.disappearingMessages.seconds {
-                Label("Messages disappear \(viewModel.group.disappearingMessages.displayName.lowercased()) after they arrive", systemImage: "timer")
-                    .accessibilityLabel("Messages disappear after \(seconds) seconds")
-            }
         }
         .font(.caption)
         .foregroundStyle(.secondary)
@@ -106,6 +116,7 @@ struct GroupMessagingScreen: View {
 
     private var inputBar: some View {
         HStack(alignment: .bottom, spacing: Spacing.xs) {
+            LifetimeMenu(lifetime: $viewModel.lifetime, accent: accent)
             TextField("Message", text: $viewModel.draft, axis: .vertical)
                 .lineLimit(1...5)
                 .focused($isInputFocused)
@@ -179,5 +190,27 @@ struct GroupMessagingDestination: View {
 
     var body: some View {
         GroupMessagingScreen(group: group, dependencies: dependencies, onDelete: onDelete)
+    }
+}
+
+/// How long the next message lives on the other phones, chosen by its author.
+struct LifetimeMenu: View {
+    @Binding var lifetime: DisappearingMessages
+    let accent: Color
+
+    var body: some View {
+        Menu {
+            Picker("Message disappears", selection: $lifetime) {
+                ForEach(DisappearingMessages.allCases, id: \.self) { option in
+                    Text(option == .off ? "Never" : option.displayName).tag(option)
+                }
+            }
+        } label: {
+            Image(systemName: lifetime == .off ? "timer" : "timer.circle.fill")
+                .font(.system(size: 24))
+                .foregroundStyle(lifetime == .off ? Color.secondary : accent)
+                .frame(height: 32)
+        }
+        .accessibilityLabel(lifetime == .off ? "Message does not disappear" : "Message disappears after \(lifetime.displayName)")
     }
 }

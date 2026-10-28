@@ -79,9 +79,9 @@ final class GroupSessions {
     /// Encrypt and save before returning: a frame is never sent unless its
     /// keys are recorded as used. If saving fails the keys stay burned in
     /// memory, which is safe, and nothing is sent.
-    func encrypt(_ text: String, msgType: UInt8, in group: GroupConversation) throws -> [UInt8] {
+    func encrypt(_ payload: [UInt8], msgType: UInt8, in group: GroupConversation) throws -> [UInt8] {
         let pads = try pads(for: group)
-        let frame = try pads.encrypt(msgType: msgType, plaintext: Array(text.utf8))
+        let frame = try pads.encrypt(msgType: msgType, plaintext: payload)
         try save(group, pads)
         return frame
     }

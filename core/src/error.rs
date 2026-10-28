@@ -219,6 +219,12 @@ pub enum Error {
         /// What is wrong.
         reason: &'static str,
     },
+
+    /// A delete request or expiring text payload is malformed.
+    InvalidContent {
+        /// What is wrong.
+        reason: &'static str,
+    },
 }
 
 impl fmt::Display for Error {
@@ -336,6 +342,7 @@ impl fmt::Display for Error {
                 )
             }
             Error::InvalidMemberCard { reason } => write!(f, "invalid member card: {}", reason),
+            Error::InvalidContent { reason } => write!(f, "invalid message content: {}", reason),
         }
     }
 }

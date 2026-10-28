@@ -49,8 +49,8 @@ struct GroupSessionsTests {
     @Test func messagesAreReadOnceThenAsDuplicates() throws {
         let sender = try sessions(me: 0)
         let reader = try sessions(me: 1)
-        let first = try sender.encrypt("one", msgType: 1, in: group(me: 0))
-        let second = try sender.encrypt("two", msgType: 1, in: group(me: 0))
+        let first = try sender.encrypt(Array("one".utf8), msgType: 1, in: group(me: 0))
+        let second = try sender.encrypt(Array("two".utf8), msgType: 1, in: group(me: 0))
 
         #expect(try reader.read([first, second], in: group(me: 1)).map(text) == ["one", "two"])
         let again = try reader.read([first], in: group(me: 1))
@@ -61,7 +61,7 @@ struct GroupSessionsTests {
     }
 
     @Test func nothingIsReadWhenThePadsCannotBeSaved() throws {
-        let frame = try sessions(me: 0).encrypt("x", msgType: 1, in: group(me: 0))
+        let frame = try sessions(me: 0).encrypt(Array("x".utf8), msgType: 1, in: group(me: 0))
         let keychain = MockKeychainService()
         let reader = try sessions(me: 1, keychain: keychain)
         try reader.open(group(me: 1))
@@ -79,7 +79,7 @@ struct GroupSessionsTests {
         try sessions.delete("g")
 
         #expect(throws: GroupSessionError.self) {
-            _ = try sessions.encrypt("x", msgType: 1, in: group(me: 0))
+            _ = try sessions.encrypt(Array("x".utf8), msgType: 1, in: group(me: 0))
         }
         #expect(keychain.storedKeys.isEmpty)
     }

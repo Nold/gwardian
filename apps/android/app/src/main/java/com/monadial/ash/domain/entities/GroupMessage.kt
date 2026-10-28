@@ -13,6 +13,8 @@ data class GroupChatMessage(
     val id: String = UUID.randomUUID().toString(),
     /** Member index of the author */
     val sender: Int,
+    /** Where the keys started in the author's pad: identifies it in a delete request */
+    val offset: Long? = null,
     val text: String,
     val timestamp: Long,
     val status: Status,
@@ -54,6 +56,17 @@ class GroupMessageStore @Inject constructor() {
             val kept = all[groupId].orEmpty().filter { (it.expiresAt ?: Long.MAX_VALUE) > now }
             if (kept.size == all[groupId]?.size) all else all + (groupId to kept)
         }
+
+    fun remove(groupId: String, id: String) =
+        _messages.update { all -> all + (groupId to all[groupId].orEmpty().filterNot { it.id == id }) }
+
+    /** A delete request from [sender]: only that member's own message goes. */
+    fun remove(groupId: String, sender: Int, offset: Long, generation: Long = this.generation) {
+        if (generation != this.generation) return
+        _messages.update { all ->
+            all + (groupId to all[groupId].orEmpty().filterNot { it.sender == sender && it.offset == offset })
+        }
+    }
 
     fun clear(groupId: String) = _messages.update { it - groupId }
 

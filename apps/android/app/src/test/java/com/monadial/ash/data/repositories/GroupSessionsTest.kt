@@ -63,8 +63,8 @@ class GroupSessionsTest {
     fun readOnce() = runTest {
         val sender = GroupSessions(repository(0, mutableMapOf()))
         val reader = GroupSessions(repository(1, mutableMapOf()))
-        val first = sender.encrypt(group(0), 1u, "one")
-        val second = sender.encrypt(group(0), 1u, "two")
+        val first = sender.encrypt(group(0), 1u, "one".encodeToByteArray().map { it.toUByte() })
+        val second = sender.encrypt(group(0), 1u, "two".encodeToByteArray().map { it.toUByte() })
 
         assertThat(reader.read(group(1), listOf(first, second)) { it.map(::text) }).containsExactly("one", "two").inOrder()
         assertThat(reader.read(group(1), listOf(first)) { it }).containsExactly(GroupReadOutcome.Duplicate)
@@ -73,7 +73,7 @@ class GroupSessionsTest {
     @Test
     @DisplayName("Nothing is delivered when the pads cannot be saved")
     fun failedSave() = runTest {
-        val frame = GroupSessions(repository(0, mutableMapOf())).encrypt(group(0), 1u, "x")
+        val frame = GroupSessions(repository(0, mutableMapOf())).encrypt(group(0), 1u, "x".encodeToByteArray().map { it.toUByte() })
         var failing = false
         val reader = GroupSessions(repository(1, mutableMapOf()) { failing })
         reader.open(group(1))
@@ -92,7 +92,7 @@ class GroupSessionsTest {
         sessions.open(group(0))
         sessions.delete("g")
 
-        assertThrows<GroupDeletedException> { sessions.encrypt(group(0), 1u, "x") }
+        assertThrows<GroupDeletedException> { sessions.encrypt(group(0), 1u, "x".encodeToByteArray().map { it.toUByte() }) }
         assertThat(saved).doesNotContainKey("g")
     }
 }

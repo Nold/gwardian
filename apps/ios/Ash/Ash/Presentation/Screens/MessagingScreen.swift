@@ -368,7 +368,11 @@ private struct MessagingContent: View {
                                     },
                                     onInfo: {
                                         selectedMessageForInfo = message
-                                    }
+                                    },
+                                    onDeleteForMe: { viewModel.deleteForMe(message) },
+                                    onDeleteForEveryone: viewModel.canDeleteForEveryone(message)
+                                        ? { Task { await viewModel.deleteForEveryone(message) } }
+                                        : nil
                                 )
                                 .id(message.id)
                             }
@@ -394,6 +398,7 @@ private struct MessagingContent: View {
             if !viewModel.peerBurned {
                 MessageInputView(
                     text: $viewModel.messageText,
+                    lifetime: $viewModel.lifetime,
                     isFocused: $isInputFocused,
                     accentColor: accentColor,
                     canSend: viewModel.canSendMessage,
@@ -537,12 +542,24 @@ private struct MessageBubbleView: View {
     let accentColor: Color
     let onRetry: (() -> Void)?
     let onInfo: (() -> Void)?
+    let onDeleteForMe: (() -> Void)?
+    /// Set only for the author's own sent messages
+    let onDeleteForEveryone: (() -> Void)?
 
-    init(message: Message, accentColor: Color, onRetry: (() -> Void)? = nil, onInfo: (() -> Void)? = nil) {
+    init(
+        message: Message,
+        accentColor: Color,
+        onRetry: (() -> Void)? = nil,
+        onInfo: (() -> Void)? = nil,
+        onDeleteForMe: (() -> Void)? = nil,
+        onDeleteForEveryone: (() -> Void)? = nil
+    ) {
         self.message = message
         self.accentColor = accentColor
         self.onRetry = onRetry
         self.onInfo = onInfo
+        self.onDeleteForMe = onDeleteForMe
+        self.onDeleteForEveryone = onDeleteForEveryone
     }
 
     var body: some View {
@@ -575,6 +592,17 @@ private struct MessageBubbleView: View {
                                 Label("Retry", systemImage: "arrow.clockwise")
                             }
                         }
+
+                        if let onDeleteForMe {
+                            Button(role: .destructive, action: onDeleteForMe) {
+                                Label("Delete for Me", systemImage: "trash")
+                            }
+                        }
+                        if let onDeleteForEveryone {
+                            Button(role: .destructive, action: onDeleteForEveryone) {
+                                Label("Delete for Everyone", systemImage: "trash.slash")
+                            }
+                        }
                     }
 
                 // Status row
@@ -583,8 +611,8 @@ private struct MessageBubbleView: View {
                     if message.isAwaitingDelivery, let serverExpiresAt = message.serverExpiresAt {
                         // Sent message waiting for delivery - show server TTL
                         ServerTTLIndicatorView(expiresAt: serverExpiresAt, accentColor: accentColor)
-                    } else if let expiresAt = message.expiresAt, !message.isOutgoing {
-                        // Received message with disappearing timer
+                    } else if let expiresAt = message.expiresAt {
+                        // Disappearing message, with the lifetime its author chose
                         ExpiryIndicatorView(expiresAt: expiresAt, accentColor: accentColor)
                     }
 
@@ -913,6 +941,7 @@ private struct ExpiryIndicatorView: View {
 
 private struct MessageInputView: View {
     @Binding var text: String
+    @Binding var lifetime: DisappearingMessages
     var isFocused: FocusState<Bool>.Binding
     let accentColor: Color
     let canSend: Bool
@@ -976,6 +1005,8 @@ private struct MessageInputView: View {
                 }
                 .disabled(isGettingLocation)
                 .accessibilityLabel("Share location")
+
+                LifetimeMenu(lifetime: $lifetime, accent: accentColor)
 
                 VStack(alignment: .trailing, spacing: 2) {
                     TextField("Message", text: $text, axis: .vertical)

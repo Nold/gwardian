@@ -152,14 +152,16 @@ extension Message {
     static func outgoing(
         text: String,
         sequence: UInt64,
-        serverTTLSeconds: TimeInterval = 300
+        serverTTLSeconds: TimeInterval = 300,
+        lifetimeSeconds: UInt32? = nil
     ) -> Message {
         Message(
             id: UUID(),
             content: .text(text),
             timestamp: Date(),
             isOutgoing: true,
-            expiresAt: nil,  // Outgoing messages don't have display expiry until delivered
+            // The author's chosen lifetime applies on this phone too
+            expiresAt: lifetimeSeconds.map { Date().addingTimeInterval(TimeInterval($0)) },
             serverExpiresAt: Date().addingTimeInterval(serverTTLSeconds),
             deliveryStatus: .sending,
             sequence: sequence,

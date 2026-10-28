@@ -1,6 +1,8 @@
 package com.monadial.ash.ui.screens
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,6 +20,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Timer
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -42,6 +47,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.LifecycleResumeEffect
+import com.monadial.ash.domain.entities.DisappearingMessages
 import com.monadial.ash.domain.entities.GroupChatMessage
 import com.monadial.ash.ui.viewmodels.GroupMessagingViewModel
 import java.text.DateFormat
@@ -99,14 +105,8 @@ fun GroupMessagingScreen(
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text(error) }
                 return@Column
             }
-            val disappearing = group?.disappearingMessages
-            val disappearingNote = if (disappearing?.seconds != null) {
-                " · messages disappear after ${disappearing.displayName.lowercase()}"
-            } else {
-                ""
-            }
             Text(
-                "${(state.remainingFraction * 100).toInt()} % of your pad left$disappearingNote",
+                "${(state.remainingFraction * 100).toInt()} % of your pad left",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier
@@ -124,7 +124,13 @@ fun GroupMessagingScreen(
                         message = message,
                         senderName = group?.nameOf(message.sender) ?: "",
                         accent = accent,
-                        onRetry = { viewModel.retry(message) }
+                        onRetry = { viewModel.retry(message) },
+                        onDeleteForMe = { viewModel.deleteForMe(message) },
+                        onDeleteForEveryone = if (viewModel.canDeleteForEveryone(message)) {
+                            { viewModel.deleteForEveryone(message) }
+                        } else {
+                            null
+                        }
                     )
                 }
             }
@@ -137,6 +143,7 @@ fun GroupMessagingScreen(
                 )
             } else {
                 Row(Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    LifetimeMenu(lifetime = state.lifetime, accent = accent, onSelect = viewModel::setLifetime)
                     OutlinedTextField(
                         value = state.draft,
                         onValueChange = viewModel::setDraft,
@@ -164,11 +171,71 @@ fun GroupMessagingScreen(
     }
 }
 
+/** How long the next message lives on the other phones, chosen by its author. */
 @Composable
-private fun GroupBubble(message: GroupChatMessage, senderName: String, accent: Color, onRetry: () -> Unit) {
+internal fun LifetimeMenu(lifetime: DisappearingMessages, accent: Color, onSelect: (DisappearingMessages) -> Unit) {
+    var expanded by remember { mutableStateOf(false) }
+    Box {
+        IconButton(onClick = { expanded = true }) {
+            Icon(
+                Icons.Default.Timer,
+                contentDescription = if (lifetime == DisappearingMessages.OFF) {
+                    "Message does not disappear"
+                } else {
+                    "Message disappears after ${lifetime.displayName}"
+                },
+                tint = if (lifetime == DisappearingMessages.OFF) MaterialTheme.colorScheme.onSurfaceVariant else accent
+            )
+        }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            DisappearingMessages.entries.forEach { option ->
+                DropdownMenuItem(
+                    text = { Text(if (option == DisappearingMessages.OFF) "Never" else option.displayName) },
+                    onClick = {
+                        onSelect(option)
+                        expanded = false
+                    }
+                )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun GroupBubble(
+    message: GroupChatMessage,
+    senderName: String,
+    accent: Color,
+    onRetry: () -> Unit,
+    onDeleteForMe: () -> Unit,
+    onDeleteForEveryone: (() -> Unit)?
+) {
     val outgoing = message.isOutgoing
+    var menu by remember { mutableStateOf(false) }
     Row(Modifier.fillMaxWidth(), horizontalArrangement = if (outgoing) Arrangement.End else Arrangement.Start) {
-        Column(horizontalAlignment = if (outgoing) Alignment.End else Alignment.Start) {
+        Column(
+            horizontalAlignment = if (outgoing) Alignment.End else Alignment.Start,
+            modifier = Modifier.combinedClickable(onClick = {}, onLongClick = { menu = true })
+        ) {
+            DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                DropdownMenuItem(
+                    text = { Text("Delete for Me") },
+                    onClick = {
+                        menu = false
+                        onDeleteForMe()
+                    }
+                )
+                onDeleteForEveryone?.let { delete ->
+                    DropdownMenuItem(
+                        text = { Text("Delete for Everyone") },
+                        onClick = {
+                            menu = false
+                            delete()
+                        }
+                    )
+                }
+            }
             if (!outgoing) {
                 Text(
                     senderName,

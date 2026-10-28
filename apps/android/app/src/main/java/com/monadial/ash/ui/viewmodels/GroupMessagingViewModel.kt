@@ -9,6 +9,7 @@ import com.monadial.ash.core.common.AppResult
 import com.monadial.ash.data.repositories.GroupReadOutcome
 import com.monadial.ash.data.repositories.GroupRepository
 import com.monadial.ash.data.repositories.GroupSessions
+import com.monadial.ash.domain.entities.DisappearingMessages
 import com.monadial.ash.domain.entities.GroupChatMessage
 import com.monadial.ash.domain.entities.GroupConversation
 import com.monadial.ash.domain.entities.GroupMessageStore
@@ -27,6 +28,11 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import uniffi.ash.decodeDeleteRequest
+import uniffi.ash.decodeExpiringText
+import uniffi.ash.encodeDeleteRequest
+import uniffi.ash.encodeExpiringText
+import uniffi.ash.groupFrameOffset
 
 data class GroupMessagingUiState(
     val group: GroupConversation? = null,
@@ -36,7 +42,9 @@ data class GroupMessagingUiState(
     val remainingFraction: Float = 1f,
     val canSendAny: Boolean = true,
     val draftFits: Boolean = false,
-    val draft: String = ""
+    val draft: String = "",
+    /** Lifetime of the next message, chosen by its author */
+    val lifetime: DisappearingMessages = DisappearingMessages.OFF
 )
 
 /**
@@ -57,8 +65,13 @@ class GroupMessagingViewModel @Inject constructor(
         private const val TAG = "GroupMessagingVM"
         private const val POLL_INTERVAL_MS = 5_000L
 
-        /** Wire type of a text message (core MessageType::Text) */
+        /** Wire types (core MessageType) */
         private const val TEXT_TYPE: UByte = 0x01u
+        private const val DELETE_TYPE: UByte = 0x03u
+        private const val EXPIRING_TEXT_TYPE: UByte = 0x04u
+
+        /** Room for the lifetime in front of an expiring text */
+        private const val LIFETIME_BYTES = 4
     }
 
     private val groupId: String = savedStateHandle.get<String>("groupId").orEmpty()
@@ -83,7 +96,7 @@ class GroupMessagingViewModel @Inject constructor(
             _uiState.update { it.copy(loadError = "This group no longer exists.") }
             return
         }
-        _uiState.update { it.copy(group = group) }
+        _uiState.update { it.copy(group = group, lifetime = group.disappearingMessages) }
         if (runCatching { sessions.open(group) }.isFailure) {
             _uiState.update { it.copy(loadError = "The pads of this group cannot be read.") }
             return
@@ -91,12 +104,11 @@ class GroupMessagingViewModel @Inject constructor(
         _uiState.update { it.copy(isLoaded = true) }
         refreshPadState(group)
         startPolling()
-        if (group.disappearingMessages.seconds != null) {
-            viewModelScope.launch {
-                while (isActive) {
-                    store.removeExpired(groupId)
-                    delay(1_000)
-                }
+        // Any message can carry its own lifetime, so expiry always runs
+        viewModelScope.launch {
+            while (isActive) {
+                store.removeExpired(groupId)
+                delay(1_000)
             }
         }
     }
@@ -124,10 +136,13 @@ class GroupMessagingViewModel @Inject constructor(
         _uiState.update { it.copy(draft = text) }
         val group = _uiState.value.group ?: return
         viewModelScope.launch {
-            val fits = text.isNotBlank() && sessions.canSend(group, text.trim().encodeToByteArray().size)
+            val fits = text.isNotBlank() &&
+                sessions.canSend(group, text.trim().encodeToByteArray().size + LIFETIME_BYTES)
             _uiState.update { if (it.draft == text) it.copy(draftFits = fits) else it }
         }
     }
+
+    fun setLifetime(lifetime: DisappearingMessages) = _uiState.update { it.copy(lifetime = lifetime) }
 
     fun canSend(state: GroupMessagingUiState = _uiState.value): Boolean =
         state.isLoaded && state.draft.isNotBlank() && state.draftFits
@@ -137,23 +152,34 @@ class GroupMessagingViewModel @Inject constructor(
         val group = state.group ?: return
         if (!canSend(state)) return
         val text = state.draft.trim()
+        val seconds = state.lifetime.seconds
         // Cleared now, so a second tap cannot send the same text again
         _uiState.update { it.copy(draft = "", draftFits = false) }
 
         // The send outlives this screen: leaving it does not strand the message
         sessions.scope.launch {
             val frame = try {
+                // The author decides how long the message lives: plain text
+                // never disappears on its own
+                val (type, payload) = if (seconds != null) {
+                    EXPIRING_TEXT_TYPE to encodeExpiringText(seconds.toUInt(), text)
+                } else {
+                    TEXT_TYPE to text.encodeToByteArray().map { it.toUByte() }
+                }
                 // Saved before returning: nothing is sent with unrecorded keys
-                sessions.encrypt(group, TEXT_TYPE, text)
+                sessions.encrypt(group, type, payload)
             } catch (e: Exception) {
                 Log.e(TAG, "Group message not sent: ${e.message}")
                 return@launch
             }
+            val now = System.currentTimeMillis()
             val message = GroupChatMessage(
                 sender = group.me,
+                offset = runCatching { groupFrameOffset(frame.map { it.toUByte() }).toLong() }.getOrNull(),
                 text = text,
-                timestamp = System.currentTimeMillis(),
-                status = GroupChatMessage.Status.SENDING
+                timestamp = now,
+                status = GroupChatMessage.Status.SENDING,
+                expiresAt = seconds?.let { now + it * 1_000L }
             )
             store.append(group.id, message)
             sessions.setPending(group.id, message.id, frame)
@@ -238,19 +264,36 @@ class GroupMessagingViewModel @Inject constructor(
                         is GroupReadOutcome.Message -> {
                             acked += received.id
                             val message = outcome.message
-                            if (message.sender.toInt() != group.me && message.msgType == TEXT_TYPE) {
-                                store.append(
-                                    group.id,
-                                    GroupChatMessage(
-                                        sender = message.sender.toInt(),
-                                        text = message.plaintext.map { it.toByte() }.toByteArray().decodeToString(),
-                                        timestamp = runCatching { Instant.parse(received.receivedAt).toEpochMilli() }
-                                            .getOrDefault(now),
-                                        status = GroupChatMessage.Status.RECEIVED,
-                                        expiresAt = group.disappearingMessages.seconds?.let { now + it * 1_000L }
-                                    ),
-                                    generation
-                                )
+                            val sender = message.sender.toInt()
+                            if (sender != group.me) {
+                                when (message.msgType) {
+                                    // Only the author's own message can be deleted this way
+                                    DELETE_TYPE -> runCatching { decodeDeleteRequest(message.plaintext) }.getOrNull()
+                                        ?.let { store.remove(group.id, sender, it.toLong(), generation) }
+                                    TEXT_TYPE, EXPIRING_TEXT_TYPE -> {
+                                        val expiring = if (message.msgType == EXPIRING_TEXT_TYPE) {
+                                            runCatching { decodeExpiringText(message.plaintext) }.getOrNull()
+                                        } else {
+                                            null
+                                        }
+                                        if (message.msgType == TEXT_TYPE || expiring != null) {
+                                            store.append(
+                                                group.id,
+                                                GroupChatMessage(
+                                                    sender = sender,
+                                                    offset = message.offset.toLong(),
+                                                    text = expiring?.text
+                                                        ?: message.plaintext.map { it.toByte() }.toByteArray().decodeToString(),
+                                                    timestamp = runCatching { Instant.parse(received.receivedAt).toEpochMilli() }
+                                                        .getOrDefault(now),
+                                                    status = GroupChatMessage.Status.RECEIVED,
+                                                    expiresAt = expiring?.let { now + it.seconds.toLong() * 1_000L }
+                                                ),
+                                                generation
+                                            )
+                                        }
+                                    }
+                                }
                             }
                         }
                         GroupReadOutcome.Duplicate, GroupReadOutcome.Rejected -> acked += received.id
@@ -274,7 +317,44 @@ class GroupMessagingViewModel @Inject constructor(
         )
     }
 
-    // MARK: - Deletion
+    // MARK: - Deleting messages
+
+    /** Remove the message from this phone only. */
+    fun deleteForMe(message: GroupChatMessage) {
+        store.remove(groupId, message.id)
+        sessions.scope.launch { sessions.clearPending(groupId, message.id) }
+    }
+
+    /** Only the author can ask the other phones to delete a message. */
+    fun canDeleteForEveryone(message: GroupChatMessage): Boolean =
+        message.isOutgoing && message.status == GroupChatMessage.Status.SENT && message.offset != null
+
+    /** A request: a modified app or an earlier screenshot can keep the message. */
+    fun deleteForEveryone(message: GroupChatMessage) {
+        val group = _uiState.value.group ?: return
+        val offset = message.offset ?: return
+        if (!canDeleteForEveryone(message)) return
+        sessions.scope.launch {
+            val request = try {
+                sessions.encrypt(group, DELETE_TYPE, encodeDeleteRequest(offset.toULong()))
+            } catch (e: Exception) {
+                Log.e(TAG, "Delete request not sent: ${e.message}")
+                return@launch
+            }
+            store.remove(group.id, message.id)
+            refreshPadState(group)
+            relayService.submitMessage(
+                conversationId = group.id,
+                authToken = group.authToken,
+                ciphertext = request,
+                ttlSeconds = group.messageRetention.seconds,
+                relayUrl = group.relayUrl,
+                sender = group.me
+            )
+        }
+    }
+
+    // MARK: - Deleting the group
 
     /** Delete the group, its pads and its messages from this phone only. */
     fun delete(onDeleted: () -> Unit) {

@@ -30,6 +30,10 @@ final class MessagingViewModel {
     private(set) var isGettingLocation = false
     private(set) var locationError: String?
 
+    /// Lifetime of the next text message, chosen by its author; starts at
+    /// the conversation's setting
+    var lifetime: DisappearingMessages = .off
+
     // Burn states
     var isShowingBurnedScreen = false
     private(set) var burnCompleted = false
@@ -132,6 +136,7 @@ final class MessagingViewModel {
         self.conversation = conversation
         self.currentConversation = conversation
         self.dependencies = dependencies
+        self.lifetime = conversation.disappearingMessages
         self.conversationRelay = dependencies.createRelayService(for: conversation.relayURL)
         self.sseService = SSEService(baseURLString: conversation.relayURL)
 
@@ -237,7 +242,11 @@ final class MessagingViewModel {
 
         do {
             let result = try await Log.measureAsync(.crypto, "encrypt") {
-                try await dependencies.sendMessageUseCase.execute(content: .text(text), in: currentConversation)
+                try await dependencies.sendMessageUseCase.execute(
+                    content: .text(text),
+                    lifetime: lifetime.seconds.map { UInt32($0) },
+                    in: currentConversation
+                )
             }
 
             Log.debug(.message, "[\(logId)] Encrypted: \(messageBytes) → \(result.ciphertext.count) bytes, seq=\(result.sequence)")
@@ -734,17 +743,17 @@ final class MessagingViewModel {
                 )
             }
 
-            let contentType: String
-            switch result.message.content {
-            case .text: contentType = "text"
-            case .location: contentType = "location"
-            }
-
-            Log.info(.message, "[\(logId)] Decrypted \(contentType), pad remaining: \(result.updatedConversation.remainingBytes)")
-
-            // Ephemeral-only: message lives in UI, relay keeps it until TTL
-            insertMessageSorted(result.message)
             currentConversation = result.updatedConversation
+            switch result.received {
+            case .message(let message):
+                Log.info(.message, "[\(logId)] Decrypted message, pad remaining: \(result.updatedConversation.remainingBytes)")
+                // Ephemeral-only: message lives in UI, relay keeps it until TTL
+                insertMessageSorted(message)
+            case .deleteRequest(let target):
+                // Only the peer's own messages: ours have sequences in our range
+                Log.info(.message, "[\(logId)] Peer deleted its message seq=\(target)")
+                removeMessages { !$0.isOutgoing && $0.sequence == target }
+            }
 
             try? await dependencies.conversationRepository.save(currentConversation)
 
@@ -755,6 +764,77 @@ final class MessagingViewModel {
         }
 
         dependencies.hapticService.light()
+    }
+
+    // MARK: - Deletion
+
+    /// Remove the message from this phone only, and wipe its pad bytes.
+    func deleteForMe(_ message: Message) {
+        removeMessages { $0.id == message.id }
+    }
+
+    /// Only the author can ask the other phone to delete a message.
+    func canDeleteForEveryone(_ message: Message) -> Bool {
+        guard message.isOutgoing, message.sequence != nil else { return false }
+        switch message.deliveryStatus {
+        case .sent, .delivered: return true
+        default: return false
+        }
+    }
+
+    /// A request: a modified app or an earlier screenshot can keep the message.
+    func deleteForEveryone(_ message: Message) async {
+        guard canDeleteForEveryone(message), let sequence = message.sequence else { return }
+        do {
+            let request = try await dependencies.sendMessageUseCase.executeDelete(sequence: sequence, in: currentConversation)
+            currentConversation = request.updatedConversation
+            sentSequences.insert(request.sequence)
+            deleteForMe(message)
+            try await submitDeleteRequest(request)
+        } catch {
+            Log.error(.message, "[\(logId)] Delete request failed: \(error)")
+            dependencies.hapticService.error()
+        }
+    }
+
+    private func submitDeleteRequest(_ request: EncryptedFrame) async throws {
+        guard let relay = conversationRelay else { throw RelayError.noConnection }
+        let result = try await relay.submitMessage(
+            conversationId: conversation.id,
+            authToken: conversation.authToken,
+            ciphertext: request.ciphertext,
+            sequence: request.sequence,
+            ttlSeconds: conversation.messageRetention.seconds,
+            extendedTTL: false,
+            persistent: false
+        )
+        sentBlobIds.insert(result.blobId)
+    }
+
+    private func removeMessages(where shouldRemove: (Message) -> Bool) {
+        let removed = messages.filter(shouldRemove)
+        guard !removed.isEmpty else { return }
+        messages.removeAll(where: shouldRemove)
+        wipePadBytes(of: removed)
+    }
+
+    /// Zero the pad bytes of messages that are gone, so a later pad compromise
+    /// cannot decrypt them.
+    private func wipePadBytes(of removed: [Message]) {
+        Task {
+            for message in removed {
+                guard let sequence = message.sequence else { continue }
+                do {
+                    try await dependencies.padManager.zeroPadBytes(
+                        offset: sequence,
+                        length: UInt64(message.content.byteCount),
+                        for: conversation.id
+                    )
+                } catch {
+                    Log.warning(.crypto, "[\(logId)] Failed to zero pad bytes for removed message: \(error)")
+                }
+            }
+        }
     }
 
     private func insertMessageSorted(_ message: Message) {
