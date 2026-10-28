@@ -1224,7 +1224,7 @@ private struct EthicsGuidelinesSheet: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 20) {
-                    Text("ASH is designed for legitimate private communication.\nBy using this application, you agree to:")
+                    Text("Gwardian is designed for legitimate private communication.\nBy using this application, you agree to:")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
@@ -1234,18 +1234,18 @@ private struct EthicsGuidelinesSheet: View {
                     VStack(spacing: 0) {
                         GuidelineRow(number: 1, title: "Respect Privacy", description: "Use this tool only for communications where both parties consent and have a legitimate need for privacy.")
                         Divider().padding(.leading, 56)
-                        GuidelineRow(number: 2, title: "No Harmful Use", description: "Do not use ASH to plan, coordinate, or facilitate illegal activities, harassment, or harm to others.")
+                        GuidelineRow(number: 2, title: "No Harmful Use", description: "Do not use Gwardian to plan, coordinate, or facilitate illegal activities, harassment, or harm to others.")
                         Divider().padding(.leading, 56)
                         GuidelineRow(number: 3, title: "Honest Communication", description: "Be truthful with your communication partners about the nature and purpose of your conversations.")
                         Divider().padding(.leading, 56)
                         GuidelineRow(number: 4, title: "Accept Responsibility", description: "You are solely responsible for the content of your messages and how you use this tool.")
                         Divider().padding(.leading, 56)
-                        GuidelineRow(number: 5, title: "Understand Limitations", description: "ASH provides technical privacy but cannot protect against physical surveillance, compromised devices, or coerced disclosure.")
+                        GuidelineRow(number: 5, title: "Understand Limitations", description: "Gwardian provides technical privacy but cannot protect against physical surveillance, compromised devices, or coerced disclosure.")
                     }
                     .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16))
                     .padding(.horizontal, 20)
 
-                    Text("ASH was created to protect legitimate privacy needs such as journalist-source communication, whistleblowing, personal privacy, and human rights work. Misuse undermines these important purposes.")
+                    Text("Gwardian was created to protect legitimate privacy needs such as journalist-source communication, whistleblowing, personal privacy, and human rights work. Misuse undermines these important purposes.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)

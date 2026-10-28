@@ -1503,11 +1503,11 @@ private fun EthicsGuidelinesContent(onDismiss: () -> Unit) {
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        EthicsItem(1, "Lawful Use Only", "ASH is designed for legitimate privacy needs.")
-        EthicsItem(2, "No Exploitation", "Never use ASH to exploit or harm others.")
-        EthicsItem(3, "Responsible Communication", "Use ASH for genuine private communication.")
+        EthicsItem(1, "Lawful Use Only", "Gwardian is designed for legitimate privacy needs.")
+        EthicsItem(2, "No Exploitation", "Never use Gwardian to exploit or harm others.")
+        EthicsItem(3, "Responsible Communication", "Use Gwardian for genuine private communication.")
         EthicsItem(4, "Transparency with Partners", "Be honest with your communication partners.")
-        EthicsItem(5, "Report Misuse", "Consider reporting harmful use of ASH.")
+        EthicsItem(5, "Report Misuse", "Consider reporting harmful use of Gwardian.")
 
         Spacer(modifier = Modifier.height(24.dp))
 
