@@ -133,11 +133,15 @@ jobs:
         run: |
           echo "$GOOGLE_PLAY_SERVICE_ACCOUNT_JSON" > apps/android/google-play-key.json
 
+      - name: Read the package name
+        id: identity
+        run: echo "application_id=$(grep '^gwardian.applicationId=' apps/android/gradle.properties | cut -d= -f2)" >> "$GITHUB_OUTPUT"
+
       - name: Upload to Google Play
         uses: r0adkll/upload-google-play@v1
         with:
           serviceAccountJson: apps/android/google-play-key.json
-          packageName: com.monadial.ash
+          packageName: ${{ steps.identity.outputs.application_id }}
           releaseFiles: apps/android/app/build/outputs/bundle/release/app-release.aab
           track: ${{ env.TRACK }}
           status: completed

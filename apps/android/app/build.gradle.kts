@@ -14,7 +14,8 @@ android {
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.monadial.ash"
+        // Set in gradle.properties (docs/app-identity.md)
+        applicationId = providers.gradleProperty("gwardian.applicationId").get()
         minSdk = 26
         targetSdk = 35
         versionCode = System.getenv("VERSION_CODE")?.toIntOrNull() ?: 1

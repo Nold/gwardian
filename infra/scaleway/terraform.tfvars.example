@@ -32,5 +32,5 @@ container_memory_limit = 512   # 512 MB
 # APNS Configuration (optional - for push notifications)
 # apns_team_id   = "ABC123DEF4"
 # apns_key_id    = "KEYID12345"
-# apns_bundle_id = "com.monadial.ash"
+# apns_bundle_id = "com.example.gwardian"  # the iOS GWARDIAN_BUNDLE_ID
 # apns_sandbox   = false

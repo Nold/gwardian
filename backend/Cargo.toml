@@ -5,7 +5,7 @@ edition = "2021"
 rust-version = "1.75"
 description = "ASH relay server - minimal untrusted message relay for ephemeral encrypted messaging"
 license = "MIT"
-repository = "https://github.com/monadial/ash"
+repository = "https://github.com/Nold/gwardian"
 keywords = ["messaging", "encryption", "ephemeral", "relay", "otp"]
 categories = ["network-programming", "cryptography"]
 

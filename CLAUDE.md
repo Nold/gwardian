@@ -101,6 +101,7 @@ FFI layer using **UniFFI** to generate Swift bindings from a single Rust interfa
 | `docs/framing.md` | QR frame format specification |
 | `docs/group-ceremony.md` | Group ceremony around the table (2 to 8 members) |
 | `docs/message-deletion.md` | Per-message lifetime, delete for me, delete for everyone |
+| `docs/app-identity.md` | Bundle identifiers, accounts and secrets for publishing |
 | `docs/data-lifecycle.md` | Data lifetime and destruction rules |
 | `docs/backend-contract.md` | Backend API invariants and TTL policies |
 | `docs/ethics.md` | Ethical position and boundaries |
